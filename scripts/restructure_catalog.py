@@ -12,10 +12,12 @@ import asyncio
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from copy import deepcopy
 import fcntl
 import hashlib
 from html.parser import HTMLParser
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -27,9 +29,9 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from structured_guides import (CONTENT_SCHEMA, PROMPT_VERSION, cache_key,
+from structured_guides import (CONTENT_SCHEMA, PROMPT_VERSION, SCHEMA_VERSION, cache_key,
                                canonical_bytes, make_v2, raw_digest,
-                               validate_content, validate_v2)
+                               source_assets, validate_content, validate_v2)
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_MODEL = "qwen/qwen3.6-35b-a3b"
@@ -347,10 +349,12 @@ def api_payload(prepared, model, config):
 
 
 class APIError(RuntimeError):
-    def __init__(self, message, *, retryable=False, retry_after=0):
+    def __init__(self, message, *, retryable=False, retry_after=0, finish_reason=None, refusal=None):
         super().__init__(message)
         self.retryable = retryable
         self.retry_after = retry_after
+        self.finish_reason = finish_reason
+        self.refusal = refusal
 
 
 def retry_delay(header):
@@ -404,23 +408,91 @@ def http_completion(payload, key, timeout=120):
     if not isinstance(choices, list) or len(choices) != 1:
         raise APIError("OpenRouter response needs one completion")
     choice = choices[0]
-    if not isinstance(choice, dict) or choice.get("finish_reason") != "stop":
-        raise APIError("OpenRouter completion incomplete or refused")
+    if not isinstance(choice, dict):
+        raise APIError("OpenRouter response has an invalid completion")
     message = choice.get("message", {})
     content = message.get("content") if isinstance(message, dict) else None
-    if not isinstance(content, str) or message.get("refusal"):
-        raise APIError("OpenRouter completion has no accepted JSON content")
+    refused = bool(message.get("refusal")) if isinstance(message, dict) else False
+    reason = choice.get("finish_reason")
+    reason = reason if isinstance(reason, str) and reason in {
+        "stop", "length", "content_filter", "tool_calls", "function_call", "error"} else "unknown"
+    if reason != "stop" or refused:
+        raise APIError("OpenRouter completion incomplete or refused (finish_reason=" + reason +
+                       ", refusal=" + str(refused).lower() + ")", finish_reason=reason, refusal=refused)
+    if not isinstance(content, str):
+        raise APIError("OpenRouter completion has no accepted JSON content", finish_reason=reason, refusal=refused)
     try:
         result = json.loads(content)
         validate_content(result)
     except (ValueError, TypeError, UnicodeError):
         raise APIError("OpenRouter completion failed strict local schema validation") from None
-    usage = response.get("usage")
-    usage = usage if isinstance(usage, dict) else {}
-    # Only aggregate numerical accounting enters the receipt; no auth/prompt dump.
-    return result, {name: value for name, value in usage.items()
-                    if name in {"prompt_tokens", "completion_tokens", "total_tokens", "cost"} and
-                    type(value) in (int, float)}
+    return result, numerical_usage(response.get("usage"))
+
+
+def numerical_usage(usage):
+    # Only finite numerical accounting enters a receipt/cache, never remote metadata.
+    return {name: value for name, value in (usage.items() if isinstance(usage, dict) else ())
+            if name in {"prompt_tokens", "completion_tokens", "total_tokens", "cost"}
+            and type(value) in (int, float) and math.isfinite(value)}
+
+
+def filter_optional_assets(raw, content):
+    """Remove unsupported optional links/images without changing generated prose."""
+    validate_content(content)
+    filtered = deepcopy(content)
+    allowed = source_assets(raw)
+    references, images = set(allowed["references"]), set(allowed["images"])
+    removed = {"references": 0, "images": 0}
+    seen = set()
+    accepted = []
+    for reference in filtered["references"]:
+        url = reference["url"]
+        if url not in references or url in seen:
+            removed["references"] += 1
+        else:
+            accepted.append(reference)
+            seen.add(url)
+    filtered["references"] = accepted
+    for step in filtered["steps"]:
+        seen = set()
+        accepted = []
+        for image in step["images"]:
+            if image not in images or image in seen:
+                removed["images"] += 1
+            else:
+                accepted.append(image)
+                seen.add(image)
+        step["images"] = accepted
+    return filtered, removed
+
+
+def response_record(raw, content, model, key, config, usage=None):
+    """A schema-valid response is recoverable input, never a publishable guide."""
+    validate_content(content)
+    if key != cache_key(raw, model, config=config):
+        raise ValueError("Response key does not match its source/configuration")
+    return {"version": 1, "id": raw["id"], "rawSha256": raw_digest(raw), "cacheKey": key,
+            "model": model, "promptVersion": PROMPT_VERSION, "schemaVersion": SCHEMA_VERSION,
+            "configuration": deepcopy(config), "content": deepcopy(content), "usage": numerical_usage(usage)}
+
+
+def valid_response(path, raw, key, model, config):
+    try:
+        record = read_regular(path)
+        fields = {"version", "id", "rawSha256", "cacheKey", "model", "promptVersion",
+                  "schemaVersion", "configuration", "content", "usage"}
+        if not isinstance(record, dict) or set(record) != fields or type(record["version"]) is not int or record["version"] != 1:
+            return None
+        if (record["id"] != raw["id"] or record["rawSha256"] != raw_digest(raw) or
+                record["cacheKey"] != key or key != cache_key(raw, model, config=config) or
+                record["model"] != model or record["promptVersion"] != PROMPT_VERSION or
+                record["schemaVersion"] != SCHEMA_VERSION or record["configuration"] != config or
+                not isinstance(record["usage"], dict) or record["usage"] != numerical_usage(record["usage"])):
+            return None
+        validate_content(record["content"])
+        return record
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
 
 
 def valid_cached(path, raw, key):
@@ -445,6 +517,8 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
     cache_dir.mkdir(parents=True, exist_ok=True)
     objects = cache_dir / "objects"
     objects.mkdir(exist_ok=True)
+    responses = cache_dir / "responses"
+    responses.mkdir(exist_ok=True)
     semaphore = asyncio.Semaphore(concurrency)
     # asyncio.to_thread's shared executor caps at 32 workers (or fewer by CPU).
     # A dedicated bounded pool makes the requested API concurrency effective.
@@ -462,6 +536,7 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                 config = request_config(prepared, max_chars, max_tokens, temperature)
                 key = cache_key(raw, model, config=config)
                 object_path = objects / (key + ".json")
+                response_path = responses / (key + ".json")
                 active_path = cache_dir / (identifier + ".json")
                 detail = await asyncio.to_thread(valid_cached, object_path, raw, key)
                 if detail is None:
@@ -471,6 +546,17 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                         await asyncio.to_thread(atomic_json, object_path, detail)
                         await asyncio.to_thread(atomic_json, active_path, detail)
                     return {"id": identifier, "status": "cached", "cacheKey": key, "apiCalls": 0}
+                response = await asyncio.to_thread(valid_response, response_path, raw, key, model, config)
+                if response is not None:
+                    if dry_run:
+                        return {"id": identifier, "status": "response-cached", "cacheKey": key, "apiCalls": 0}
+                    content, removed = filter_optional_assets(raw, response["content"])
+                    detail = make_v2(raw, content, model, key=key, config=config)
+                    validate_v2(detail, raw)
+                    await asyncio.to_thread(atomic_json, object_path, detail)
+                    await asyncio.to_thread(atomic_json, active_path, detail)
+                    return {"id": identifier, "status": "reprocessed", "cacheKey": key,
+                            "apiCalls": 0, "assetsRemoved": removed}
                 if dry_run:
                     return {"id": identifier, "status": "pending", "cacheKey": key, "apiCalls": 0,
                             "inputCharacters": len(canonical_bytes(prepared).decode())}
@@ -484,18 +570,25 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                         content, usage = await asyncio.get_running_loop().run_in_executor(
                             transport_pool, transport, payload, api_key, timeout)
                         validate_content(content)
+                        response = response_record(raw, content, model, key, config, usage)
+                        await asyncio.to_thread(atomic_json, response_path, response)
+                        content, removed = filter_optional_assets(raw, content)
                         detail = make_v2(raw, content, model, key=key, config=config)
                         validate_v2(detail, raw)
                         await asyncio.to_thread(atomic_json, object_path, detail)
                         await asyncio.to_thread(atomic_json, active_path, detail)
-                        return {"id": identifier, "status": "processed", "cacheKey": key, "apiCalls": calls, "usage": usage}
+                        return {"id": identifier, "status": "processed", "cacheKey": key,
+                                "apiCalls": calls, "usage": numerical_usage(usage), "assetsRemoved": removed}
                     except APIError as error:
                         if not error.retryable or attempt + 1 == retries:
                             raise
                         await sleep(max(error.retry_after, min(2 ** attempt, 30)))
                 raise AssertionError("Retry loop exhausted without result")
             except (OSError, ValueError, TypeError, KeyError, APIError) as error:
-                return {"id": identifier, "status": "failed", "error": str(error), "apiCalls": calls}
+                result = {"id": identifier, "status": "failed", "error": str(error), "apiCalls": calls}
+                if isinstance(error, APIError) and error.finish_reason is not None:
+                    result.update(finishReason=error.finish_reason, refusal=error.refusal)
+                return result
 
     try:
         results = await asyncio.gather(*(process(entry) for entry in entries))

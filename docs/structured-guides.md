@@ -39,7 +39,12 @@ or clinical correctness, and dated First Aid source material remains dated.
 SHA-256 keys cover the complete raw guide, model, prompt version, schema, and
 request/cleaner configuration. Valid results live in `stage3_cache/objects/<sha>.json`;
 `stage3_cache/<id>.json` activates one result for publication. Failed responses
-do not become active entries. Cache hits make no API calls and incur no model
+do not become active entries. Complete schema-valid model responses are also
+saved to `stage3_cache/responses/<sha>.json` before postprocessing. Their source,
+model, prompt, schema, and request configuration are checked before offline reuse.
+Unsupported or duplicate optional references/images are discarded; generated
+prose and safety instructions are preserved. Partial or schema-invalid responses
+are never cached for publication. Cache hits make no API calls and incur no model
 charge; local reads and validation still take time. Source or configuration
 changes invalidate the key. Malformed or stale active entries fall back to v1
 during the build. A cache change during publication aborts the new snapshot.

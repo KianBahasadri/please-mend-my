@@ -12,7 +12,7 @@ from unittest.mock import patch
 from urllib.error import HTTPError
 
 import restructure_catalog as processor
-from structured_guides import canonical_bytes, raw_digest
+from structured_guides import cache_key, canonical_bytes, raw_digest, validate_v2
 
 
 def raw_guide(number=1):
@@ -169,6 +169,7 @@ class ProcessorTests(unittest.TestCase):
         self.assertEqual(result["apiCalls"], 3)
         self.assertEqual(list(self.cache.glob("*.json")), [])
         self.assertEqual(list((self.cache / "objects").glob("*.json")), [])
+        self.assertEqual(list((self.cache / "responses").glob("*.json")), [])
 
     def test_invalid_generation_does_not_retry_or_cache_and_other_entries_continue(self):
         entries = [self.store(raw_guide(i)) for i in (1, 2)]
@@ -177,13 +178,121 @@ class ProcessorTests(unittest.TestCase):
             calls.append(1)
             if "Test repair 1" in payload["messages"][1]["content"]:
                 result = generated()
-                result["steps"][0]["images"] = ["/media/" + "b" * 64 + ".png"]
+                result["steps"][0]["body"] = {"invalid": "not a plain string"}
                 return result, {}
             return generated(), {}
         result = self.batch(entries, api_key="test-key", transport=transport)
         self.assertEqual(result["counts"], {"failed": 1, "processed": 1})
         self.assertEqual(result["apiCalls"], 2)
         self.assertFalse((self.cache / (entries[0]["id"] + ".json")).exists())
+        self.assertEqual(len(list((self.cache / "responses").glob("*.json"))), 1)
+
+    def test_optional_asset_filter_preserves_prose_and_source_assets_without_mutation(self):
+        raw, content = raw_guide(), generated()
+        good_image = "/media/" + "a" * 64 + ".png"
+        bad_image = "/media/" + "b" * 64 + ".png"
+        raw["html"] += '<img src="' + good_image + '">'
+        content["steps"][0].update(images=[good_image, bad_image, good_image, "https://example.org/image.png"],
+                                   warnings=["Do not remove more than 3 mg."], code="if ready:\n    repair()")
+        content["references"] += [
+            {"title": "Duplicate manual", "url": "https://example.org/manual"},
+            {"title": "Original", "url": raw["sourceUrl"]},
+            {"title": "Invented", "url": "https://example.org/invented"},
+            {"title": "Unsafe", "url": "javascript:alert(1)"}]
+        before_raw, before_content = copy.deepcopy(raw), copy.deepcopy(content)
+        filtered, removed = processor.filter_optional_assets(raw, content)
+        self.assertEqual(removed, {"references": 3, "images": 3})
+        self.assertEqual(filtered["references"], [content["references"][0], content["references"][2]])
+        self.assertEqual(filtered["steps"][0]["images"], [good_image])
+        for field in ("summary", "tools", "materials", "safety", "symptoms"):
+            self.assertEqual(filtered[field], content[field])
+        for field in ("title", "body", "warnings", "code"):
+            self.assertEqual(filtered["steps"][0][field], content["steps"][0][field])
+        self.assertEqual(raw, before_raw)
+        self.assertEqual(content, before_content)
+
+    def test_filtered_generation_retains_original_response_but_only_activates_valid_assets(self):
+        raw, content = raw_guide(), generated()
+        entry = self.store(raw)
+        content["references"].append({"title": "Invented", "url": "https://example.org/invented"})
+        content["steps"][0]["images"] = ["/media/" + "b" * 64 + ".png"]
+        result = self.batch([entry], api_key="test-key", transport=lambda *_: (content, {"cost": 0.01}))
+        self.assertEqual(result["counts"], {"processed": 1})
+        self.assertEqual(result["entries"][0]["assetsRemoved"], {"references": 1, "images": 1})
+        active = json.loads((self.cache / (entry["id"] + ".json")).read_bytes())
+        validate_v2(active, raw)
+        self.assertEqual(active["steps"][0]["images"], [])
+        self.assertEqual(active["references"], generated()["references"])
+        response = json.loads(next((self.cache / "responses").glob("*.json")).read_bytes())
+        self.assertEqual(response["content"], content)
+        self.assertEqual(response["usage"], {"cost": 0.01})
+
+    def test_cached_response_recovers_after_publication_failure_without_an_api_call(self):
+        raw, content = raw_guide(), generated()
+        entry = self.store(raw)
+        content["references"].append({"title": "Unsupported", "url": "https://example.org/not-in-source"})
+        original_write = processor.atomic_json
+        def fail_after_response(path, value):
+            if Path(path).parent.name == "objects":
+                raise OSError("Simulated interruption before activation")
+            original_write(path, value)
+        with patch.object(processor, "atomic_json", side_effect=fail_after_response):
+            first = self.batch([entry], api_key="test-key", transport=lambda *_: (content, {}))
+        self.assertEqual(first["counts"], {"failed": 1})
+        self.assertEqual(first["apiCalls"], 1)
+        self.assertEqual(len(list((self.cache / "responses").glob("*.json"))), 1)
+        self.assertFalse((self.cache / (entry["id"] + ".json")).exists())
+        preflight = self.batch([entry], dry_run=True, transport=lambda *_: self.fail("Preflight paid for cached response"))
+        self.assertEqual(preflight["counts"], {"response-cached": 1})
+        self.assertFalse((self.cache / (entry["id"] + ".json")).exists())
+        recovered = self.batch([entry], transport=lambda *_: self.fail("Recovery paid for cached response"))
+        self.assertEqual(recovered["counts"], {"reprocessed": 1})
+        self.assertEqual(recovered["apiCalls"], 0)
+        self.assertEqual(recovered["entries"][0]["assetsRemoved"], {"references": 1, "images": 0})
+        validate_v2(json.loads((self.cache / (entry["id"] + ".json")).read_bytes()), raw)
+
+    def test_response_cache_rejects_changed_pins_invalid_shape_and_unknown_metadata(self):
+        raw = raw_guide()
+        prepared = processor.prepare_source(raw)
+        config = processor.request_config(prepared, processor.MAX_INPUT_CHARS, 16384, 0)
+        key = cache_key(raw, processor.DEFAULT_MODEL, config=config)
+        record = processor.response_record(raw, generated(), processor.DEFAULT_MODEL, key, config)
+        path = self.root / "response.json"
+        processor.atomic_json(path, record)
+        self.assertEqual(processor.valid_response(path, raw, key, processor.DEFAULT_MODEL, config), record)
+        for field, value in (("id", "f" * 20), ("rawSha256", "f" * 64), ("cacheKey", "f" * 64),
+                             ("model", "different/model"), ("promptVersion", "future"),
+                             ("schemaVersion", 3), ("configuration", {}), ("content", {}),
+                             ("extra", "not accepted"), ("usage", {"secret": "never accepted"})):
+            with self.subTest(field=field):
+                changed = copy.deepcopy(record)
+                changed[field] = value
+                processor.atomic_json(path, changed)
+                self.assertIsNone(processor.valid_response(path, raw, key, processor.DEFAULT_MODEL, config))
+        with self.assertRaisesRegex(ValueError, "key does not match"):
+            processor.response_record(raw, generated(), processor.DEFAULT_MODEL, "f" * 64, config)
+
+    def test_incomplete_and_schema_invalid_http_responses_never_enter_any_cache(self):
+        entry = self.store(raw_guide())
+        cases = [("length", json.dumps(generated()), None),
+                 ("stop", json.dumps(generated()), "private refusal text"),
+                 ("stop", "{truncated", None), ("stop", "{}", None),
+                 (["untrusted remote value"], "{}", None)]
+        for reason, content, refusal in cases:
+            with self.subTest(reason=reason, refusal=bool(refusal)):
+                response = {"model": processor.DEFAULT_MODEL, "choices": [{"finish_reason": reason,
+                            "message": {"content": content, "refusal": refusal}}]}
+                with patch.object(processor, "urlopen", return_value=io.BytesIO(json.dumps(response).encode())):
+                    result = self.batch([entry], api_key="test-key")
+                self.assertEqual(result["counts"], {"failed": 1})
+                self.assertEqual(result["apiCalls"], 1)
+                if reason == "length" or refusal or isinstance(reason, list):
+                    self.assertEqual(result["entries"][0]["finishReason"], reason if isinstance(reason, str) else "unknown")
+                    self.assertIs(result["entries"][0]["refusal"], bool(refusal))
+                self.assertNotIn("private refusal", json.dumps(result))
+                self.assertNotIn("untrusted remote", json.dumps(result))
+                for directory in (self.cache, self.cache / "objects", self.cache / "responses"):
+                    self.assertEqual(list(directory.glob("*.json")), [])
 
     def test_stale_pilot_and_oversize_fail_before_any_request(self):
         raw = raw_guide()
