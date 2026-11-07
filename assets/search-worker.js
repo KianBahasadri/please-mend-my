@@ -90,6 +90,7 @@ let groupOffsets;
 let groupDocuments;
 let trie;
 let maximumWordLength = 0;
+const RESULT_LIMIT = 100;
 const tokenCache = new Map();
 let tokenCacheBytes = 0;
 
@@ -195,31 +196,42 @@ function prepareInverted(metadata) {
 function buildTrie(terms) {
   // Sorted ASCII surface words form a compact trie in typed arrays. Numbers are
   // intentionally absent: a near model number must never turn into another one.
-  let capacity = 1;
-  for (const term of terms) if (/^[a-z]+$/.test(term)) capacity += term.length;
-  const child = new Uint32Array(capacity), sibling = new Uint32Array(capacity);
-  const character = new Uint8Array(capacity), terminal = new Uint32Array(capacity), lastChild = new Uint32Array(capacity);
-  let nodes = 1, previous = "", path = [0];
-  for (let termIndex = 0; termIndex < terms.length; termIndex++) {
-    const term = terms[termIndex];
+  // Store shared-prefix lengths during sizing. Allocate only live nodes: the
+  // larger dictionary otherwise allocates and then copies several times its
+  // final size, causing avoidable startup allocation/GC work.
+  const prefixes = new Uint32Array(terms.length);
+  let capacity = 1, previous = "";
+  for (let at = 0; at < terms.length; at++) {
+    const term = terms[at];
     if (!/^[a-z]+$/.test(term)) continue;
-    maximumWordLength = Math.max(maximumWordLength, term.length);
+    const limit = previous.length < term.length ? previous.length : term.length;
     let shared = 0;
-    while (shared < Math.min(previous.length, term.length) && previous[shared] === term[shared]) shared++;
-    path.length = shared + 1;
+    while (shared < limit && previous.charCodeAt(shared) === term.charCodeAt(shared)) shared++;
+    prefixes[at] = shared + 1;
+    capacity += term.length - shared;
+    if (term.length > maximumWordLength) maximumWordLength = term.length;
+    previous = term;
+  }
+  const child = new Uint32Array(capacity), sibling = new Uint32Array(capacity);
+  const character = new Uint8Array(capacity), terminal = new Uint32Array(capacity);
+  const path = new Uint32Array(maximumWordLength + 1);
+  let nodes = 1, previousLength = 0;
+  for (let termIndex = 0; termIndex < terms.length; termIndex++) {
+    if (!prefixes[termIndex]) continue;
+    const term = terms[termIndex];
+    const shared = prefixes[termIndex] - 1;
     for (let at = shared; at < term.length; at++) {
       const parent = path[at], node = nodes++;
       character[node] = term.charCodeAt(at);
-      if (lastChild[parent]) sibling[lastChild[parent]] = node;
+      // With sorted words the previous path holds the parent's last child.
+      if (at === shared && shared < previousLength) sibling[path[at + 1]] = node;
       else child[parent] = node;
-      lastChild[parent] = node;
-      path.push(node);
+      path[at + 1] = node;
     }
     terminal[path[term.length]] = termIndex + 1;
-    previous = term;
+    previousLength = term.length;
   }
-  trie = { child: child.slice(0, nodes), sibling: sibling.slice(0, nodes),
-    character: character.slice(0, nodes), terminal: terminal.slice(0, nodes) };
+  trie = { child, sibling, character, terminal };
 }
 
 function fuzzyTerms(token, matches) {
@@ -328,18 +340,74 @@ function resolveToken(token, widen = false) {
   return result;
 }
 
-function titleScore(entry, query, tokens) {
+function titleScore(entry, query, tokens, wordPrefixes) {
   let score = entry.title === query ? 1000 : entry.title.startsWith(query) ? 500 : entry.title.includes(query) ? 250 : 0;
   if (entry.row[3] === "guide") score += 15;
-  for (const token of tokens) {
-    if (entry.title.startsWith(token) || entry.title.includes(` ${token}`)) score += 35;
+  for (let at = 0; at < tokens.length; at++) {
+    const token = tokens[at];
+    if (entry.title.startsWith(token) || entry.title.includes(wordPrefixes[at])) score += 35;
     else if (entry.title.includes(token)) score += 10;
   }
   return score;
 }
 
+function singleWordTitleScore(entry, query, wordPrefix) {
+  const position = entry.title.indexOf(query);
+  const bonus = entry.row[3] === "guide" ? 15 : 0;
+  if (position < 0) return bonus;
+  if (position === 0) return bonus + (entry.title.length === query.length ? 1000 : 500) + 35;
+  return bonus + 250 + (entry.title.includes(wordPrefix) ? 35 : 10);
+}
+
+function shortlist() {
+  // Keep only the best results while visiting candidates. The heap root is the
+  // worst retained score, with later catalog positions losing ties. Sorting
+  // this bounded heap preserves the former full ranking's first 100 results.
+  const documents = new Uint32Array(RESULT_LIMIT), scores = new Float64Array(RESULT_LIMIT);
+  let size = 0;
+  const worse = (score, doc, otherScore, otherDoc) => score < otherScore || score === otherScore && doc > otherDoc;
+  return {
+    // Candidates arrive in catalog order, so an equal score cannot beat an
+    // earlier retained document. This also permits safe score-bound pruning.
+    canBeat: score => size < RESULT_LIMIT || score > scores[0],
+    add(doc, score) {
+      let at;
+      if (size < RESULT_LIMIT) {
+        at = size++;
+        while (at) {
+          const parent = (at - 1) >>> 1;
+          if (!worse(score, doc, scores[parent], documents[parent])) break;
+          scores[at] = scores[parent];
+          documents[at] = documents[parent];
+          at = parent;
+        }
+      } else {
+        if (worse(score, doc, scores[0], documents[0]) || score === scores[0] && doc === documents[0]) return;
+        at = 0;
+        while (at * 2 + 1 < size) {
+          let child = at * 2 + 1;
+          if (child + 1 < size && worse(scores[child + 1], documents[child + 1], scores[child], documents[child])) child++;
+          if (!worse(scores[child], documents[child], score, doc)) break;
+          scores[at] = scores[child];
+          documents[at] = documents[child];
+          at = child;
+        }
+      }
+      scores[at] = score;
+      documents[at] = doc;
+    },
+    sorted() {
+      return Array.from({ length: size }, (_, index) => index)
+        .sort((a, b) => scores[b] - scores[a] || documents[a] - documents[b])
+        .map(index => documents[index]);
+    },
+  };
+}
+
 function indexedSearch(query, tokens) {
-  if (!tokens.length) return query ? [] : entries.map((_, index) => index);
+  if (!tokens.length) return query ? [] : Array.from({ length: Math.min(entries.length, RESULT_LIMIT) }, (_, index) => index);
+  const wordPrefixes = tokens.map(token => " " + token);
+  const singleWord = tokens.length === 1 && tokens[0] === query;
   // Literal punctuation in model identifiers remains significant after word
   // tokenization, e.g. S23+ must not match S23 and WH-1000XM4 stays one model.
   const identifiers = query.split(/\s+/).filter(token => /\p{N}/u.test(token))
@@ -352,7 +420,7 @@ function indexedSearch(query, tokens) {
       lists.push(list);
     }
     lists.sort((a, b) => a.documents.length - b.documents.length);
-    const buckets = new Map();
+    const best = shortlist();
     for (const doc of lists[0].documents) {
       let penalty = 0, matches = true, literal = false;
       for (const list of lists) {
@@ -366,18 +434,17 @@ function indexedSearch(query, tokens) {
         if (!entry.text.includes(identifier) && !searchGroups[itemGroups[doc]].includes(identifier)) { matches = false; break; }
       }
       if (!matches) continue;
+      const bonus = entry.row[3] === "guide" ? 15 : 0;
+      const upper = literal ? singleWord ? (entry.title.length === query.length ? 1035 : 535) + bonus : Infinity : bonus;
+      if (!best.canBeat(upper - penalty * 100)) continue;
       // A candidate found solely through aliases/stem changes/typos has no
       // literal title-word bonus. Avoid rescanning thousands of unrelated
       // titles for broad shared aliases such as "cellphone".
-      const score = (literal ? titleScore(entry, query, tokens) : entry.row[3] === "guide" ? 15 : 0) - penalty * 100;
-      if (!buckets.has(score)) buckets.set(score, []);
-      buckets.get(score).push(doc);
+      const score = (literal ? singleWord ? singleWordTitleScore(entry, query, wordPrefixes[0])
+        : titleScore(entry, query, tokens, wordPrefixes) : entry.row[3] === "guide" ? 15 : 0) - penalty * 100;
+      best.add(doc, score);
     }
-    const result = [];
-    for (const score of [...buckets.keys()].sort((a, b) => b - a)) {
-      for (const doc of buckets.get(score)) result.push(doc);
-    }
-    return result;
+    return best.sorted();
   };
   const literal = intersect(false);
   // A typo can exist as a rare literal elsewhere in the vocabulary. Retry only
@@ -386,7 +453,8 @@ function indexedSearch(query, tokens) {
 }
 
 function legacySearch(query) {
-  const tokens = query.split(/\s+/).filter(Boolean), buckets = new Map();
+  const tokens = query.split(/\s+/).filter(Boolean), best = shortlist();
+  const wordPrefixes = tokens.map(token => " " + token);
   // Transitional compatibility while an old catalog is still cached. Published
   // builds have prepared postings; their searches never take this scan path.
   const compact = tokens.length <= 31;
@@ -409,15 +477,10 @@ function legacySearch(query) {
       break;
     }
     if (!matches) continue;
-    const score = titleScore(entry, query, tokens);
-    if (!buckets.has(score)) buckets.set(score, []);
-    buckets.get(score).push(index);
+    const score = titleScore(entry, query, tokens, wordPrefixes);
+    best.add(index, score);
   }
-  const result = [];
-  for (const score of [...buckets.keys()].sort((a, b) => b - a)) {
-    for (const index of buckets.get(score)) result.push(index);
-  }
-  return result;
+  return best.sorted();
 }
 
 function search(request) {
@@ -470,6 +533,7 @@ self.onmessage = ({ data }) => {
     postMessage({ type: "ready", total: entries.length, categories: catalog.categories, source: catalog.source,
       revision: catalog.revision, aliasGroups: searchGroups.length - 1, invertedIndex: Boolean(inverted),
       termCount: inverted?.terms.length || 0, stemming: Boolean(inverted), fuzzy: Boolean(inverted),
+      resultLimit: RESULT_LIMIT,
       loadDuration: performance.now() - started });
     if (pending) schedule(pending);
   } catch (error) {

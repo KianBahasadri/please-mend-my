@@ -186,24 +186,63 @@ test('long queries retain every required term beyond the old compact mask width'
   assert.equal((await worker.search(terms.join(' ') + ' missingword')).total, 0);
 });
 
-test('all matches remain available through viewport ranges and stale ranges are ignored', async () => {
+test('only the best 100 matches remain available through viewport ranges and stale ranges are ignored', async () => {
   const index = fixture();
   index.items = Array.from({ length: 120 }, (_, i) => ['battery-' + i, 'Battery Repair ' + i, 'technology', 'guide', 'Battery']);
   index.search = { version: 1, groups: [''], itemGroups: Array(120).fill(0) };
   const worker = await workerFor(prepare(index));
   const result = await worker.search('battery', 30);
-  assert.equal(result.total, 120);
+  assert.equal(worker.ready.total, 120, 'the complete browser catalog remains available');
+  assert.equal(worker.ready.resultLimit, 100);
+  assert.equal(result.total, 100);
   assert.equal(result.items.length, 30);
   worker.send({ type: 'range', requestId: result.requestId, rangeId: 1, start: 30, count: 60 });
   const range = await worker.next('range');
   assert.equal(range.start, 30);
   assert.equal(range.items.length, 60);
   assert.equal(new Set([...result.items, ...range.items].map(row => row[0])).size, 90);
+  worker.send({ type: 'range', requestId: result.requestId, rangeId: 2, start: 90, count: 60 });
+  const last = await worker.next('range');
+  assert.equal(last.items.length, 10);
+  assert.deepEqual(Array.from(last.items, row => row[0]), index.items.slice(90, 100).map(row => row[0]));
+  worker.send({ type: 'range', requestId: result.requestId, rangeId: 3, start: 100, count: 60 });
+  assert.equal((await worker.next('range')).items.length, 0);
+  const emptyQuery = await worker.search('');
+  assert.equal(emptyQuery.total, 100);
+  assert.equal(emptyQuery.items.length, 60);
   await worker.search('unmatchedzzzz');
-  worker.send({ type: 'range', requestId: result.requestId, rangeId: 2, start: 90, count: 30 });
+  worker.send({ type: 'range', requestId: result.requestId, rangeId: 4, start: 90, count: 30 });
   await new Promise(resolve => setTimeout(resolve, 5));
   assert.equal(worker.messages.filter(message => message.type === 'range').length, 0);
   assert.equal(worker.fetches(), 1);
+});
+
+test('the cap keeps higher-ranked late documents and stable ties in prepared and legacy catalogs', async () => {
+  const index = fixture();
+  index.items = [];
+  index.search = { version: 1, groups: ['', 'laptop'], itemGroups: [] };
+  const add = (id, title, kind, group = 0) => {
+    index.items.push([id, title, 'technology', kind, '']);
+    index.search.itemGroups.push(group);
+  };
+  // Put weak alias hits first and exact hits last: slicing the first 100
+  // candidates, or stopping the candidate scan at 100, must both fail.
+  for (let at = 0; at < 160; at++) add('alias-' + at, 'Notebook Repair ' + at, 'guide', 1);
+  for (let at = 0; at < 150; at++) add('inside-' + at, 'Repair Laptop Battery ' + at, 'guide');
+  for (let at = 0; at < 130; at++) add('prefix-' + at, 'Laptop Battery Repair ' + at, 'guide');
+  add('exact-topic', 'Laptop', 'topic');
+  add('exact-guide', 'Laptop', 'guide');
+  const expected = ['exact-guide', 'exact-topic', ...Array.from({ length: 98 }, (_, at) => 'prefix-' + at)];
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    const result = await worker.search('laptop');
+    worker.send({ type: 'range', requestId: result.requestId, rangeId: 1, start: 60, count: 60 });
+    const tail = await worker.next('range');
+    assert.equal(result.total, 100);
+    assert.deepEqual(Array.from([...result.items, ...tail.items], row => row[0]), expected);
+    assert.equal((await worker.search('laptop')).items[0][0], 'exact-guide', 'repeat queries retain the same ranking');
+    assert.equal(worker.fetches(), 1);
+  }
 });
 
 test('queued keystrokes coalesce to the latest query', async () => {

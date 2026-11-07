@@ -18,9 +18,9 @@
 - Prepare all enrichment/aliases/categories before publish; searches use our index/DB only; no external API calls.
 - Search: offline aliases+inverted postings+Porter stems; typo edits 1 for 5–7 letters, 2 for ≥8; numeric/model tokens strict; exact/model matches first; benchmark size/startup/memory/query before deploy.
 - VM replacement authorized: rebuild with 64GiB root (no extra data volume); retain EIP/domain; regenerate catalog on EC2.
-- Prod: i-00b3468454b650217/64GiB; cloud-built 103473 items/575002 media; unchanged runs reuse; no corpus uploads.
+- Prod: i-00b3468454b650217/64GiB; cloud-built 207691 items/679729 media; unchanged runs reuse; no corpus uploads.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
-- Local: http://127.0.0.1:8080; catalog-data/runtime has 103473 items/575002 media; catalog.sqlite holds inventory.
+- Local: http://127.0.0.1:8080; 207691 items/679729 media; catalog-data/releases/<pipeline SHA>; source SQLite in catalog-data/build/.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
 - CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
@@ -32,8 +32,11 @@
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
 - Disposable ingest SQLite: journal/sync OFF; unlink scratch on restart (no GB-scale DROP); publish complete snapshots only.
+- Additional sources proposed: Appropedia ZIM (CC BY-SA) + public domain textile/garment mending + procedural datasets.
+- Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms). Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
+- Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
-- All matches in one continuous scroll; no showing limits/Show more/Clear search; render efficiently, prefetch visible cards only.
+- Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.
