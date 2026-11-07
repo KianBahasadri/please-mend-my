@@ -15,7 +15,7 @@
 - Commit AND push regular work milestones.
 - Ingest via the same pinned Python pipeline locally/EC2; cloud downloads sources/builds its own catalog; never upload local corpus.
 - VM replacement authorized: rebuild with 64GiB root (no extra data volume); retain EIP/domain; regenerate catalog on EC2.
-- Prod verified: 8e35097; 103473 items/575002 media deployed.
+- Prod rebuilding: i-00b3468454b650217/64GiB; old VM removed; deployment resumes cloud ingestion.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
 - Local: http://127.0.0.1:8080; catalog-data/runtime has 103473 items/575002 media; catalog.sqlite holds inventory.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.

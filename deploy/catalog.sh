@@ -106,7 +106,6 @@ UMask=0022
 UNIT
   printf '%s\n' "$digest" > "$base/current-key"
   systemctl daemon-reload
-  systemctl reset-failed please-mend-my-ingest.service
   run_ingestion=true
 fi
 if [[ "$run_ingestion" == true ]]; then
