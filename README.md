@@ -22,6 +22,7 @@ Negation, symptoms, numeric model identifiers, and exact title priority remain.
 The hero uses those same filler rules when deciding whether to ask a follow-up:
 `fucking dick` supports Enter just like `dick`, while the original input remains
 editable and the question uses the cleaned subject.
+The tab title follows the first hero line immediately, including its typed text.
 
 Check the hero and search interactions without opening a browser:
 

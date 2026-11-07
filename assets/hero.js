@@ -62,6 +62,11 @@
     return [suffix(first).trim(), open ? suffix(second).trim() : ""].filter(Boolean).join(" ");
   }
 
+  function syncTitle() {
+    const title = first.value.trim();
+    if (document.title !== title) document.title = title;
+  }
+
   function notify() {
     const current = query();
     if (current === lastQuery) return;
@@ -219,6 +224,7 @@
       input.setSelectionRange(item.prefix.length, item.prefix.length);
     }
     item.previous = input.value;
+    if (input === first) syncTitle();
     grow(input);
     if (!item.composing) {
       if (input === first) syncFirst();
@@ -321,6 +327,7 @@
   window.addEventListener("resize", fit);
   window.addEventListener("mend:layout", fit);
   document.fonts?.ready.then(fit);
+  syncTitle();
   fit();
   focus(first, true);
 })();
