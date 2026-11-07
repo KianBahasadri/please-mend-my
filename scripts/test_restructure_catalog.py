@@ -215,6 +215,33 @@ class ProcessorTests(unittest.TestCase):
         self.assertLessEqual(maximum, 2)
         self.assertEqual(current, 0)
 
+    def test_default_transport_can_run_forty_simultaneous_requests(self):
+        entries = [self.store(raw_guide(i)) for i in range(1, 41)]
+        barrier = threading.Barrier(40, timeout=10)
+        mutex = threading.Lock()
+        active, maximum = 0, 0
+        def transport(*_):
+            nonlocal active, maximum
+            with mutex:
+                active += 1
+                maximum = max(maximum, active)
+            barrier.wait()
+            with mutex:
+                active -= 1
+            return generated(), {}
+        result = self.batch(entries, api_key="test-key", transport=transport)
+        self.assertEqual(result["counts"], {"processed": 40})
+        self.assertEqual(result["apiCalls"], 40)
+        self.assertEqual(maximum, 40)
+        self.assertEqual(active, 0)
+
+    def test_invalid_concurrency_is_rejected_before_resources_or_requests(self):
+        for value in (0, -1, 129, True, 4.0, "40"):
+            with self.subTest(concurrency=value):
+                with self.assertRaisesRegex(ValueError, "Invalid concurrency"):
+                    self.batch([], concurrency=value,
+                               transport=lambda *_: self.fail("Invalid concurrency reached API"))
+
     def test_http_completion_validates_model_finish_content_and_keeps_numeric_usage(self):
         payload = {"model": processor.DEFAULT_MODEL}
         response = {"model": processor.DEFAULT_MODEL, "choices": [{"finish_reason": "stop",

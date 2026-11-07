@@ -28,6 +28,10 @@ It preserves substantive text, quantities, negation, and warnings. Oversized
 sources fail explicitly instead of being silently truncated. Stage 3 runs
 bounded asynchronous OpenRouter calls to `qwen/qwen3.6-35b-a3b`, with
 [`response_format.json_schema` and strict provider parameters](https://openrouter.ai/docs/guides/features/structured-outputs).
+The runner defaults to 40 concurrent requests, using a dedicated HTTP thread
+pool so Python's smaller default executor cannot limit it. Concurrency is bounded
+at 128; transient rate-limit/server failures use bounded retry backoff. This
+scheduler setting does not alter generation cache keys.
 It independently validates returned JSON and source-bound assets before caching.
 A schema-valid output still requires content review; it is not proof of factual
 or clinical correctness, and dated First Aid source material remains dated.
@@ -54,7 +58,7 @@ RAW_CATALOG=catalog-data/releases/f55559d274f784f9e90e11cc3b1bb9182dbc2b37abd16c
 python3 scripts/restructure_catalog.py pilot --runtime-dir "$RAW_CATALOG"
 python3 scripts/restructure_catalog.py prepare --runtime-dir "$RAW_CATALOG" --max-input-chars 200000
 python3 scripts/restructure_catalog.py run --runtime-dir "$RAW_CATALOG" --max-input-chars 200000 --dry-run
-python3 scripts/restructure_catalog.py run --runtime-dir "$RAW_CATALOG" --max-input-chars 200000 --concurrency 4
+python3 scripts/restructure_catalog.py run --runtime-dir "$RAW_CATALOG" --max-input-chars 200000 --concurrency 40
 ```
 
 The API key stays in `OPENROUTER_API_KEY`, outside Git. The process environment

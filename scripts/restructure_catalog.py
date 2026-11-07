@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 import fcntl
 import hashlib
@@ -434,16 +435,20 @@ def valid_cached(path, raw, key):
 
 
 async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api_key=None,
-                        concurrency=4, max_chars=MAX_INPUT_CHARS, max_tokens=16384,
+                        concurrency=40, max_chars=MAX_INPUT_CHARS, max_tokens=16384,
                         temperature=0, timeout=120, retries=3, dry_run=False,
                         transport=http_completion, sleep=asyncio.sleep):
-    if not (1 <= concurrency <= 32 and 1 <= retries <= 8 and max_tokens > 0 and max_chars > 0 and timeout > 0):
+    if not (type(concurrency) is int and 1 <= concurrency <= 128 and
+            1 <= retries <= 8 and max_tokens > 0 and max_chars > 0 and timeout > 0):
         raise ValueError("Invalid concurrency, retries, token/input limit, or timeout")
     cache_dir = Path(cache_dir)
     cache_dir.mkdir(parents=True, exist_ok=True)
     objects = cache_dir / "objects"
     objects.mkdir(exist_ok=True)
     semaphore = asyncio.Semaphore(concurrency)
+    # asyncio.to_thread's shared executor caps at 32 workers (or fewer by CPU).
+    # A dedicated bounded pool makes the requested API concurrency effective.
+    transport_pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="stage3-api")
     results = []
     started = time.perf_counter()
 
@@ -476,7 +481,8 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                 for attempt in range(retries):
                     calls += 1
                     try:
-                        content, usage = await asyncio.to_thread(transport, payload, api_key, timeout)
+                        content, usage = await asyncio.get_running_loop().run_in_executor(
+                            transport_pool, transport, payload, api_key, timeout)
                         validate_content(content)
                         detail = make_v2(raw, content, model, key=key, config=config)
                         validate_v2(detail, raw)
@@ -491,7 +497,10 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
             except (OSError, ValueError, TypeError, KeyError, APIError) as error:
                 return {"id": identifier, "status": "failed", "error": str(error), "apiCalls": calls}
 
-    results = await asyncio.gather(*(process(entry) for entry in entries))
+    try:
+        results = await asyncio.gather(*(process(entry) for entry in entries))
+    finally:
+        transport_pool.shutdown(wait=True, cancel_futures=True)
     counts = dict(Counter(result["status"] for result in results))
     return {"version": 1, "model": model, "promptVersion": PROMPT_VERSION,
             "elapsedSeconds": round(time.perf_counter() - started, 6), "counts": counts,
@@ -582,7 +591,7 @@ def main():
             command.add_argument("--model", default=DEFAULT_MODEL)
             command.add_argument("--api-key-env", default="OPENROUTER_API_KEY")
             command.add_argument("--env-file", type=Path, default=ROOT / ".env")
-            command.add_argument("--concurrency", type=int, default=4)
+            command.add_argument("--concurrency", type=int, default=40)
             command.add_argument("--max-tokens", type=int, default=16384)
             command.add_argument("--timeout", type=float, default=120)
             command.add_argument("--retries", type=int, default=3)
