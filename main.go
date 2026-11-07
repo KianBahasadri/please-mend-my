@@ -200,7 +200,12 @@ func serve(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("load TLS certificate and key: %w", err)
 		}
-		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+		tlsConfig = &tls.Config{
+			MinVersion: tls.VersionTLS12,
+			// Keep origin handshake flights small on this network path.
+			CurvePreferences: []tls.CurveID{tls.X25519, tls.CurveP256},
+			Certificates:     []tls.Certificate{certificate},
+		}
 	}
 	handler, err := newHandler()
 	if err != nil {

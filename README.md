@@ -1,6 +1,6 @@
 # please, mend my
 
-A responsive typing page with independently rotating fonts and monochrome backgrounds.
+A responsive typing page with rotating fonts and subtle monochrome lighting.
 
 Run locally with Go 1.25+:
 
@@ -26,3 +26,5 @@ Assets are prepared once at startup and served from memory. Text responses use p
 `GET /healthz` returns `ok`. Header/read/write/idle timeouts bound stalled connections. SIGINT or SIGTERM allows up to ten seconds for active requests to finish.
 
 Optional native HTTPS runs alongside HTTP. Set both `TLS_CERT` and `TLS_KEY` to PEM file paths; `TLS_ADDR` defaults to `:443`. Certificates load once at startup, so restart after replacing them. HTTPS supports HTTP/2 and requires TLS 1.2 or newer. Both listeners share the prepared assets and drain together on shutdown; invalid credentials or a bind failure stop startup without leaving a partial service running.
+
+TLS uses X25519/P-256 key exchange to keep handshake flights small on the origin network path.
