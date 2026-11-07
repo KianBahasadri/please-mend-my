@@ -434,7 +434,7 @@ def build(metadata, sha256):
         category = category_for(path, title)
         author = first(tree, "//*[contains(concat(' ',normalize-space(@class),' '),' guide-author ')]/a")
         author_name = text(author) or "iFixit contributors"
-        attribution = f"{author_name} via iFixit / Kiwix; reformatted and sanitized for this offline catalog. CC BY-NC-SA 3.0."
+        attribution = f"{author_name} via iFixit / Kiwix."
         selected, images = [], []
         summary_element = first(tree, "//*[contains(concat(' ',normalize-space(@class),' '),' introduction-container ')]//*[@itemprop='description']")
         if summary_element is None:
@@ -528,7 +528,7 @@ def build(metadata, sha256):
     work.close()
     index = {"version": 1, "revision": REVISION,
              "source": {"name": "iFixit via Kiwix", "url": SOURCE_URL, "archive": ARCHIVE.name, "license": LICENSE,
-                        "attribution": "iFixit and its contributors, distributed by Kiwix/openZIM. Offline formatting adapted; CC BY-NC-SA 3.0."},
+                        "attribution": "iFixit and its contributors, distributed by Kiwix/openZIM."},
              "categories": CATEGORIES, "fields": ["id", "title", "category", "kind", "device"], "items": sorted(rows, key=lambda row: (row[1].casefold(), row[0]))}
     index_payload = json_bytes(index)
     index_gzip = gzip.compress(index_payload, compresslevel=9, mtime=0)

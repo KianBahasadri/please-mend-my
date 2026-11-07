@@ -26,6 +26,10 @@
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
 - DNS: authoritative/public resolvers verified; local apex negative cache may linger (www works); never alter global DNS/hosts.
 - Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
+- Sources: add full English WikiMed + Army FM4-25.11 PDF chapters; same pinned local/EC2 pipeline; preserve raw text/media/provenance/licenses.
+- Rough pages OK; future LLM custom-generates each entry page.
+- Attribution: credits only, no formatting/sanitizing notices; license separate.
+- ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
 - Never show loading text/spinners; retain current results until prefetched content is ready.

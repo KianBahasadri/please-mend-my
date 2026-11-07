@@ -286,7 +286,8 @@
     const attribution = node("p", "guide-source");
     const sourceUrl = safeUrl(detail.sourceUrl);
     if (sourceUrl) {
-      const link = node("a", "", "Original on iFixit");
+      const sourceName = detail.sourceName || (new URL(sourceUrl).hostname.endsWith("ifixit.com") ? "iFixit" : "source");
+      const link = node("a", "", `Original on ${sourceName}`);
       link.href = sourceUrl;
       link.target = "_blank";
       link.rel = "noopener noreferrer";
@@ -300,7 +301,10 @@
       if (licenseUrl) { label.href = licenseUrl; label.target = "_blank"; label.rel = "noopener noreferrer"; }
       attribution.append(label);
     }
-    if (detail.attribution || latestSource?.attribution) attribution.append(document.createTextNode(` · ${detail.attribution || latestSource.attribution}`));
+    const credit = (detail.attribution || latestSource?.attribution || "")
+      .replace(/;?\s*reformatted and sanitized for this offline catalog\./gi, ".")
+      .replace(/\s*CC BY-NC-SA 3\.0\.$/, "").trim();
+    if (credit) attribution.append(document.createTextNode(` · ${credit}`));
     fragment.append(attribution);
     const coverUrl = safeUrl(detail.images?.[0]);
     if (coverUrl && new URL(coverUrl).origin === location.origin) {
