@@ -119,7 +119,9 @@ class Element extends EventTarget {
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] || null; }
   getBoundingClientRect() {
-    return { top: 0, left: 0, width: this.id?.includes('measure') ? this.textContent.length * 42 : this.clientWidth,
+    const heading = this.closest('h1');
+    const fontSize = parseFloat(heading?.style.fontSize) || 100;
+    return { top: 0, left: 0, width: this.id?.includes('measure') ? this.ownerDocument.measureText(this.textContent, fontSize) : this.clientWidth,
       height: this.scrollHeight, bottom: this.scrollHeight, right: this.clientWidth };
   }
   setSelectionRange(start, end, direction = 'none') {
@@ -155,7 +157,8 @@ class Element extends EventTarget {
   }
 }
 
-function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100 } = {}) {
+function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
+  measureText = (text, fontSize) => text.length * fontSize * 0.42 } = {}) {
   const timers = new Map(), frames = new Map();
   let clock = 0, nextId = 1;
   const window = new EventTarget();
@@ -170,6 +173,7 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100 } = 
     }
   };
   document.width = width;
+  document.measureText = measureText;
   document.animations = 0;
   document.parentNode = window;
   document.documentElement = new Element('html', document);

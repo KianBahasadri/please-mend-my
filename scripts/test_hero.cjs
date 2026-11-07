@@ -104,6 +104,95 @@ test('Enter and Tab immediately ask the question, focus its blank answer, and pr
   }
 });
 
+test('completion punctuation immediately clarifies bare nouns without entering query punctuation', async () => {
+  for (const noun of ['arm', 'harpsichord']) {
+    for (const punctuation of ['?', '.', '!']) {
+      const dom = await heroFor();
+      dom.type(dom.response, noun);
+      const event = dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' });
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(dom.visible(), true);
+      assert.equal(dom.document.activeElement, dom.clarification);
+      assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`);
+      assert.equal(dom.suffix(dom.response), noun);
+      assert.equal(dom.clarification.value, '');
+      assert.equal(dom.clarification.selectionStart, 0);
+      assert.equal(dom.window.mendHero.query(), noun);
+      dom.advance(10000);
+      assert.equal(dom.document.activeElement, dom.clarification);
+      assert.deepEqual(dom.queries, [noun]);
+    }
+  }
+});
+
+test('mobile completion punctuation clarifies once without inserting literal punctuation', async () => {
+  for (const punctuation of ['?', '.', '!']) {
+    const dom = await heroFor();
+    dom.type(dom.response, 'car');
+    const mobile = dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true });
+    assert.equal(mobile.defaultPrevented, true);
+    assert.equal(dom.visible(), true);
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.question.textContent, "What's wrong with your car?");
+    assert.equal(dom.window.mendHero.query(), 'car');
+    assert.equal(dom.suffix(dom.response), 'car');
+    assert.deepEqual(dom.queries, ['car']);
+  }
+});
+
+test('completion punctuation preserves full phrases, decimals, models, and non-subjects', async () => {
+  for (const text of ['broken arm', 'arm hurts', '3', '3.5', 'A1708', 'broken']) {
+    const dom = await heroFor();
+    dom.type(dom.response, text);
+    for (const punctuation of ['?', '.', '!']) {
+      assert.equal(dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' }).defaultPrevented, false);
+      assert.equal(dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true }).defaultPrevented, false);
+      assert.equal(dom.visible(), false);
+      assert.equal(dom.window.mendHero.query(), text);
+      assert.equal(dom.document.activeElement, dom.response);
+    }
+  }
+});
+
+test('completion shortcuts respect modifiers, composition, and ordinary answer punctuation', async () => {
+  for (const punctuation of ['?', '.', '!']) {
+    const dom = await heroFor();
+    dom.type(dom.response, 'arm');
+    for (const options of [{ ctrlKey: true }, { metaKey: true }, { altKey: true },
+      { isComposing: true }, { keyCode: 229 }]) {
+      const event = dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.', ...options });
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(dom.visible(), false);
+    }
+    dom.event(dom.response, 'compositionstart');
+    const composing = dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true });
+    assert.equal(composing.defaultPrevented, false);
+    assert.equal(dom.visible(), false);
+    dom.event(dom.response, 'compositionend');
+    dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' });
+    assert.equal(dom.key(dom.clarification, punctuation, { shiftKey: punctuation !== '.' }).defaultPrevented, false);
+    assert.equal(dom.event(dom.clarification, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true }).defaultPrevented, false);
+    dom.type(dom.clarification, 'hurts' + punctuation);
+    assert.equal(dom.window.mendHero.query(), 'arm hurts' + punctuation);
+  }
+});
+
+test('completion punctuation does not hijack midword insertion or selection replacement', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'laptop');
+  const boundary = Number(dom.response.dataset.promptLength);
+  for (const [start, end] of [[boundary + 2, boundary + 2], [boundary, dom.response.value.length]]) {
+    dom.response.setSelectionRange(start, end);
+    for (const punctuation of ['?', '.', '!']) {
+      assert.equal(dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' }).defaultPrevented, false);
+      assert.equal(dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true }).defaultPrevented, false);
+      assert.equal(dom.visible(), false);
+      assert.equal(dom.response.selectionStart, start);
+      assert.equal(dom.response.selectionEnd, end);
+    }
+  }
+});
+
 test('Backspace on an empty second suffix dissolves it and suppresses idle reopening', async () => {
   const dom = await heroFor();
   dom.type(dom.response, 'arm');
@@ -350,4 +439,50 @@ test('all seven themes retain protected prompts and the controller stays static 
     assert.equal(dom.document.animations, 0, 'the controller must not start a decorative animation loop');
     assert.ok(Number.isFinite(parseFloat(dom.hero.style.fontSize)));
   }
+});
+
+test('all seven styles fit the visible question and first prompt on narrow and wide layouts', async () => {
+  // Injectable proportional metrics exercise the controller's real measurement
+  // path. They model different font widths, not browser font shaping or paint.
+  const styles = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox'];
+  for (const [styleIndex, theme] of styles.entries()) {
+    const measureText = (text, size) => [...text].reduce((width, char) =>
+      width + (char === ' ' ? 0.25 : /[il'?.]/.test(char) ? 0.3 : 0.48 + styleIndex * 0.035), 0) * size;
+    for (const width of [280, 320, 768, 1440]) {
+      const dom = await heroFor({ theme, width, measureText });
+      const closedSize = parseFloat(dom.hero.style.fontSize);
+      const firstSample = dom.prefix(dom.response) + 'relationship';
+      assert.ok(measureText(firstSample, closedSize) <= width - 6 + 0.001, `${theme}/${width}: first prompt fits`);
+      dom.reveal('finger');
+      const questionSize = parseFloat(dom.hero.style.fontSize);
+      assert.ok(measureText(dom.question.textContent, questionSize) <= width - 6 + 0.001, `${theme}/${width}: full question fits`);
+      assert.ok(measureText(firstSample, questionSize) <= width - 6 + 0.001, `${theme}/${width}: first line remains fitted`);
+      assert.ok(questionSize <= closedSize, 'visible question may shrink the shared font, never enlarge it');
+      dom.response.focus();
+      dom.type(dom.response, 'extraordinarilylongunfamiliarobject');
+      dom.key(dom.response, 'Enter');
+      const longSize = parseFloat(dom.hero.style.fontSize);
+      assert.ok(measureText(dom.question.textContent, longSize) <= width - 6 + 0.001, `${theme}/${width}: a longer dynamic question fits`);
+      const beforeInput = dom.hero.style.fontSize;
+      dom.type(dom.clarification, 'a very long editable answer '.repeat(20));
+      assert.equal(dom.hero.style.fontSize, beforeInput, 'editable long text wraps without shrinking the whole hero');
+    }
+  }
+});
+
+test('a question that already fits keeps its style size and fitting refreshes on resize', async () => {
+  const measureText = (text, size) => text.length * size * 0.42;
+  const dom = await heroFor({ width: 2000, measureText });
+  const originalSize = dom.hero.style.fontSize;
+  dom.reveal('finger');
+  assert.equal(dom.hero.style.fontSize, originalSize, 'fitting question keeps the current theme size');
+  dom.response.clientWidth = 320;
+  dom.event(dom.window, 'resize');
+  const narrowSize = parseFloat(dom.hero.style.fontSize);
+  assert.ok(measureText(dom.question.textContent, narrowSize) <= 314 + 0.001);
+  assert.ok(narrowSize < parseFloat(originalSize));
+  dom.key(dom.clarification, 'Backspace');
+  const closedSize = parseFloat(dom.hero.style.fontSize);
+  assert.ok(closedSize >= narrowSize, 'dismissal restores fitting for the first prompt only');
+  assert.ok(measureText(dom.prefix(dom.response) + 'relationship', closedSize) <= 314 + 0.001);
 });

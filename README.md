@@ -5,11 +5,14 @@ A responsive typing page with rotating fonts and subtle monochrome lighting.
 Both typing areas are underlined, matching the little idle typing animations.
 After 2.5 seconds without typing, bare subjects such as `arm` reveal the hero
 question `What's wrong with your arm?` and focus a blank answer field beneath it.
-Enter or Tab opens it immediately; Backspace on an empty answer returns to the
-end of the first line. The prompt and question stay protected, and only the
+Enter, Tab, or a noun-ending `?`, `.`, or `!` opens it immediately; punctuation
+stays normal in full phrases and the answer. Backspace on an empty answer returns
+to the end of the first line. The prompt and question stay protected, and only the
 focused native textbox has a caret. Full phrases such as `broken arm` use the
 first line alone. Search combines the two editable answers locally, excluding
 the fixed prompt and question.
+Each font keeps its size when the full question fits; otherwise the hero scales
+down to keep the question on one line. Long editable answers still wrap.
 Broad queries favor general entries over niche model guides; exact model searches
 keep their priority.
 

@@ -29,6 +29,12 @@
   let active = first;
   let lastQuery = "";
   let automaticTimer = null;
+  const completionPunctuation = new Set(["?", ".", "!"]);
+
+  function completesSubject(input, text) {
+    return completionPunctuation.has(text) && input.selectionStart === input.selectionEnd &&
+      input.selectionEnd === input.value.length;
+  }
 
   function cancelAutomatic() {
     if (automaticTimer !== null) clearTimeout(automaticTimer);
@@ -78,7 +84,12 @@
     if (!first.clientWidth) return;
     heading.style.fontSize = "";
     const size = parseFloat(getComputedStyle(heading).fontSize);
-    const sampleWidth = measure.getBoundingClientRect().width;
+    measure.textContent = `${prompt}relationship`;
+    let sampleWidth = measure.getBoundingClientRect().width;
+    if (open) {
+      measure.textContent = question.textContent;
+      sampleWidth = Math.max(sampleWidth, measure.getBoundingClientRect().width);
+    }
     if (sampleWidth > 0) heading.style.fontSize = `${Math.min(size, size * (first.clientWidth - 6) / sampleWidth)}px`;
     grow(first);
     grow(second);
@@ -203,7 +214,8 @@
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
         input.setSelectionRange(state.get(input).prefix.length, input.value.length);
-      } else if (input === first && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && (event.key === "Enter" || event.key === "Tab")) {
+      } else if (input === first && !event.ctrlKey && !event.metaKey && !event.altKey &&
+          (completesSubject(input, event.key) || !event.shiftKey && (event.key === "Enter" || event.key === "Tab"))) {
         if (activate() || event.key === "Enter") event.preventDefault();
       } else if (input === second && event.key === "Backspace" && !suffix(second) && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
@@ -219,9 +231,10 @@
       const boundary = item.prefix.length;
       const start = input.selectionStart;
       const end = input.selectionEnd;
-      if (input === first && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") && !event.isComposing && !item.composing) {
-        event.preventDefault();
-        activate();
+      if (input === first && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph" ||
+          event.inputType === "insertText" && completesSubject(input, event.data)) &&
+          !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing && !item.composing) {
+        if (activate() || event.inputType !== "insertText") event.preventDefault();
       } else if (event.inputType.startsWith("delete") && event.inputType.endsWith("Backward") && end <= boundary) {
         event.preventDefault();
         if (input === second && !suffix(second) && !event.isComposing && !item.composing) dissolve();
