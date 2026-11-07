@@ -5,12 +5,20 @@ const vm = require('node:vm');
 const { performance } = require('node:perf_hooks');
 const { spawnSync } = require('node:child_process');
 
+const invocation = process.argv.slice(2);
+const suiteAt = invocation.indexOf('--suite');
+const suite = suiteAt < 0 ? 'repair' : invocation.splice(suiteAt, 2)[1];
+if (!['repair', 'multisource'].includes(suite)) throw new Error('Choose --suite repair or --suite multisource');
 const commonQueries = ['fridge', 'frid thermostat', 'laptop battery', 'macbook notebook battery',
   'cellphone', 'tumble dryer', 'washer', 'macbook air', 'Samsung Galaxy S23', 'noresultzzzz'];
-const queries = [...commonQueries, 'laptop batteries', 'repairing laptop', 'laptpp batery',
+const repairQueries = [...commonQueries, 'laptop batteries', 'repairing laptop', 'laptpp batery',
   'refrxxerator', 'frdge thermostat', 'samsung galaxi S23', 'Samsung Galaxy S24', 'A1708', 'A1709'];
+const medicalQueries = suite === 'multisource' ? ['asthma', 'hypertension', 'high blood pressure',
+  'diabetes', 'diabetis', 'first aid', 'fractures', 'climatic injuries'] : [];
+const queries = [...repairQueries, ...medicalQueries];
 const stressQueries = ['a', 'r'];
-const coldQueries = ['laptpp batery', 'refrxxerator', 'noresultzzzz'];
+const coldQueries = ['laptpp batery', 'refrxxerator', 'noresultzzzz',
+  ...(suite === 'multisource' ? ['diabetis', 'first aid'] : [])];
 const rounded = value => +value.toFixed(3);
 function percentiles(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -27,7 +35,9 @@ async function settledMemory() {
 
 async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
   const before = await settledMemory();
+  const catalogStarted = performance.now();
   const index = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+  const catalogReadParseMs = performance.now() - catalogStarted;
   const messages = [];
   let requests = 0;
   const context = vm.createContext({ self: {}, performance, setTimeout, clearTimeout,
@@ -56,11 +66,13 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     throw new Error('Worker did not reply within 30 seconds');
   }
   const ready = await next('ready');
+  const catalogToReadyMs = performance.now() - catalogStarted;
   const after = await settledMemory();
   const preparedHeapMiB = (after.heapUsed - before.heapUsed) / 1024 ** 2;
   const preparedExternalMiB = (after.external - before.external) / 1024 ** 2;
   const preparedArrayBufferMiB = (after.arrayBuffers - before.arrayBuffers) / 1024 ** 2;
-  const samples = [], commonSamples = [], firstPass = [], totals = {}, perQuery = {};
+  const samples = [], commonSamples = [], repairSamples = [], medicalSamples = [],
+    firstPass = [], totals = {}, perQuery = {};
   let requestId = 0;
   async function run(query) {
     context.self.onmessage({ data: { type: 'search', query, requestId: ++requestId, count: 30 } });
@@ -74,7 +86,8 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     const response = await run(firstOnlyQuery);
     if (requests !== 1) throw new Error('Search made extra requests');
     return { query: firstOnlyQuery, total: response.total, firstQueryMs: rounded(response.duration),
-      workerLoadMs: rounded(ready.loadDuration), indexRequests: requests };
+      workerLoadMs: rounded(ready.loadDuration), catalogReadParseMs: rounded(catalogReadParseMs),
+      catalogToReadyMs: rounded(catalogToReadyMs), indexRequests: requests };
   }
   // Keep initial searches separate: warm repetitions can hide expansion/trie work.
   // This pass starts with empty caches, but later queries can reuse shared terms.
@@ -92,6 +105,8 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
         samples.push(response.duration);
         perQuery[query].samples.push(response.duration);
         if (commonQueries.includes(query)) commonSamples.push(response.duration);
+        if (repairQueries.includes(query)) repairSamples.push(response.duration);
+        if (medicalQueries.includes(query)) medicalSamples.push(response.duration);
       }
     }
   }
@@ -113,27 +128,31 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     invertedIndex: ready.invertedIndex || false, termCount: ready.termCount || 0,
     indexJsonBytes: fs.statSync(indexPath).size,
     indexGzipBytes: fs.existsSync(packed) ? fs.statSync(packed).size : null,
-    workerLoadMs: rounded(ready.loadDuration), preparedHeapMiB: rounded(preparedHeapMiB),
+    workerLoadMs: rounded(ready.loadDuration), catalogReadParseMs: rounded(catalogReadParseMs),
+    catalogToReadyMs: rounded(catalogToReadyMs), preparedHeapMiB: rounded(preparedHeapMiB),
     preparedExternalMiB: rounded(preparedExternalMiB), preparedArrayBufferMiB: rounded(preparedArrayBufferMiB),
     searchP50Ms: regular.p50Ms, searchP95Ms: regular.p95Ms,
     firstPass: percentiles(firstPass), commonQueries: percentiles(commonSamples),
+    repairQueries: percentiles(repairSamples),
+    ...(medicalSamples.length ? { medicalQueries: percentiles(medicalSamples) } : {}),
     measuredQueries: samples.length, indexRequests: requests, totals, perQuery, stress };
 }
 
 (async () => {
-  if (process.argv[2] === '--cold-query') {
-    console.log(JSON.stringify(await benchmark(process.argv[3], process.argv[4], process.argv[5])));
+  if (invocation[0] === '--cold-query') {
+    console.log(JSON.stringify(await benchmark(invocation[1], invocation[2], invocation[3])));
     return;
   }
-  if (process.argv[2] === '--single') {
-    console.log(JSON.stringify(await benchmark(process.argv[3], process.argv[4])));
+  if (invocation[0] === '--single') {
+    console.log(JSON.stringify(await benchmark(invocation[1], invocation[2])));
     return;
   }
-  const [beforeIndex, beforeWorker, afterIndex, afterWorker] = process.argv.slice(2);
-  if (!afterWorker) throw new Error('Usage: node --expose-gc scripts/bench_search.cjs before.json before-worker.js after.json after-worker.js');
+  const [beforeIndex, beforeWorker, afterIndex, afterWorker] = invocation;
+  if (!afterWorker || invocation.length !== 4) throw new Error('Usage: node --expose-gc scripts/bench_search.cjs [--suite repair|multisource] before.json before-worker.js after.json after-worker.js');
   function isolated(index, source, query) {
     const args = ['--expose-gc', __filename, query === undefined ? '--single' : '--cold-query', index, source];
     if (query !== undefined) args.push(query);
+    args.push('--suite', suite);
     const result = spawnSync(process.execPath, args, { encoding: 'utf8' });
     if (result.status !== 0) throw new Error(result.stderr || 'Benchmark failed');
     return JSON.parse(result.stdout);
@@ -148,11 +167,12 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     before.coldQueries[query] = isolated(beforeIndex, beforeWorker, query);
     after.coldQueries[query] = isolated(afterIndex, afterWorker, query);
   }
-  console.log(JSON.stringify({ environment: 'Node ' + process.version + ', worker computation (not browser end-to-end)',
+  console.log(JSON.stringify({ suite, environment: 'Node ' + process.version + ', worker computation (not browser end-to-end)',
     hardware: { platform: process.platform, architecture: process.arch,
       cpu: os.cpus()[0]?.model, logicalCpus: os.cpus().length },
     firstPassPolicy: 'Initial pass precedes warmups in one fresh worker per build; later queries can reuse earlier shared terms.',
     coldQueryPolicy: 'Each coldQueries probe is the first search in its own new process and worker, with empty caches.',
     memoryPolicy: 'Deltas before JSON parsing versus after startup; both settle with GC, an event-loop turn, then GC again. External includes ArrayBuffer memory, so do not add both.',
+    startupPolicy: 'catalogReadParseMs includes local file read and JSON parsing; catalogToReadyMs also includes worker script setup and preparation. Neither includes network transfer or browser painting.',
     before, after }, null, 2));
 })().catch(error => { console.error(error); process.exitCode = 1; });

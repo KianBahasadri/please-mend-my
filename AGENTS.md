@@ -31,7 +31,7 @@
 - Attribution: credits only, no formatting/sanitizing notices; license separate.
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
-- Disposable ingest SQLite: journal/sync OFF; publish completed snapshots only.
+- Disposable ingest SQLite: journal/sync OFF; unlink scratch on restart (no GB-scale DROP); publish complete snapshots only.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
