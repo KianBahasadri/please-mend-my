@@ -3,33 +3,109 @@
   --strength: 0.14;
   --beam: 0.115;
   --contour: 0.075;
+  --wash-size: 55% 110%;
+  --wash-origin: 94% -15%;
+  --beam-origin: 92% -18%;
+  --beam-turn: 180deg;
+  --beam-size: 95% 115%;
+  --pool-size: 38% 8%;
+  --pool-origin: 67% 79%;
+  --seam-top: 75%;
+  --seam-turn: 9deg;
+  --seam-focus: 65% 50%;
+  --mirror: 1;
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
+  transform: scaleX(var(--mirror));
   background:
-    radial-gradient(ellipse 38% 8% at 67% 79%, rgb(var(--light) / 0.035), transparent 80%),
-    radial-gradient(ellipse 55% 110% at 94% -15%, rgb(var(--light) / var(--strength)), transparent 80%);
+    radial-gradient(ellipse var(--pool-size) at var(--pool-origin), rgb(var(--light) / 0.035), transparent 80%),
+    radial-gradient(ellipse var(--wash-size) at var(--wash-origin), rgb(var(--light) / var(--strength)), transparent 80%);
 }
 
 .atmosphere::before {
   content: "";
   position: absolute;
   inset: 0;
-  background: conic-gradient(from 180deg at 92% -18%, transparent 2deg, rgb(var(--light) / 0.025) 14deg, rgb(var(--light) / var(--beam)) 25deg, rgb(var(--light) / 0.025) 39deg, transparent 51deg);
-  mask-image: radial-gradient(ellipse 95% 115% at 92% -18%, #000 18%, rgb(0 0 0 / 0.8) 46%, transparent 88%);
+  background: conic-gradient(from var(--beam-turn) at var(--beam-origin), transparent 2deg, rgb(var(--light) / 0.025) 14deg, rgb(var(--light) / var(--beam)) 25deg, rgb(var(--light) / 0.025) 39deg, transparent 51deg);
+  mask-image: radial-gradient(ellipse var(--beam-size) at var(--beam-origin), #000 18%, rgb(0 0 0 / 0.8) 46%, transparent 88%);
 }
 
 .atmosphere::after {
   content: "";
   position: absolute;
   left: -15%;
-  top: 75%;
+  top: var(--seam-top);
   width: 130%;
   height: clamp(40px, 6vw, 100px);
-  transform: rotate(9deg);
-  background: radial-gradient(ellipse 85% 45% at 65% 50%, rgb(var(--light) / var(--contour)), transparent 78%);
+  transform: rotate(var(--seam-turn));
+  background: radial-gradient(ellipse 85% 45% at var(--seam-focus), rgb(var(--light) / var(--contour)), transparent 78%);
+}
+
+[data-background="left"] .atmosphere { --mirror: -1; }
+
+[data-background="wide"] .atmosphere {
+  --wash-size: 85% 125%;
+  --wash-origin: 80% -30%;
+  --beam-origin: 88% -38%;
+  --beam-size: 120% 145%;
+  --beam-turn: 168deg;
+  --pool-size: 55% 11%;
+  --pool-origin: 61% 85%;
+  --seam-top: 81%;
+  --seam-turn: 5deg;
+}
+
+[data-background="narrow"] .atmosphere {
+  --wash-size: 38% 130%;
+  --wash-origin: 85% -24%;
+  --beam-origin: 91% -36%;
+  --beam-size: 62% 145%;
+  --beam-turn: 174deg;
+  --pool-size: 22% 7%;
+  --pool-origin: 60% 80%;
+  --seam-turn: 12deg;
+  --seam-focus: 60% 50%;
+}
+
+[data-background="low"] .atmosphere {
+  --wash-size: 75% 80%;
+  --wash-origin: 112% 2%;
+  --beam-origin: 125% -10%;
+  --beam-turn: 194deg;
+  --beam-size: 130% 105%;
+  --pool-size: 48% 7%;
+  --pool-origin: 73% 88%;
+  --seam-top: 84%;
+  --seam-turn: 4deg;
+}
+
+[data-background="crosslight"] .atmosphere {
+  --mirror: -1;
+  --wash-size: 70% 120%;
+  --wash-origin: 105% -18%;
+  --beam-origin: 115% -25%;
+  --beam-turn: 191deg;
+  --pool-size: 44% 9%;
+  --pool-origin: 56% 78%;
+  --seam-top: 73%;
+  --seam-turn: 13deg;
+  --seam-focus: 53% 50%;
+}
+
+[data-background="distant"] .atmosphere {
+  --wash-size: 80% 100%;
+  --wash-origin: 68% -44%;
+  --beam-origin: 80% -57%;
+  --beam-turn: 164deg;
+  --beam-size: 120% 150%;
+  --pool-size: 60% 5%;
+  --pool-origin: 53% 73%;
+  --seam-top: 70%;
+  --seam-turn: 2deg;
+  --seam-focus: 50% 50%;
 }
 
 @media (prefers-color-scheme: light) {

@@ -3,16 +3,17 @@
 - index.html; open `firefox index.html`.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
-- Random font/refresh; no repeats in row: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
+- Independently randomize font/BG each refresh; no repeats in row. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
-- BG: docs/references/spotlight-wall-floor.png: visible offscreen upper-right spotlight on wall/floor + soft diagonal seam, near/brighter→far/faded; system theme; static/fast.
+- BG: save approved look in docs/references/approved-spotlight.css; mix spotlight/wall-floor variations only. Reference: docs/references/spotlight-wall-floor.png; visible light, receding seam, system theme, static/fast.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
 - Performance + response latency are CLASS-1: measure before/after deploy; slow => optimize/remove; sustained speed > cost; no decorative bottlenecks.
 - Commit AND push regular work milestones.
 - Current work local only; no live/AWS deploy.
+- Local: http://127.0.0.1:8080; catalog-data/runtime has 103473 items/575002 media; catalog.sqlite holds inventory.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
 - CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
@@ -20,3 +21,4 @@
 - Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
+- No Browse library/category-filter buttons; typing searches all categorized items.

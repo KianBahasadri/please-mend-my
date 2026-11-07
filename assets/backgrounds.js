@@ -22,7 +22,7 @@
     try {
       previous = localStorage.getItem(storageKey) || previous;
     } catch {
-      // window.name keeps font history across reloads when storage is blocked.
+      // Keep separate font and lighting histories when browser storage is blocked.
     }
     const alternatives = options.filter((option) => option !== previous);
     const choices = alternatives.length ? alternatives : options;
@@ -35,4 +35,7 @@
     }
     return chosen;
   };
+
+  const backgrounds = ["approved", "left", "wide", "narrow", "low", "crosslight", "distant"];
+  document.documentElement.dataset.background = window.pickMendVariant("please-mend-my-background", backgrounds);
 })();

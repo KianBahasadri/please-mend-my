@@ -6,7 +6,6 @@
   const results = document.getElementById("search-results");
   const cards = document.getElementById("result-cards");
   const count = document.getElementById("result-count");
-  const filters = document.getElementById("category-filters");
   const empty = document.getElementById("no-results");
   const more = document.getElementById("more-results");
   const panel = document.getElementById("guide-panel");
@@ -23,7 +22,6 @@
   let worker;
   let ready = false;
   let total = 0;
-  let category = "";
   let limit = 12;
   let requestId = 0;
   let inputAt = 0;
@@ -32,7 +30,6 @@
   let pendingGuide = null;
   let viewVersion = 0;
   let latestSource;
-  let browsing = false;
   let searchFrame = 0;
   let pendingSearch;
 
@@ -52,28 +49,14 @@
   };
 
   function setStatus(message) {
-    status.textContent = message;
-  }
-
-  function addFilter(id, label) {
-    const button = node("button", "", label);
-    button.type = "button";
-    button.dataset.category = id;
-    button.setAttribute("aria-pressed", String(id === category));
-    button.addEventListener("click", () => {
-      cancelPendingGuide();
-      category = id;
-      limit = 12;
-      for (const item of filters.children) item.setAttribute("aria-pressed", String(item.dataset.category === id));
-      runSearch();
-    });
-    filters.append(button);
+    status.hidden = !message;
+    status.textContent = message || "";
   }
 
   function runSearch() {
     requestId += 1;
     const text = query();
-    const active = Boolean(text || category || browsing);
+    const active = Boolean(text);
     document.body.classList.toggle("searching", active);
     results.hidden = !active || currentGuide !== null;
     if (!active) {
@@ -87,7 +70,7 @@
       results.hidden = true;
       return;
     }
-    pendingSearch = { type: "search", requestId, query: text, category, limit };
+    pendingSearch = { type: "search", requestId, query: text, limit };
     if (!searchFrame) searchFrame = requestAnimationFrame(() => {
       searchFrame = 0;
       worker.postMessage(pendingSearch);
@@ -316,16 +299,7 @@
   });
 
   input.addEventListener("input", () => { cancelPendingGuide(); limit = 12; runSearch(); });
-  document.getElementById("browse-library").addEventListener("click", () => {
-    cancelPendingGuide();
-    browsing = true;
-    runSearch();
-    results.scrollIntoView({ block: "start", behavior: "instant" });
-  });
   document.getElementById("clear-search").addEventListener("click", () => {
-    browsing = false;
-    category = "";
-    for (const button of filters.children) button.setAttribute("aria-pressed", String(button.dataset.category === ""));
     input.value = input.value.slice(0, promptLength);
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.focus();
@@ -355,10 +329,7 @@
         total = data.total;
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
-        addFilter("", "All");
-        for (const item of data.categories) { categoryNames.set(item.id, item.name); addFilter(item.id, item.name); }
-        setStatus(`${total.toLocaleString()} repair guides, device pages & articles · iFixit`);
-        document.getElementById("browse-library").hidden = false;
+        for (const item of data.categories) categoryNames.set(item.id, item.name);
         runSearch();
       } else if (data.type === "results") renderCards(data);
       else if (data.type === "error") {

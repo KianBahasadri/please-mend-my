@@ -14,6 +14,7 @@ The page can also be opened directly with `firefox index.html`.
 
 Serve an ingested repair catalog locally with
 `CATALOG_DIR=./catalog-data/runtime ADDR=127.0.0.1:8080 go run .`.
+Build or audit that snapshot with the commands in [scripts/README.md](scripts/README.md).
 `GET /api/catalog` supplies the complete compact browser-search index;
 `GET /api/guides/{id}` supplies full guide/topic content, and `/media/{filename}`
 serves content-addressed local images. Catalog data stays outside the binary and Git.
