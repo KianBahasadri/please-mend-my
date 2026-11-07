@@ -11,7 +11,7 @@ uv run scripts/ingest_ifixit.py --reclassify-only # refresh source-graph categor
 `build_catalog.py` pins uv 0.13.5 and Python 3.12.12; the ingestion script pins
 libzim/lxml and the archive revision, size, and SHA-256. Its default work cache is
 `catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
-The ingestion/build/enrichment scripts and vocabulary pins are fingerprinted; an unchanged completed release is reused
+The ingestion/build/enrichment/search scripts and vocabulary pins are fingerprinted; an unchanged completed release is reused
 without scanning its corpus. Interrupted downloads/extraction can resume, failed
 builds cannot publish a release, and a filesystem lock prevents overlapping builds.
 The same command runs on EC2 with `--data-dir` and `--release-root` pointing to
@@ -31,15 +31,27 @@ no guessed entity-name matches. The index retains separate Wikidata CC0 provenan
 and the original iFixit attribution/licence.
 
 Search terms live in shared groups referenced by item position, avoiding repeated
-alias strings in every row. The existing worker combines those groups with title,
-device and category text; exact title/model matches outrank inherited aliases.
-Browser searches issue no external requests. This stage adds aliases/ancestry;
-stemming, fuzzy matching and a full inverted index remain separate proposals.
+alias strings in every row. After enrichment, `prepare_search.py` builds sorted
+word dictionaries and compact delta-varint posting lists for titles, devices,
+categories and those shared alias groups. A second prepared dictionary connects
+words with the same [Porter stem](https://tartarus.org/martin/PorterStemmer/def.txt),
+so inflections such as `battery`/`batteries` and `repair`/`repairing` share matches.
+Numeric identifiers are never stemmed.
+
+The browser worker intersects posting lists and retains every match, sending only
+the visible range to the page. It supports word prefixes while typing and bounded
+typo matching through a compact word trie: one Levenshtein edit for 5–7 letters,
+two for words of at least 8 letters. Typo recovery applies to ASCII letter words
+when literal/prefix/stem lookup or the combined result is empty. Exact/model matches rank ahead of expanded
+matches; numeric-bearing query chunks remain literal. All dictionaries and
+postings are prepared before publication. Queries use only the browser's loaded
+data, with no server or external search requests.
 
 For an unpublished completed local core snapshot only:
 
 ```sh
 python3 scripts/enrich_search.py --data-dir catalog-data
+python3 scripts/prepare_search.py --data-dir catalog-data
 python3 -m unittest discover -s scripts -p 'test_*.py'
 node --test scripts/test_search_worker.cjs
 ```
@@ -49,7 +61,44 @@ inside the unpublished build; download/enrichment failure leaves the live releas
 unchanged. `bench_search.cjs` compares actual worker computation against a saved
 baseline without opening a browser; its numbers are not browser end-to-end latency.
 
-Alias-stage measurements on the 103,473-item catalog (Node v26.12.0, isolated
+Inverted-index measurements on the 103,473-item catalog (Linux x64, Intel
+i7-13650HX, Node v26.12.0; isolated processes running the actual worker):
+
+| Probe | Aliases + linear scan | Inverted + stems + typos |
+| --- | ---: | ---: |
+| Compressed index | 2,724,228 bytes | 3,577,878 bytes (+31.3%) |
+| Common 10 queries, warm p95 | 9.55 ms | 1.93 ms |
+| All 19 queries, warm p50 / p95 | 8.32 / 9.82 ms | 0.20 / 1.57 ms |
+| Initial query pass, p95 | 20.96 ms | 5.60 ms |
+| Worker preparation | 203 ms | 224 ms |
+| Prepared JS heap growth | 59.05 MiB | 54.37 MiB |
+| Prepared external memory growth (includes ArrayBuffers) | 0.40 MiB | 4.73 MiB |
+
+The common subset has 100 timed queries; the expanded suite has 190, after three
+warmup rounds. Initial-pass results precede warmups but may share earlier terms.
+Separate fresh-process/worker probes measure each typo as the very first query:
+`laptpp batery` takes 8.50 ms, `refrxxerator` 9.56 ms, and `noresultzzzz` 5.73 ms
+(baseline 21.33, 21.39 and 19.72 ms). Preparation excludes index transfer and JSON
+parsing; memory includes parsed catalog data and settles GC identically for both
+builds. These are worker CPU measurements, not browser input-to-paint timings.
+Single-letter queries still enumerate many matches: warm p95 is 11.13 ms for
+`a` and 14.85 ms for `r`; the result list remains complete.
+
+The prepared dictionary has 44,326 terms and 5,258 nonidentity stem mappings.
+`laptop batteries` improves from 6 to 2,364 matches, `repairing laptop` from 15 to
+428, and `laptpp batery` from 0 to 2,356. `Samsung Galaxy S23` and `S24` retain
+53 and 50 matches respectively. Matching now uses words/prefixes rather than
+arbitrary embedded substrings: `air` no longer matches the middle of `repair`,
+and `washer` no longer matches inside `dishwasher`. This explains the deliberate
+`macbook air` count change from 507 to 470 and `washer` from 824 to 679.
+
+Reproduce a comparison against a saved prior worker/index:
+
+```sh
+node --expose-gc scripts/bench_search.cjs BEFORE.json BEFORE-worker.js AFTER.json assets/search-worker.js
+```
+
+Earlier alias-stage measurements on the 103,473-item catalog (Node v26.12.0, isolated
 processes, 30 warmup searches followed by 100 measured searches each):
 
 | Probe | Before | With aliases |
