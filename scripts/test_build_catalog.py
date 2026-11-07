@@ -37,6 +37,12 @@ class ReleaseTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, "uv " + builder.UV_VERSION + "\n")
         self.assertIn(builder.PYTHON_VERSION, args)
         self.assertEqual(args[-2:], ["--data-dir", str(self.data)])
+        if str(builder.ENRICH) in args:
+            manifest = self.data / "runtime/manifest.json"
+            data = json.loads(manifest.read_text())
+            data["searchEnrichment"] = {"version": 1}
+            manifest.write_text(json.dumps(data))
+            return subprocess.CompletedProcess(args, 0)
         runtime = self.data / "runtime"
         runtime.mkdir(parents=True, exist_ok=True)
         (runtime / "guides").mkdir(exist_ok=True)
@@ -55,7 +61,7 @@ class ReleaseTests(unittest.TestCase):
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_count, 3)
         self.assertEqual(release.name, builder.pipeline_key())
         self.assertFalse((self.data / "runtime").exists())
         receipt = json.loads((release / "ingest.json").read_text())
@@ -110,6 +116,17 @@ class ReleaseTests(unittest.TestCase):
             fcntl.flock(lock, fcntl.LOCK_EX)
             with self.assertRaisesRegex(RuntimeError, "Another catalog build"):
                 builder.build_release(self.data, self.releases)
+
+    def test_alias_failure_cannot_publish_completed_core_data(self):
+        def fail_aliases(args, **kwargs):
+            if str(builder.ENRICH) in args:
+                raise subprocess.CalledProcessError(1, args)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=fail_aliases):
+            with self.assertRaises(subprocess.CalledProcessError):
+                builder.build_release(self.data, self.releases)
+        self.assertTrue((self.data / "runtime/manifest.json").is_file())
+        self.assertFalse((self.releases / builder.pipeline_key()).exists())
 
 
 class ConsoleKeyTests(unittest.TestCase):

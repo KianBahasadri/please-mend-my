@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "language": "en",
+  "concepts": [
+    {
+      "id": "Q3962",
+      "revision": 2561622294,
+      "label": "laptop",
+      "ifixitPaths": [
+        "Device/Mac_Laptop",
+        "Device/PC_Laptop"
+      ],
+      "curated": [
+        "laptops"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q22645",
+      "revision": 2532804358,
+      "label": "smartphone",
+      "ifixitPaths": [
+        "Device/iPhone",
+        "Device/Android_Phone",
+        "Device/Windows_Phone"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q17517",
+      "revision": 2558557497,
+      "label": "mobile phone",
+      "ifixitPaths": [
+        "Device/iPhone",
+        "Device/Android_Phone",
+        "Device/Windows_Phone",
+        "Device/Nokia_Phone"
+      ],
+      "curated": [
+        "mobilephone"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q37828",
+      "revision": 2565261847,
+      "label": "refrigerator",
+      "ifixitPaths": [
+        "Device/Refrigerator"
+      ],
+      "curated": [
+        "refrigerators"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q124441",
+      "revision": 2539635548,
+      "label": "washing machine",
+      "ifixitPaths": [
+        "Device/Washing_Machine"
+      ],
+      "curated": [
+        "washing machines"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q496334",
+      "revision": 2556962091,
+      "label": "clothes dryer",
+      "ifixitPaths": [
+        "Device/Dryer"
+      ],
+      "curated": [
+        "dryer"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q186263",
+      "revision": 2532350141,
+      "label": "dishwasher",
+      "ifixitPaths": [
+        "Device/Dishwasher"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q101674",
+      "revision": 2563035740,
+      "label": "vacuum cleaner",
+      "ifixitPaths": [
+        "Device/Vacuum_Cleaner"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q127956",
+      "revision": 2563173060,
+      "label": "microwave oven",
+      "ifixitPaths": [
+        "Device/Microwave"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q14890",
+      "revision": 2555690677,
+      "label": "toaster",
+      "ifixitPaths": [
+        "Device/Toaster"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q8075",
+      "revision": 2562689878,
+      "label": "television set",
+      "ifixitPaths": [
+        "Device/Television"
+      ],
+      "curated": [
+        "televisions"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q5290",
+      "revision": 2552840339,
+      "label": "computer monitor",
+      "ifixitPaths": [
+        "Device/Display"
+      ],
+      "curated": [],
+      "excludeAliases": [
+        "console"
+      ]
+    },
+    {
+      "id": "Q82",
+      "revision": 2563088339,
+      "label": "printer",
+      "ifixitPaths": [
+        "Device/Printer"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q186819",
+      "revision": 2556080837,
+      "label": "headphone",
+      "ifixitPaths": [
+        "Device/Headphone"
+      ],
+      "curated": [
+        "earphones"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q155972",
+      "revision": 2565376206,
+      "label": "tablet computer",
+      "ifixitPaths": [
+        "Device/Tablet",
+        "Device/iPad",
+        "Device/Android_Tablet"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q11442",
+      "revision": 2565417197,
+      "label": "bicycle",
+      "ifixitPaths": [
+        "Device/Bicycle"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q34493",
+      "revision": 2553077527,
+      "label": "motorcycle",
+      "ifixitPaths": [
+        "Device/Motorcycle"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q49013",
+      "revision": 2547942195,
+      "label": "sewing machine",
+      "ifixitPaths": [
+        "Device/Sewing_Machine"
+      ],
+      "curated": [],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q173725",
+      "revision": 2561610355,
+      "label": "air conditioning",
+      "ifixitPaths": [
+        "Device/Air_Conditioning"
+      ],
+      "curated": [
+        "air conditioner",
+        "aircon"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q56155",
+      "revision": 2516858108,
+      "label": "desktop computer",
+      "ifixitPaths": [
+        "Device/PC_Desktop",
+        "Device/iMac",
+        "Device/Mac_Mini",
+        "Device/Mac_Pro"
+      ],
+      "curated": [
+        "desktop"
+      ],
+      "excludeAliases": []
+    },
+    {
+      "id": "Q11035",
+      "revision": 2561106139,
+      "label": "telephone",
+      "ifixitPaths": [
+        "Device/Phone"
+      ],
+      "curated": [
+        "phones"
+      ],
+      "excludeAliases": []
+    }
+  ]
+}

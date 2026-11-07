@@ -16,7 +16,7 @@
 - Commit AND push regular work milestones.
 - Ingest via the same pinned Python pipeline locally/EC2; cloud downloads sources/builds its own catalog; never upload local corpus.
 - Prepare all enrichment/aliases/categories before publish; searches use our index/DB only; no external API calls.
-- Wikidata deferred; proposed search upgrades: ingestion aliases, prebuilt worker inverted index/stemming, bounded fuzzy; benchmark first.
+- Implement aliases: pinned/cached Wikidata English names + iFixit ancestors + curated synonyms; exact/model matches first. Inverted/stemming/fuzzy remain proposed.
 - VM replacement authorized: rebuild with 64GiB root (no extra data volume); retain EIP/domain; regenerate catalog on EC2.
 - Prod: i-00b3468454b650217/64GiB; cloud-built 103473 items/575002 media; unchanged runs reuse; no corpus uploads.
 - No audits/catalog scans unless asked; English-content filtering remains pending.

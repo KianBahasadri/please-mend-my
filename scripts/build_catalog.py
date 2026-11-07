@@ -18,11 +18,13 @@ PYTHON_VERSION = "3.12.12"
 UV_VERSION = "0.13.5"
 ROOT = Path(__file__).resolve().parent.parent
 INGEST = ROOT / "scripts/ingest_ifixit.py"
+ENRICH = ROOT / "scripts/enrich_search.py"
+VOCABULARY = ROOT / "scripts/search-vocabulary.json"
 
 
 def pipeline_key():
     digest = hashlib.sha256()
-    for path in (Path(__file__).resolve(), INGEST):
+    for path in (Path(__file__).resolve(), INGEST, ENRICH, VOCABULARY):
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
@@ -83,11 +85,17 @@ def build_release(data_dir, release_root, uv="uv"):
         subprocess.run([uv, "run", "--python", PYTHON_VERSION, "--script", str(INGEST),
                         "--data-dir", str(data_dir)], check=True, stdout=sys.stderr)
         runtime = data_dir / "runtime"
+        completed_manifest(runtime)
+        subprocess.run([uv, "run", "--python", PYTHON_VERSION, "--script", str(ENRICH),
+                        "--data-dir", str(data_dir)], check=True, stdout=sys.stderr)
         manifest = completed_manifest(runtime)
+        if manifest.get("searchEnrichment", {}).get("version") != 1:
+            raise RuntimeError("Search alias enrichment did not finish; refusing to publish.")
         receipt = {"pipelineSha256": key, "pythonVersion": PYTHON_VERSION, "uvVersion": UV_VERSION,
                    "archiveSha256": manifest["archiveSha256"], "revision": manifest["revision"],
                    "indexSha256": hashlib.sha256((runtime / "index.json").read_bytes()).hexdigest(),
-                   "indexedItems": manifest["indexedItems"], "uniqueMediaFiles": manifest["uniqueMediaFiles"]}
+                   "indexedItems": manifest["indexedItems"], "uniqueMediaFiles": manifest["uniqueMediaFiles"],
+                   "searchEnrichment": manifest["searchEnrichment"]}
         temporary = runtime / "ingest.json.tmp"
         temporary.write_text(json.dumps(receipt, separators=(",", ":")) + "\n")
         temporary.replace(runtime / "ingest.json")
