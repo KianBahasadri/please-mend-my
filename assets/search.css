@@ -1,0 +1,272 @@
+.search-shell {
+  width: 100%;
+  max-width: 90rem;
+  min-width: 0;
+  margin: 0 auto;
+}
+
+.catalog-status,
+.search-results,
+.guide-panel {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 0.925rem;
+  font-weight: 400;
+  line-height: 1.5;
+  letter-spacing: 0;
+}
+
+.catalog-status {
+  min-height: 1.5em;
+  margin: 1.3rem 0 0;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+}
+
+.catalog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem 1.3rem;
+}
+
+.catalog-toolbar button {
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+  font: 0.8rem -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+body.searching main,
+body.reading main {
+  align-items: flex-start;
+  padding-top: clamp(2rem, 7vh, 5rem);
+  padding-bottom: 4rem;
+}
+
+.search-results {
+  margin-top: 2rem;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.category-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.category-filters button,
+.more-results {
+  padding: 0.55rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+  border-radius: 100px;
+  background: color-mix(in srgb, var(--paper) 78%, transparent);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+
+.category-filters button[aria-pressed="true"] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.results-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.3rem 0 1rem;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+}
+
+.results-heading p {
+  margin: 0;
+}
+
+.text-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.result-cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.repair-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  min-width: 0;
+  min-height: 10rem;
+  padding: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--paper) 88%, transparent);
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.repair-card:hover {
+  border-color: color-mix(in srgb, var(--ink) 50%, transparent);
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+}
+
+.repair-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 550;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.card-meta,
+.card-device {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 58%, transparent);
+  font-size: 0.8rem;
+}
+
+.card-device {
+  margin-top: auto;
+}
+
+.empty-state {
+  padding: 2rem 0;
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+.more-results {
+  display: block;
+  margin: 1.5rem auto 0;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+}
+
+.guide-panel {
+  max-width: 58rem;
+  margin: 0 auto;
+}
+
+body.reading .hero-area,
+body.reading .search-results {
+  display: none;
+}
+
+.back-button {
+  margin-bottom: 1.8rem;
+}
+
+.guide-panel h1,
+.guide-panel h2,
+.guide-panel h3,
+.guide-panel h4 {
+  position: static;
+  width: auto;
+  margin: 1.5em 0 0.6em;
+  color: inherit;
+  font-family: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  overflow-wrap: anywhere;
+}
+
+.guide-panel h1 {
+  margin-top: 0;
+  font-size: clamp(1.9rem, 4.5vw, 3.6rem);
+}
+
+.guide-panel h2 { font-size: 1.6rem; }
+.guide-panel h3 { font-size: 1.25rem; }
+
+.guide-summary {
+  color: color-mix(in srgb, var(--ink) 72%, transparent);
+  font-size: 1.1rem;
+}
+
+.guide-source {
+  margin: 1rem 0 2rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--ink) 17%, transparent);
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+  font-size: 0.8rem;
+}
+
+.guide-panel a {
+  color: inherit;
+  text-underline-offset: 0.18em;
+}
+
+.guide-content {
+  overflow-wrap: anywhere;
+}
+
+.guide-content img,
+.guide-cover,
+.guide-content video,
+.guide-content svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.2rem 0;
+  border-radius: 0.4rem;
+}
+
+.guide-content table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.guide-content td,
+.guide-content th {
+  padding: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  text-align: left;
+}
+
+.guide-content pre {
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.guide-related {
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 17%, transparent);
+}
+
+.guide-related ul {
+  padding-left: 1.25rem;
+}
+
+.guide-error {
+  padding: 3rem 0;
+}
+
+@media (max-width: 850px) {
+  .result-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 520px) {
+  .result-cards { grid-template-columns: 1fr; }
+  .repair-card { min-height: 8rem; }
+  .category-filters { gap: 0.4rem; }
+  .category-filters button { padding: 0.45rem 0.7rem; font-size: 0.8rem; }
+  .catalog-status { font-size: 0.8rem; }
+}

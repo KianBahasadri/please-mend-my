@@ -2,6 +2,7 @@
 - Public: KianBahasadri/please-mend-my.
 - index.html; open `firefox index.html`.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
+- Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Random font/refresh; no repeats in row: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
@@ -18,3 +19,4 @@
 - DNS: authoritative/public resolvers verified; local apex negative cache may linger (www works); never alter global DNS/hosts.
 - Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
+- Never show loading text/spinners; retain current results until prefetched content is ready.

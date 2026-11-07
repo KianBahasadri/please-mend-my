@@ -10,6 +10,8 @@
     <title>please, mend my</title>
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/backgrounds.css">
+    <link rel="stylesheet" href="/assets/search.css">
+    <script src="/assets/search.js" defer></script>
     <script src="assets/backgrounds.js"></script>
     <script>
       const themes = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
@@ -186,7 +188,24 @@
   <body>
     <div class="atmosphere" aria-hidden="true"></div>
     <main>
-      <h1><textarea id="response" aria-label="please, mend my — what would you like to mend?" spellcheck="false" rows="1" autofocus></textarea><span id="measure" aria-hidden="true"></span></h1>
+      <div class="search-shell">
+        <section class="hero-area" aria-label="Search the repair library">
+          <h1><textarea id="response" aria-label="please, mend my — what would you like to mend?" spellcheck="false" rows="1" autofocus></textarea><span id="measure" aria-hidden="true"></span></h1>
+          <div class="catalog-toolbar"><p id="catalog-status" class="catalog-status" role="status"></p><button id="browse-library" class="text-button" type="button" hidden>Browse library</button></div>
+        </section>
+        <section id="search-results" class="search-results" aria-label="Repair search results" hidden>
+          <div id="category-filters" class="category-filters" role="group" aria-label="Filter repair categories"></div>
+          <div class="results-heading"><p id="result-count" aria-live="polite"></p><button id="clear-search" class="text-button" type="button">Clear search</button></div>
+          <div id="result-cards" class="result-cards"></div>
+          <p id="no-results" class="empty-state" hidden>No matches yet. Try a device name, part, or repair.</p>
+          <button id="more-results" class="more-results" type="button" hidden>Show more</button>
+        </section>
+        <section id="guide-panel" class="guide-panel" aria-label="Repair guide" hidden>
+          <button id="close-guide" class="text-button back-button" type="button">← Back to results</button>
+          <div id="guide-body"></div>
+        </section>
+        <p id="guide-nav-error" class="guide-error" role="alert" hidden></p>
+      </div>
     </main>
     <script>
       const response = document.getElementById("response");
@@ -194,8 +213,44 @@
       const measure = document.getElementById("measure");
       const prompt = theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
       response.value = prompt;
+      response.dataset.promptLength = prompt.length;
       measure.textContent = `${prompt}relationship`;
       let previousValue = prompt;
+
+      function clampSelection() {
+        const start = Math.max(prompt.length, response.selectionStart);
+        const end = Math.max(prompt.length, response.selectionEnd);
+        if (start !== response.selectionStart || end !== response.selectionEnd) {
+          response.setSelectionRange(start, end, response.selectionDirection);
+        }
+      }
+
+      response.addEventListener("keydown", (event) => {
+        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a") {
+          event.preventDefault();
+          response.setSelectionRange(prompt.length, response.value.length);
+        }
+      });
+      response.addEventListener("select", clampSelection);
+      response.addEventListener("pointerup", clampSelection);
+      response.addEventListener("keyup", clampSelection);
+      document.addEventListener("selectionchange", () => {
+        if (document.activeElement === response) clampSelection();
+      });
+      for (const operation of ["copy", "cut"]) {
+        response.addEventListener(operation, (event) => {
+          clampSelection();
+          const start = response.selectionStart;
+          const end = response.selectionEnd;
+          if (!event.clipboardData || start === end) return;
+          event.clipboardData.setData("text/plain", response.value.slice(start, end));
+          event.preventDefault();
+          if (operation === "cut") {
+            response.setRangeText("", start, end, "start");
+            response.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteByCut" }));
+          }
+        });
+      }
 
       function grow() {
         response.style.height = "0px";
@@ -203,6 +258,7 @@
       }
 
       function fit() {
+        if (!response.clientWidth) return;
         hero.style.fontSize = "";
         const size = parseFloat(getComputedStyle(hero).fontSize);
         const available = response.clientWidth - 6;
@@ -212,9 +268,10 @@
       }
 
       response.addEventListener("beforeinput", (event) => {
+        clampSelection();
         const start = response.selectionStart;
         const end = response.selectionEnd;
-        if (event.inputType.startsWith("delete") && end <= prompt.length) {
+        if (event.inputType.startsWith("delete") && event.inputType.endsWith("Backward") && end <= prompt.length) {
           event.preventDefault();
         } else if (start < prompt.length) {
           response.setSelectionRange(prompt.length, Math.max(prompt.length, end));
@@ -231,12 +288,13 @@
       });
 
       document.querySelector("main").addEventListener("click", (event) => {
-        if (event.target === response) return;
+        if (event.target.closest("a, button, input, textarea, select") || !event.target.closest(".hero-area")) return;
         response.focus({ preventScroll: true });
         response.setSelectionRange(response.value.length, response.value.length);
       });
 
       window.addEventListener("resize", fit);
+      window.addEventListener("mend:layout", fit);
       document.fonts.ready.then(fit);
       fit();
       response.focus({ preventScroll: true });

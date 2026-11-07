@@ -37,7 +37,8 @@ TLS uses X25519/P-256 key exchange to keep handshake flights small on the origin
 
 The catalog completion manifest and precompressed index are verified at startup;
 an interrupted or unfinished ingestion is rejected. Guide
-responses use ingestion-time gzip, content ETags and a bounded 64 MiB memory cache;
-no request performs compression or database queries. Media supports byte ranges
+responses use ingestion-time gzip, content ETags and a bounded 64 MiB memory cache.
+The first guide prefetch reads and hashes its files; warm guide hits use the cache.
+No request performs compression or database queries. Media supports byte ranges
 and immutable caching. Runtime files are confined with `os.OpenRoot`; private
 source archives, inventory databases, and arbitrary files are never public routes.
