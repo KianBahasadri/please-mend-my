@@ -93,6 +93,11 @@ for ((attempt = 0; attempt < 30; attempt++)); do
 done
 if [[ "$ssh_ready" != true ]]; then cat "$deploy_tmp/ssh.err" >&2; exit 1; fi
 ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'sudo timeout 180 cloud-init status --wait && test -f /etc/systemd/system/please-mend-my.service'
+catalog_snapshot=''
+if [[ -f "${PMM_CATALOG_DIR:-$repo_dir/catalog-data/runtime}/manifest.json" ]]; then
+  catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" bash "$deploy_dir/catalog.sh")
+fi
+deploy_commit=$(git rev-parse HEAD)
 remote_upload=$(ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'mktemp /home/ec2-user/please-mend-my.XXXXXX')
 scp "${ssh_options[@]}" "$deploy_tmp/server" "ec2-user@$server_ip:$remote_upload"
 if [[ "$deploy_tls" == true ]]; then
@@ -115,15 +120,70 @@ UNIT
 rm -rf -- "$1"
 TLS
 fi
-ssh "${ssh_options[@]}" "ec2-user@$server_ip" bash -s -- "$remote_upload" <<'REMOTE'
+ssh "${ssh_options[@]}" "ec2-user@$server_ip" sudo bash -s -- "$remote_upload" "$catalog_snapshot" "$deploy_commit" <<'REMOTE'
 set -euo pipefail
-sudo install -o root -g root -m 0755 "$1" /opt/please-mend-my/server.next
-sudo mv -f /opt/please-mend-my/server.next /opt/please-mend-my/server
+catalog_snapshot=$2
+catalog_link=/opt/please-mend-my/catalog
+catalog_config=/etc/systemd/system/please-mend-my.service.d/catalog.conf
+previous_catalog=$(readlink "$catalog_link" || true)
+had_server=false
+had_config=false
+if [[ -f /opt/please-mend-my/server ]]; then
+  cp -p /opt/please-mend-my/server /opt/please-mend-my/server.previous
+  had_server=true
+fi
+if [[ -f "$catalog_config" ]]; then
+  cp -p "$catalog_config" "$catalog_config.previous"
+  had_config=true
+fi
+rollback() {
+  trap - ERR
+  printf 'Release failed; restoring the previous service.\n' >&2
+  if [[ "$had_server" == true ]]; then
+    cp -p /opt/please-mend-my/server.previous /opt/please-mend-my/server.rollback
+    mv -f /opt/please-mend-my/server.rollback /opt/please-mend-my/server
+  fi
+  if [[ -n "$previous_catalog" ]]; then
+    ln -sfn "$previous_catalog" /opt/please-mend-my/catalog.next
+    mv -Tf /opt/please-mend-my/catalog.next "$catalog_link"
+  elif [[ -n "$catalog_snapshot" ]]; then
+    rm -f "$catalog_link"
+  fi
+  if [[ "$had_config" == true ]]; then
+    cp -p "$catalog_config.previous" "$catalog_config"
+  elif [[ -n "$catalog_snapshot" ]]; then
+    rm -f "$catalog_config"
+  fi
+  systemctl daemon-reload
+  systemctl restart please-mend-my.service || true
+  exit 1
+}
+trap rollback ERR
+install -o root -g root -m 0755 "$1" /opt/please-mend-my/server.next
+mv -f /opt/please-mend-my/server.next /opt/please-mend-my/server
 rm -f -- "$1"
-sudo systemctl daemon-reload
-sudo systemctl enable please-mend-my.service
-sudo systemctl restart please-mend-my.service
-sudo systemctl is-active --quiet please-mend-my.service
+if [[ -n "$catalog_snapshot" ]]; then
+  [[ "$catalog_snapshot" =~ ^/opt/please-mend-my/catalogs/[0-9a-f]{64}$ && -f "$catalog_snapshot/manifest.json" ]]
+  ln -sfn "$catalog_snapshot" /opt/please-mend-my/catalog.next
+  mv -Tf /opt/please-mend-my/catalog.next "$catalog_link"
+  install -d -o root -g root -m 0755 /etc/systemd/system/please-mend-my.service.d
+  cat > "$catalog_config" <<'UNIT'
+[Service]
+Environment=CATALOG_DIR=/opt/please-mend-my/catalog
+UNIT
+fi
+systemctl daemon-reload
+systemctl enable please-mend-my.service
+systemctl restart please-mend-my.service
+for attempt in {1..20}; do
+  if curl --fail --silent --max-time 2 http://127.0.0.1/healthz >/dev/null; then break; fi
+  sleep 0.25
+done
+systemctl is-active --quiet please-mend-my.service
+curl --fail --silent --max-time 2 http://127.0.0.1/healthz >/dev/null
+if [[ -n "$catalog_snapshot" ]]; then curl --fail --silent --head --max-time 2 http://127.0.0.1/api/catalog >/dev/null; fi
+printf '%s\n' "$3" > /opt/please-mend-my/deployed-commit
+trap - ERR
 REMOTE
 curl --fail --silent --show-error --retry 10 --retry-delay 1 --retry-connrefused \
   --connect-timeout 5 --max-time 10 "http://$server_ip/healthz"
