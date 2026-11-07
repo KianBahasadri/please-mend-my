@@ -14,17 +14,17 @@ for catalog_tool in python3 git ssh; do
 done
 catalog_commit=${PMM_DEPLOY_COMMIT:-$(git -C "$catalog_repo_dir" rev-parse HEAD)}
 catalog_digest=$(python3 "$catalog_repo_dir/scripts/build_catalog.py" --print-key)
-read -r catalog_ingest_hash catalog_builder_hash catalog_enrich_hash catalog_vocabulary_hash < <(python3 - "$catalog_repo_dir" <<'PY'
+read -r catalog_ingest_hash catalog_builder_hash catalog_enrich_hash catalog_vocabulary_hash catalog_search_hash < <(python3 - "$catalog_repo_dir" <<'PY'
 import hashlib, sys
 from pathlib import Path
 root = Path(sys.argv[1]) / 'scripts'
-print(*(hashlib.sha256((root / name).read_bytes()).hexdigest() for name in ('ingest_ifixit.py', 'build_catalog.py', 'enrich_search.py', 'search-vocabulary.json')))
+print(*(hashlib.sha256((root / name).read_bytes()).hexdigest() for name in ('ingest_ifixit.py', 'build_catalog.py', 'enrich_search.py', 'search-vocabulary.json', 'prepare_search.py')))
 PY
 )
 catalog_ssh=(-i "$catalog_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=5 \
   -o "UserKnownHostsFile=$catalog_hosts" -o StrictHostKeyChecking=yes -o LogLevel=ERROR)
 ssh "${catalog_ssh[@]}" "ec2-user@$catalog_ip" sudo bash -s -- \
-  "$catalog_commit" "$catalog_digest" "$catalog_ingest_hash" "$catalog_builder_hash" "$catalog_enrich_hash" "$catalog_vocabulary_hash" <<'REMOTE'
+  "$catalog_commit" "$catalog_digest" "$catalog_ingest_hash" "$catalog_builder_hash" "$catalog_enrich_hash" "$catalog_vocabulary_hash" "$catalog_search_hash" <<'REMOTE'
 set -euo pipefail
 umask 022
 commit=$1
@@ -33,9 +33,10 @@ ingest_hash=$3
 builder_hash=$4
 enrich_hash=$5
 vocabulary_hash=$6
+search_hash=$7
 [[ "$commit" =~ ^[0-9a-f]{40}$ && "$digest" =~ ^[0-9a-f]{64}$ &&
    "$ingest_hash" =~ ^[0-9a-f]{64}$ && "$builder_hash" =~ ^[0-9a-f]{64}$ &&
-   "$enrich_hash" =~ ^[0-9a-f]{64}$ && "$vocabulary_hash" =~ ^[0-9a-f]{64}$ ]]
+   "$enrich_hash" =~ ^[0-9a-f]{64}$ && "$vocabulary_hash" =~ ^[0-9a-f]{64}$ && "$search_hash" =~ ^[0-9a-f]{64}$ ]]
 exec 9>/run/please-mend-my-catalog.lock
 flock -n 9 || { printf 'Another deployment is preparing the cloud catalog.\n' >&2; exit 1; }
 base=/opt/please-mend-my/ingest
@@ -65,6 +66,7 @@ fetch_script ingest_ifixit.py "$ingest_hash"
 fetch_script build_catalog.py "$builder_hash"
 fetch_script enrich_search.py "$enrich_hash"
 fetch_script search-vocabulary.json "$vocabulary_hash"
+fetch_script prepare_search.py "$search_hash"
 [[ "$(python3 "$source_dir/scripts/build_catalog.py" --print-key)" == "$digest" ]]
 if [[ ! -x "$base/tools/uv" ]] || [[ "$("$base/tools/uv" --version | cut -d' ' -f1-2)" != 'uv 0.13.5' ]]; then
   curl --fail --silent --show-error --location --retry 3 --connect-timeout 10 --max-time 120 \

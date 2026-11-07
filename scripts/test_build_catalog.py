@@ -43,6 +43,12 @@ class ReleaseTests(unittest.TestCase):
             data["searchEnrichment"] = {"version": 1}
             manifest.write_text(json.dumps(data))
             return subprocess.CompletedProcess(args, 0)
+        if str(builder.SEARCH_INDEX) in args:
+            manifest = self.data / "runtime/manifest.json"
+            data = json.loads(manifest.read_text())
+            data["searchIndex"] = {"version": 1}
+            manifest.write_text(json.dumps(data))
+            return subprocess.CompletedProcess(args, 0)
         runtime = self.data / "runtime"
         runtime.mkdir(parents=True, exist_ok=True)
         (runtime / "guides").mkdir(exist_ok=True)
@@ -61,12 +67,13 @@ class ReleaseTests(unittest.TestCase):
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 3)
+            self.assertEqual(run.call_count, 4)
         self.assertEqual(release.name, builder.pipeline_key())
         self.assertFalse((self.data / "runtime").exists())
         receipt = json.loads((release / "ingest.json").read_text())
         self.assertEqual(receipt["pipelineSha256"], release.name)
         self.assertEqual(receipt["pythonVersion"], builder.PYTHON_VERSION)
+        self.assertEqual(receipt["searchIndex"], {"version": 1})
         with patch.object(builder.subprocess, "run") as run:
             self.assertEqual(builder.build_release(self.data, self.releases), release)
             run.assert_not_called()
@@ -126,6 +133,28 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(subprocess.CalledProcessError):
                 builder.build_release(self.data, self.releases)
         self.assertTrue((self.data / "runtime/manifest.json").is_file())
+        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+
+    def test_search_index_failure_cannot_publish_enriched_data(self):
+        def fail_index(args, **kwargs):
+            if str(builder.SEARCH_INDEX) in args:
+                raise subprocess.CalledProcessError(1, args)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=fail_index):
+            with self.assertRaises(subprocess.CalledProcessError):
+                builder.build_release(self.data, self.releases)
+        manifest = json.loads((self.data / "runtime/manifest.json").read_bytes())
+        self.assertEqual(manifest["searchEnrichment"], {"version": 1})
+        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+
+    def test_missing_search_index_metadata_cannot_publish(self):
+        def skip_index(args, **kwargs):
+            if str(builder.SEARCH_INDEX) in args:
+                return subprocess.CompletedProcess(args, 0)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=skip_index):
+            with self.assertRaisesRegex(RuntimeError, "Inverted search index did not finish"):
+                builder.build_release(self.data, self.releases)
         self.assertFalse((self.releases / builder.pipeline_key()).exists())
 
 

@@ -20,11 +20,12 @@ ROOT = Path(__file__).resolve().parent.parent
 INGEST = ROOT / "scripts/ingest_ifixit.py"
 ENRICH = ROOT / "scripts/enrich_search.py"
 VOCABULARY = ROOT / "scripts/search-vocabulary.json"
+SEARCH_INDEX = ROOT / "scripts/prepare_search.py"
 
 
 def pipeline_key():
     digest = hashlib.sha256()
-    for path in (Path(__file__).resolve(), INGEST, ENRICH, VOCABULARY):
+    for path in (Path(__file__).resolve(), INGEST, ENRICH, VOCABULARY, SEARCH_INDEX):
         digest.update(path.read_bytes())
         digest.update(b"\0")
     return digest.hexdigest()
@@ -71,7 +72,9 @@ def build_release(data_dir, release_root, uv="uv"):
             receipt = json.loads((release / "ingest.json").read_bytes())
             if receipt.get("pipelineSha256") != key:
                 raise RuntimeError("Existing release has different ingestion inputs.")
-            completed_manifest(release)
+            manifest = completed_manifest(release)
+            if manifest.get("searchIndex", {}).get("version") != 1:
+                raise RuntimeError("Existing release is missing its prepared search index.")
             print("Reusing completed catalog " + key, file=sys.stderr, flush=True)
             return release
         if data_dir.stat().st_dev != release_root.stat().st_dev:
@@ -91,11 +94,16 @@ def build_release(data_dir, release_root, uv="uv"):
         manifest = completed_manifest(runtime)
         if manifest.get("searchEnrichment", {}).get("version") != 1:
             raise RuntimeError("Search alias enrichment did not finish; refusing to publish.")
+        subprocess.run([uv, "run", "--python", PYTHON_VERSION, "--script", str(SEARCH_INDEX),
+                        "--data-dir", str(data_dir)], check=True, stdout=sys.stderr)
+        manifest = completed_manifest(runtime)
+        if manifest.get("searchIndex", {}).get("version") != 1:
+            raise RuntimeError("Inverted search index did not finish; refusing to publish.")
         receipt = {"pipelineSha256": key, "pythonVersion": PYTHON_VERSION, "uvVersion": UV_VERSION,
                    "archiveSha256": manifest["archiveSha256"], "revision": manifest["revision"],
                    "indexSha256": hashlib.sha256((runtime / "index.json").read_bytes()).hexdigest(),
                    "indexedItems": manifest["indexedItems"], "uniqueMediaFiles": manifest["uniqueMediaFiles"],
-                   "searchEnrichment": manifest["searchEnrichment"]}
+                   "searchEnrichment": manifest["searchEnrichment"], "searchIndex": manifest["searchIndex"]}
         temporary = runtime / "ingest.json.tmp"
         temporary.write_text(json.dumps(receipt, separators=(",", ":")) + "\n")
         temporary.replace(runtime / "ingest.json")
