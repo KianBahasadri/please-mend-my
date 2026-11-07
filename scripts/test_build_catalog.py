@@ -24,7 +24,7 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.data, self.releases = self.root / "build", self.root / "releases"
         # Every mutable input is a tiny fixture, independent of source builds.
-        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX"):
+        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES"):
             path = self.root / (name.lower() + ".py")
             path.write_text("# pinned fixture " + name + "\n")
             fixture = patch.object(builder, name, path)
@@ -123,7 +123,7 @@ class ReleaseTests(unittest.TestCase):
         return previous
 
     def assert_not_published(self, previous=None):
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assertFalse((self.releases / builder.pipeline_key(self.data / "stage3_cache")).exists())
         self.assertEqual(list(self.data.glob(".merge-*")), [], "Failed staging must be cleaned up")
         if previous:
             self.assertEqual((previous / "live").read_text(), "keep")
@@ -134,7 +134,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(run.call_count, 7)
         self.assertEqual(self.commands, [builder.INGEST, builder.ENRICH, builder.WIKIMED, builder.FIRST_AID, builder.MERGE,
                                          builder.SEARCH_INDEX])
-        self.assertEqual(release.name, builder.pipeline_key())
+        self.assertEqual(release.name, builder.pipeline_key(self.data / "stage3_cache"))
         self.assertTrue((self.data / "runtime/source-build.json").is_file())
         self.assertTrue((self.data / "wikimed/runtime/manifest.json").is_file())
         self.assertEqual((self.data / "runtime/guides/ifixit.json").read_text(), "ifixit guide")
@@ -200,6 +200,44 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual((self.data / "runtime/manifest.json").read_bytes(), ifixit_manifest)
         self.assertEqual((first / "index.json").read_bytes(), first_index)
         self.assertTrue((second / "ingest.json").is_file())
+
+    def test_active_overlay_changes_invalidate_release_but_reuse_raw_sources(self):
+        with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
+            first = builder.build_release(self.data, self.releases)
+            original = (first / "ingest.json").read_bytes()
+            cache = self.data / "stage3_cache"
+            cache.mkdir()
+            # An invalid active guide still changes the rollout fingerprint;
+            # it is rejected and raw responses survive unchanged.
+            (cache / ("a" * 20 + ".json")).write_text("{unfinished")
+            self.commands.clear()
+            second = builder.build_release(self.data, self.releases)
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+        receipt = json.loads((second / "ingest.json").read_bytes())
+        self.assertEqual(receipt["structuredGuides"]["processedItems"], 0)
+        self.assertEqual(receipt["structuredGuides"]["rejectedItems"], 1)
+        self.assertEqual(receipt["structuredGuides"]["cacheSha256"], builder.cache_fingerprint(cache))
+        self.assertEqual((first / "ingest.json").read_bytes(), original)
+        self.assertEqual((second / "guides/ifixit.json").read_text(), "ifixit guide")
+        with patch.object(builder.subprocess, "run") as run:
+            self.assertEqual(builder.build_release(self.data, self.releases), second)
+            run.assert_not_called()
+
+    def test_cache_changed_before_publication_cannot_publish_old_key(self):
+        original = builder.pipeline_key(self.data / "stage3_cache")
+        def change_cache(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.SEARCH_INDEX:
+                cache = self.data / "stage3_cache"
+                cache.mkdir()
+                (cache / ("a" * 20 + ".json")).write_text("{new input")
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=change_cache):
+            with self.assertRaisesRegex(RuntimeError, "inputs changed during ingestion"):
+                builder.build_release(self.data, self.releases)
+        self.assertFalse((self.releases / original).exists())
+        self.assert_not_published()
 
     def test_constituent_bad_pin_cannot_publish(self):
         previous = self.previous_release()
@@ -324,22 +362,22 @@ class ReleaseTests(unittest.TestCase):
         self.assert_not_published()
 
     def test_pipeline_key_tracks_every_script_and_pinned_runtime(self):
-        original = builder.pipeline_key()
-        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX"):
+        original = builder.pipeline_key(self.data / "stage3_cache")
+        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES"):
             with self.subTest(input=name):
                 path = getattr(builder, name)
                 data = path.read_bytes()
                 path.write_bytes(data + b"# changed\n")
-                self.assertNotEqual(builder.pipeline_key(), original)
+                self.assertNotEqual(builder.pipeline_key(self.data / "stage3_cache"), original)
                 path.write_bytes(data)
-                self.assertEqual(builder.pipeline_key(), original)
+                self.assertEqual(builder.pipeline_key(self.data / "stage3_cache"), original)
         for name in ("PYTHON_VERSION", "UV_VERSION"):
             with self.subTest(input=name), patch.object(builder, name, "changed"):
-                self.assertNotEqual(builder.pipeline_key(), original)
+                self.assertNotEqual(builder.pipeline_key(self.data / "stage3_cache"), original)
 
     def test_inputs_changed_during_build_cannot_publish_under_old_fingerprint(self):
         previous = self.previous_release()
-        original_key = builder.pipeline_key()
+        original_key = builder.pipeline_key(self.data / "stage3_cache")
         def changed_inputs(args, **kwargs):
             result = self.fake_command(args, **kwargs)
             if self.script(args) == builder.SEARCH_INDEX:

@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 
+from overlay_guides import cache_fingerprint, overlay_guides
+
 PYTHON_VERSION = "3.12.12"
 UV_VERSION = "0.13.5"
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +27,8 @@ SEARCH_INDEX = ROOT / "scripts/prepare_search.py"
 WIKIMED = ROOT / "scripts/ingest_wikimed.py"
 FIRST_AID = ROOT / "scripts/ingest_first_aid.py"
 MERGE = ROOT / "scripts/merge_catalogs.py"
+OVERLAY = ROOT / "scripts/overlay_guides.py"
+STRUCTURED_GUIDES = ROOT / "scripts/structured_guides.py"
 
 
 def input_key(paths):
@@ -36,9 +40,11 @@ def input_key(paths):
     return digest.hexdigest()
 
 
-def pipeline_key():
-    return input_key((Path(__file__).resolve(), INGEST, ENRICH, VOCABULARY,
-                      WIKIMED, FIRST_AID, MERGE, SEARCH_INDEX))
+def pipeline_key(cache_dir=None):
+    cache_dir = cache_dir if cache_dir is not None else ROOT / "catalog-data/build/stage3_cache"
+    scripts = input_key((Path(__file__).resolve(), INGEST, ENRICH, VOCABULARY,
+                         WIKIMED, FIRST_AID, MERGE, SEARCH_INDEX, OVERLAY, STRUCTURED_GUIDES))
+    return hashlib.sha256((scripts + "\0" + cache_fingerprint(cache_dir)).encode()).hexdigest()
 
 
 def verified_source(manifest):
@@ -83,8 +89,9 @@ def ifixit_cached(data_dir):
         return False
 
 
-def build_release(data_dir, release_root, uv="uv"):
+def build_release(data_dir, release_root, uv="uv", cache_dir=None):
     data_dir, release_root = Path(data_dir).resolve(), Path(release_root).resolve()
+    cache_dir = Path(cache_dir).absolute() if cache_dir is not None else data_dir / "stage3_cache"
     if data_dir == release_root or data_dir in release_root.parents:
         raise ValueError("Release storage must be separate from the mutable ingestion directory.")
     for path in (data_dir, release_root):
@@ -98,13 +105,14 @@ def build_release(data_dir, release_root, uv="uv"):
             raise ValueError("Catalog output inside the source checkout must be Git-ignored: " + str(path))
     data_dir.mkdir(parents=True, exist_ok=True)
     release_root.mkdir(parents=True, exist_ok=True)
-    key = pipeline_key()
-    release = release_root / key
     with (data_dir / ".build.lock").open("a") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RuntimeError("Another catalog build is using this data directory.") from error
+        key = pipeline_key(cache_dir)
+        cache_key = cache_fingerprint(cache_dir)
+        release = release_root / key
         if release.exists():
             receipt = json.loads((release / "ingest.json").read_bytes())
             if receipt.get("pipelineSha256") != key:
@@ -157,18 +165,19 @@ def build_release(data_dir, release_root, uv="uv"):
             manifest = completed_manifest(runtime)
             if manifest.get("searchEnrichment", {}).get("version") != 1:
                 raise RuntimeError("Merged alias enrichment did not finish; refusing to publish.")
+            overlay_guides(runtime, cache_dir, expected_fingerprint=cache_key)
             run_script(SEARCH_INDEX, "--runtime-dir", runtime, "--data-dir", data_dir)
             manifest = completed_manifest(runtime)
             if manifest.get("searchIndex", {}).get("version") != 1:
                 raise RuntimeError("Inverted search index did not finish; refusing to publish.")
-            if pipeline_key() != key:
+            if pipeline_key(cache_dir) != key:
                 raise RuntimeError("Pipeline inputs changed during ingestion; rerun to publish matching inputs.")
             receipt = {"pipelineSha256": key, "pythonVersion": PYTHON_VERSION, "uvVersion": UV_VERSION,
                        "archiveSha256": manifest["archiveSha256"], "revision": manifest["revision"],
                        "indexSha256": hashlib.sha256((runtime / "index.json").read_bytes()).hexdigest(),
                        "indexedItems": manifest["indexedItems"], "uniqueMediaFiles": manifest["uniqueMediaFiles"],
                        "sources": manifest["sources"], "searchEnrichment": manifest["searchEnrichment"],
-                       "searchIndex": manifest["searchIndex"]}
+                       "searchIndex": manifest["searchIndex"], "structuredGuides": manifest["structuredGuides"]}
             temporary = runtime / "ingest.json.tmp"
             temporary.write_text(json.dumps(receipt, separators=(",", ":")) + "\n")
             temporary.replace(runtime / "ingest.json")
@@ -184,12 +193,13 @@ def main():
     parser.add_argument("--data-dir", type=Path, default=ROOT / "catalog-data/build")
     parser.add_argument("--release-root", type=Path, default=ROOT / "catalog-data/releases")
     parser.add_argument("--uv", default="uv")
+    parser.add_argument("--stage3-cache", type=Path, help="Validated active guide cache (default: <data-dir>/stage3_cache).")
     parser.add_argument("--print-key", action="store_true", help="Print the source/version fingerprint without building anything.")
     args = parser.parse_args()
     if args.print_key:
-        print(pipeline_key())
+        print(pipeline_key(args.stage3_cache or args.data_dir / "stage3_cache"))
     else:
-        print(build_release(args.data_dir, args.release_root, args.uv), flush=True)
+        print(build_release(args.data_dir, args.release_root, args.uv, args.stage3_cache), flush=True)
 
 
 if __name__ == "__main__":

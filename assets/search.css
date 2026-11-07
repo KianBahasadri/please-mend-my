@@ -165,11 +165,29 @@ body.reading .search-results {
 }
 
 .guide-source {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.65rem 1.5rem;
   margin: 1rem 0 2rem;
   padding-bottom: 1.25rem;
   border-bottom: 1px solid color-mix(in srgb, var(--ink) 17%, transparent);
   color: color-mix(in srgb, var(--ink) 65%, transparent);
   font-size: 0.8rem;
+}
+
+.guide-attribution {
+  flex: 1 1 20rem;
+}
+
+.guide-references {
+  display: flex;
+  justify-content: flex-end;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  gap: 0.35rem 1rem;
+  text-align: right;
 }
 
 .guide-panel a {
@@ -209,6 +227,103 @@ body.reading .search-results {
 .guide-content pre {
   overflow-x: auto;
   white-space: pre-wrap;
+}
+
+.guide-supplies {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: 0 2rem;
+}
+
+.guide-structured ul {
+  padding-left: 1.3rem;
+}
+
+.guide-structured li + li {
+  margin-top: 0.35rem;
+}
+
+.guide-notice {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 22%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--ink) 60%, transparent);
+  border-radius: 0.3rem;
+  background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+}
+
+.guide-notice-warning {
+  border-left-color: var(--ink);
+}
+
+.guide-notice-danger {
+  border-left: 6px double var(--ink);
+}
+
+.guide-notice p {
+  margin: 0.35rem 0 0;
+  white-space: pre-line;
+}
+
+.guide-panel .guide-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.guide-panel .guide-step {
+  margin: 0;
+  padding: 1.2rem 0;
+  border-top: 1px solid color-mix(in srgb, var(--ink) 17%, transparent);
+}
+
+.guide-panel .guide-step-title {
+  margin: 0 0 0.8rem;
+}
+
+.guide-step-check {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  cursor: pointer;
+}
+
+.guide-step-check input {
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin: 0;
+  accent-color: var(--ink);
+  cursor: pointer;
+}
+
+.guide-step.is-complete .guide-step-check span {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+  color: color-mix(in srgb, var(--ink) 65%, transparent);
+}
+
+.guide-step-body {
+  white-space: pre-line;
+}
+
+.guide-code {
+  padding: 0.75rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 0.4rem;
+  background: color-mix(in srgb, var(--ink) 4%, var(--paper));
+}
+
+.guide-copy {
+  display: block;
+  margin-left: auto;
+  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  font-size: 0.8rem;
+}
+
+.guide-code pre {
+  margin: 0.5rem 0 0;
+  white-space: pre;
 }
 
 .guide-related {

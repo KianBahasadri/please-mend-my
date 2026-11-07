@@ -118,6 +118,7 @@
   };
   const guideHref = (id) => `/?guide=${encodeURIComponent(id)}`;
   const safeUrl = (value) => {
+    if (typeof value !== "string" || !value.trim()) return "";
     try {
       const url = new URL(value, location.href);
       return ["http:", "https:"].includes(url.protocol) ? url.href : "";
@@ -158,7 +159,7 @@
   }
 
   function cacheImages(detail) {
-    for (const source of (detail.images || []).slice(0, 1)) {
+    for (const source of (Array.isArray(detail.images) ? detail.images : []).slice(0, 1)) {
       const url = safeUrl(source);
       if (!url || new URL(url).origin !== location.origin || prefetchedImages.has(url)) continue;
       prefetchedImages.add(url);
@@ -274,17 +275,20 @@
     scheduleWindow();
   });
 
-  function renderGuide(detail) {
-    body.removeAttribute("aria-busy");
-    const fragment = document.createDocumentFragment();
-    const heading = node("h1", "guide-title", detail.title || "Repair guide");
-    heading.tabIndex = -1;
-    fragment.append(heading);
-    if (detail.summary) fragment.append(node("p", "guide-summary", detail.summary));
-    const attribution = node("p", "guide-source");
+  const strings = (value) => Array.isArray(value)
+    ? value.filter((item) => typeof item === "string" && item.trim()) : [];
+  const localMedia = (value) => {
+    const url = safeUrl(value);
+    return url && new URL(url).origin === location.origin && new URL(url).pathname.startsWith("/media/") ? url : "";
+  };
+
+  function renderProvenance(detail) {
+    const metadata = node("div", "guide-source");
+    const attribution = node("span", "guide-attribution");
     const sourceUrl = safeUrl(detail.sourceUrl);
     if (sourceUrl) {
-      const sourceName = detail.sourceName || (new URL(sourceUrl).hostname.endsWith("ifixit.com") ? "iFixit" : "source");
+      const sourceName = typeof detail.sourceName === "string" && detail.sourceName
+        ? detail.sourceName : (new URL(sourceUrl).hostname.endsWith("ifixit.com") ? "iFixit" : "source");
       const link = node("a", "", `Original on ${sourceName}`);
       link.href = sourceUrl;
       link.target = "_blank";
@@ -299,11 +303,143 @@
       if (licenseUrl) { label.href = licenseUrl; label.target = "_blank"; label.rel = "noopener noreferrer"; }
       attribution.append(label);
     }
-    const credit = (detail.attribution || latestSource?.attribution || "")
+    const credit = (typeof detail.attribution === "string" ? detail.attribution
+      : typeof latestSource?.attribution === "string" ? latestSource.attribution : "")
       .replace(/;?\s*reformatted and sanitized for this offline catalog\./gi, ".")
       .replace(/\s*CC BY-NC-SA 3\.0\.$/, "").trim();
     if (credit) attribution.append(document.createTextNode(` · ${credit}`));
-    fragment.append(attribution);
+    metadata.append(attribution);
+    const references = Array.isArray(detail.references) ? detail.references : [];
+    const links = node("span", "guide-references");
+    links.setAttribute("aria-label", "Further references");
+    const seen = new Set();
+    for (const reference of references) {
+      if (!reference || typeof reference.title !== "string" || !reference.title.trim()) continue;
+      const url = safeUrl(reference.url);
+      if (!url || seen.has(url)) continue;
+      seen.add(url);
+      const link = node("a", "", reference.title);
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      links.append(link);
+    }
+    if (links.children.length) metadata.append(links);
+    return metadata;
+  }
+
+  function renderLegacyGuide(detail) {
+    const content = node("div", "guide-content");
+    // Only the legacy ingestion path supplies sanitized HTML. Structured model
+    // output always uses the text-only renderer below, even if it is malformed.
+    content.innerHTML = typeof detail.html === "string" ? detail.html : "";
+    for (const image of content.querySelectorAll("img")) {
+      image.decoding = "async";
+      image.loading = "lazy";
+    }
+    return content;
+  }
+
+  function renderNotice(level, text) {
+    const severity = ["note", "warning", "danger"].includes(level) ? level : "note";
+    const notice = node("aside", `guide-notice guide-notice-${severity}`);
+    notice.setAttribute("role", "note");
+    notice.append(node("strong", "", { note: "Note", warning: "Warning", danger: "Danger" }[severity]),
+      node("p", "", text));
+    return notice;
+  }
+
+  function renderStructuredGuide(detail) {
+    const content = node("div", "guide-content guide-structured");
+    const safety = Array.isArray(detail.safety) ? detail.safety : [];
+    if (safety.some((item) => item && typeof item.text === "string" && item.text.trim())) {
+      const section = node("section", "guide-safety");
+      section.append(node("h2", "", "Before you start"));
+      for (const item of safety) {
+        if (item && typeof item.text === "string" && item.text.trim()) section.append(renderNotice(item.level, item.text));
+      }
+      content.append(section);
+    }
+    const supplies = node("div", "guide-supplies");
+    for (const [key, title] of [["tools", "Tools"], ["materials", "Materials"]]) {
+      const items = strings(detail[key]);
+      if (!items.length) continue;
+      const section = node("section");
+      const list = node("ul");
+      for (const item of items) list.append(node("li", "", item));
+      section.append(node("h2", "", title), list);
+      supplies.append(section);
+    }
+    if (supplies.children.length) content.append(supplies);
+    const symptoms = strings(detail.symptoms);
+    if (symptoms.length) {
+      const section = node("section", "guide-symptoms");
+      const list = node("ul");
+      for (const symptom of symptoms) list.append(node("li", "", symptom));
+      section.append(node("h2", "", "Symptoms"), list);
+      content.append(section);
+    }
+    const steps = Array.isArray(detail.steps) ? detail.steps : [];
+    const list = node("ol", "guide-steps");
+    for (const step of steps) {
+      if (!step || typeof step !== "object" || typeof step.title !== "string" || typeof step.body !== "string") continue;
+      const number = list.children.length + 1;
+      const item = node("li", "guide-step");
+      const heading = node("h3", "guide-step-title");
+      const label = node("label", "guide-step-check");
+      const checkbox = node("input");
+      checkbox.type = "checkbox";
+      checkbox.setAttribute("aria-label", `Mark step ${number} complete: ${step.title}`);
+      checkbox.addEventListener("change", () => item.classList.toggle("is-complete", checkbox.checked));
+      label.append(checkbox, node("span", "", `${number}. ${step.title}`));
+      heading.append(label);
+      item.append(heading);
+      if (step.body) item.append(node("p", "guide-step-body", step.body));
+      for (const warning of strings(step.warnings)) item.append(renderNotice("warning", warning));
+      for (const source of strings(step.images)) {
+        const url = localMedia(source);
+        if (!url) continue;
+        const image = node("img");
+        image.src = url;
+        image.alt = step.title;
+        image.decoding = "async";
+        image.loading = "lazy";
+        item.append(image);
+      }
+      if (typeof step.code === "string" && step.code.trim()) {
+        const block = node("div", "guide-code");
+        const copy = node("button", "text-button guide-copy", "Copy");
+        copy.type = "button";
+        copy.setAttribute("aria-label", `Copy code for step ${number}`);
+        copy.addEventListener("click", async () => {
+          try {
+            await navigator.clipboard.writeText(step.code);
+            copy.textContent = "Copied";
+          } catch { copy.textContent = "Copy unavailable"; }
+        });
+        const pre = node("pre");
+        pre.append(node("code", "", step.code));
+        block.append(copy, pre);
+        item.append(block);
+      }
+      list.append(item);
+    }
+    if (list.children.length) {
+      const section = node("section");
+      section.append(node("h2", "", "Steps"), list);
+      content.append(section);
+    }
+    return content;
+  }
+
+  function renderGuide(detail) {
+    body.removeAttribute("aria-busy");
+    const fragment = document.createDocumentFragment();
+    const heading = node("h1", "guide-title", detail.title || "Repair guide");
+    heading.tabIndex = -1;
+    fragment.append(heading);
+    if (typeof detail.summary === "string" && detail.summary) fragment.append(node("p", "guide-summary", detail.summary));
+    fragment.append(renderProvenance(detail));
     const coverUrl = safeUrl(detail.images?.[0]);
     if (coverUrl && new URL(coverUrl).origin === location.origin) {
       const cover = node("img", "guide-cover");
@@ -312,19 +448,14 @@
       cover.decoding = "async";
       fragment.append(cover);
     }
-    const content = node("div", "guide-content");
-    // HTML is sanitized by ingestion; no remote markup is accepted from search input.
-    content.innerHTML = typeof detail.html === "string" ? detail.html : "";
-    for (const image of content.querySelectorAll("img")) {
-      image.decoding = "async";
-      image.loading = "lazy";
-    }
-    fragment.append(content);
-    if (detail.related?.length) {
+    fragment.append(detail.version === 2 || Array.isArray(detail.steps)
+      ? renderStructuredGuide(detail) : renderLegacyGuide(detail));
+    if (Array.isArray(detail.related) && detail.related.length) {
       const related = node("section", "guide-related");
       related.append(node("h2", "", "Related repairs"));
       const list = node("ul");
       for (const item of detail.related.slice(0, 12)) {
+        if (!item || typeof item.id !== "string" || typeof item.title !== "string") continue;
         const link = node("a", "", item.title);
         link.href = guideHref(item.id);
         link.dataset.guideId = item.id;
