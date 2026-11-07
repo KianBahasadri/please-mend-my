@@ -7,6 +7,7 @@
 - Independently randomize font/BG each refresh; no repeats in row. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
+- Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
 - BG: preserve approved dark look in docs/references/approved-spotlight.css; mix spotlight/wall-floor variants. Visible beam in BOTH themes, receding seam, static/fast. Reference: docs/references/spotlight-wall-floor.png.
