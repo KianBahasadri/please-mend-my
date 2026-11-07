@@ -49,6 +49,24 @@ inside the unpublished build; download/enrichment failure leaves the live releas
 unchanged. `bench_search.cjs` compares actual worker computation against a saved
 baseline without opening a browser; its numbers are not browser end-to-end latency.
 
+Alias-stage measurements on the 103,473-item catalog (Node v26.12.0, isolated
+processes, 30 warmup searches followed by 100 measured searches each):
+
+| Probe | Before | With aliases |
+| --- | ---: | ---: |
+| Compressed index | 2,598,468 bytes | 2,724,228 bytes (+4.8%) |
+| Worker search p50 | 6.88 ms | 6.74 ms |
+| Worker search p95 | 8.59 ms | 8.56 ms |
+| Worker preparation | 188 ms | 219 ms |
+| Prepared JS heap growth | 58.47 MiB | 59.06 MiB |
+
+99,208 items receive extra terms through 5,213 nonempty shared groups. For example,
+`macbook notebook battery` changes from 0 to 155 matches, `laptop battery` from 68
+to 2,356, and `cellphone` from 0 to 9,689. The exact `Samsung Galaxy S23` query
+remains at 53 matches. The benchmark permits one index request at startup and no
+requests while searching. These are workstation Node measurements; browser/mobile
+latency and memory will differ.
+
 The tracked [catalog summary](catalog-summary.json) records the verified source,
 full item/category counts, index size, and completed audit scope; generated corpus
 files and the detailed quality report stay local and ignored by Git.
