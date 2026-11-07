@@ -10,7 +10,6 @@ go run .
 ```
 
 Set `ADDR` to change the listening address, for example `ADDR=127.0.0.1:9000 go run .`.
-The page can also be opened directly with `firefox index.html`.
 
 Serve an ingested repair catalog locally with
 `CATALOG_DIR=./catalog-data/runtime ADDR=127.0.0.1:8080 go run .`.
@@ -18,6 +17,9 @@ Build or audit that snapshot with the commands in [scripts/README.md](scripts/RE
 `GET /api/catalog` supplies the complete compact browser-search index;
 `GET /api/guides/{id}` supplies full guide/topic content, and `/media/{filename}`
 serves content-addressed local images. Catalog data stays outside the binary and Git.
+`python3 scripts/build_catalog.py` runs the pinned ingestion pipeline locally or
+on EC2. Production downloads its own archive and builds its own catalog;
+deployment never uploads the local corpus. See [deployment](deploy/README.md).
 
 Build a self-contained Linux ARM64 binary for a Graviton EC2 instance:
 

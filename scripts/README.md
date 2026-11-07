@@ -1,12 +1,26 @@
 # Repair catalog ingestion
 
 ```sh
+python3 scripts/build_catalog.py              # same pinned, immutable build locally or on EC2
 uv run scripts/ingest_ifixit.py                 # download, verify, and build
 uv run scripts/ingest_ifixit.py --build-only    # reuse the complete download
 uv run scripts/ingest_ifixit.py --download-only
 uv run scripts/ingest_ifixit.py --reclassify-only # refresh source-graph categories only
-uv run scripts/validate_catalog.py              # audit every finished document
 ```
+
+`build_catalog.py` pins uv 0.13.5 and Python 3.12.12; the ingestion script pins
+libzim/lxml and the archive revision, size, and SHA-256. Its default work cache is
+`catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
+Both Python scripts are fingerprinted; an unchanged completed release is reused
+without scanning its corpus. Interrupted downloads/extraction can resume, failed
+builds cannot publish a release, and a filesystem lock prevents overlapping builds.
+The same command runs on EC2 with `--data-dir` and `--release-root` pointing to
+server directories. EC2 downloads directly from public sources; it needs no local
+catalog upload. The existing local `catalog-data/runtime` is unaffected.
+
+Use `CATALOG_DIR=<printed release path> go run .` to serve a completed snapshot.
+`scripts/validate_catalog.py` is an explicit, optional full audit; deployment and
+the build wrapper never invoke it. Actual English-content filtering remains pending.
 
 The tracked [catalog summary](catalog-summary.json) records the verified source,
 full item/category counts, index size, and completed audit scope; generated corpus

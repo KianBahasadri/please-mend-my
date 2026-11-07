@@ -16,7 +16,7 @@ deploy_tmp=$(mktemp -d)
 trap 'rm -rf -- "$deploy_tmp"' EXIT
 aws_cmd=(aws --region "$deploy_region" --no-cli-pager)
 
-for tool in aws go curl ssh scp ssh-keygen; do
+for tool in aws go curl ssh scp ssh-keygen python3; do
   command -v "$tool" >/dev/null || { printf 'Missing command: %s\n' "$tool" >&2; exit 1; }
 done
 if [[ -f "$deploy_tls_dir/origin.crt" && -f "$deploy_tls_dir/origin.key" ]]; then
@@ -28,17 +28,20 @@ fi
 [[ "$deploy_stack" =~ ^[A-Za-z][A-Za-z0-9-]*$ ]] || { printf 'Invalid PMM_STACK\n' >&2; exit 1; }
 account_id=$("${aws_cmd[@]}" sts get-caller-identity --query Account --output text)
 deploy_key_name=${PMM_KEY_NAME:-$deploy_stack-$account_id}
+previous_instance=''
 
 # Fail before changing resources if this account already has an unrelated stack.
 if stack_project=$("${aws_cmd[@]}" cloudformation describe-stacks --stack-name "$deploy_stack" \
   --query 'Stacks[0].Tags[?Key==`Project`].Value | [0]' --output text 2>"$deploy_tmp/stack.err"); then
   [[ "$stack_project" == please-mend-my ]] || { printf 'Refusing to modify an unrelated stack.\n' >&2; exit 1; }
+  previous_instance=$("${aws_cmd[@]}" cloudformation describe-stacks --stack-name "$deploy_stack" \
+    --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue | [0]' --output text)
 elif ! grep -q 'does not exist' "$deploy_tmp/stack.err"; then
   cat "$deploy_tmp/stack.err" >&2
   exit 1
 fi
 
-# Build before provisioning: the VM receives one static binary, with no build tools.
+# Build the web server locally; the VM builds its catalog directly from public sources.
 cd -- "$repo_dir"
 CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$deploy_tmp/server" .
 availability_zone=$("${aws_cmd[@]}" ec2 describe-instance-type-offerings --location-type availability-zone \
@@ -79,8 +82,29 @@ admin_ip=$(curl --fail --silent --show-error --connect-timeout 5 --max-time 10 h
 server_ip=$("${aws_cmd[@]}" cloudformation describe-stacks --stack-name "$deploy_stack" \
   --query 'Stacks[0].Outputs[?OutputKey==`PublicIp`].OutputValue | [0]' --output text)
 [[ "$server_ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || { printf 'Stack did not return a public IP.\n' >&2; exit 1; }
+server_instance=$("${aws_cmd[@]}" cloudformation describe-stacks --stack-name "$deploy_stack" \
+  --query 'Stacks[0].Outputs[?OutputKey==`InstanceId`].OutputValue | [0]' --output text)
 
 touch "$deploy_hosts"
+# Authenticate replacement keys through AWS before updating the same Elastic IP.
+verify_stack_host_key() {
+  for ((attempt = 0; attempt < 40; attempt++)); do
+    "${aws_cmd[@]}" ec2 get-console-output --instance-id "$server_instance" --latest \
+      --query Output --output text > "$deploy_tmp/console-output"
+    if python3 "$deploy_dir/verify_host_key.py" "$deploy_tmp/console-output" "$server_ip" > "$deploy_tmp/host-key"; then
+      cp -p "$deploy_hosts" "$deploy_hosts.previous"
+      ssh-keygen -R "$server_ip" -f "$deploy_hosts" >/dev/null 2>&1
+      cat "$deploy_tmp/host-key" >> "$deploy_hosts"
+      return 0
+    fi
+    sleep 3
+  done
+  printf 'Replacement host key is not yet available from AWS console output.\n' >&2
+  return 1
+}
+if [[ -n "$previous_instance" && "$previous_instance" != "$server_instance" ]]; then
+  verify_stack_host_key
+fi
 ssh_policy=accept-new
 if ssh-keygen -F "$server_ip" -f "$deploy_hosts" >/dev/null; then ssh_policy=yes; fi
 ssh_options=(-i "$deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=5 \
@@ -88,15 +112,16 @@ ssh_options=(-i "$deploy_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectT
 ssh_ready=false
 for ((attempt = 0; attempt < 30; attempt++)); do
   if ssh "${ssh_options[@]}" "ec2-user@$server_ip" true 2>"$deploy_tmp/ssh.err"; then ssh_ready=true; break; fi
-  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$deploy_tmp/ssh.err"; then break; fi
+  if grep -q 'REMOTE HOST IDENTIFICATION HAS CHANGED' "$deploy_tmp/ssh.err"; then
+    # Also recover if a previous deployment stopped after instance replacement.
+    verify_stack_host_key || break
+  fi
   sleep 2
 done
 if [[ "$ssh_ready" != true ]]; then cat "$deploy_tmp/ssh.err" >&2; exit 1; fi
 ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'sudo timeout 180 cloud-init status --wait && test -f /etc/systemd/system/please-mend-my.service'
 catalog_snapshot=''
-if [[ -f "${PMM_CATALOG_DIR:-$repo_dir/catalog-data/runtime}/manifest.json" ]]; then
-  catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" bash "$deploy_dir/catalog.sh")
-fi
+catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" bash "$deploy_dir/catalog.sh")
 deploy_commit=$(git rev-parse HEAD)
 remote_upload=$(ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'mktemp /home/ec2-user/please-mend-my.XXXXXX')
 scp "${ssh_options[@]}" "$deploy_tmp/server" "ec2-user@$server_ip:$remote_upload"

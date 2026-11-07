@@ -68,7 +68,7 @@ Resources:
         - {IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0}
         - {IpProtocol: tcp, FromPort: 22, ToPort: 22, CidrIp: !Ref AdminCidr}
       Tags: [{Key: Name, Value: please-mend-my}, {Key: Project, Value: please-mend-my}]
-  Server:
+  WebServer:
     Type: AWS::EC2::Instance
     DependsOn: [PublicRoute, SubnetRouteAssociation]
     Properties:
@@ -85,7 +85,9 @@ Resources:
         - DeviceName: /dev/xvda
           Ebs:
             VolumeType: gp3
-            VolumeSize: 20
+            VolumeSize: 64
+            Iops: 6000
+            Throughput: 250
             Encrypted: true
             DeleteOnTermination: true
       PropagateTagsToVolumeOnCreation: true
@@ -141,7 +143,7 @@ Resources:
     Type: AWS::EC2::EIPAssociation
     Properties:
       AllocationId: !GetAtt Address.AllocationId
-      InstanceId: !Ref Server
+      InstanceId: !Ref WebServer
 
 Outputs:
   PublicIp:
@@ -149,4 +151,4 @@ Outputs:
   Url:
     Value: !Sub 'http://${Address}'
   InstanceId:
-    Value: !Ref Server
+    Value: !Ref WebServer

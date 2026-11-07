@@ -7,7 +7,8 @@
 
 Content is CC BY-NC-SA 3.0; this is retrieval/formatting, never model training.
 Everything it writes stays in the gitignored catalog-data directory: the ZIM,
-SQLite inventory, and runtime snapshot are local only and must not be committed.
+SQLite inventory, and runtime snapshot must not be committed. Use --data-dir
+to run the identical pipeline on another machine or an attached data volume.
 Run: uv run scripts/ingest_ifixit.py [--download-only | --build-only]
 """
 from __future__ import annotations
@@ -40,6 +41,8 @@ DATA = ROOT / "catalog-data"
 RAW = DATA / "raw"
 RUNTIME = DATA / "runtime"
 REVISION = "ifixit_en_all_2025-12"
+ARCHIVE_SHA256 = "9bb5f3408707fd0300c6ef47a425c3217187f144cd9154a928183816aa72eead"
+ARCHIVE_BYTES = 3570695757
 ARCHIVE = RAW / f"{REVISION}.zim"
 BASE = "https://download.kiwix.org/zim/ifixit/"
 SOURCE_URL = "https://browse.library.kiwix.org/#lang=eng&category=iFixit"
@@ -105,11 +108,14 @@ def source_metadata():
     root = ET.fromstring(metalink.read_bytes())
     ns = {"m": "urn:ietf:params:xml:ns:metalink"}
     file = root.find("m:file", ns)
-    return {
+    metadata = {
         "size": int(file.find("m:size", ns).text),
         "sha256": file.find("m:hash[@type='sha-256']", ns).text,
         "mirrors": [item.text for item in file.findall("m:url", ns)],
     }
+    if metadata["size"] != ARCHIVE_BYTES or metadata["sha256"] != ARCHIVE_SHA256:
+        raise RuntimeError("Official source metadata differs from the pinned archive; review the source revision before updating.")
+    return metadata
 
 
 def download(metadata):
@@ -492,7 +498,7 @@ def build(metadata, sha256):
         atomic_write(RUNTIME / "guides" / f"{record['id']}.json.gz", gzip.compress(body, compresslevel=6, mtime=0))
         return record, path, len(body)
 
-    log(f"Normalizing full content for {page_count:,} pages; each finished file is atomic for staging sync")
+    log(f"Normalizing full content for {page_count:,} pages; each finished file is atomic")
     rows, item_rows, counts, total_json = [], [], Counter(), 0
     # Bound queued documents and memory. lxml and gzip do their expensive work in C.
     cursor = work.execute("SELECT path,title,kind,html FROM pages ORDER BY path")
@@ -551,13 +557,14 @@ def build(metadata, sha256):
 def assert_output_untracked():
     """Stop before download or build if Git could pick up the catalog database."""
     data = DATA.resolve()
-    if ROOT.resolve() not in data.parents:
-        raise SystemExit(f"Refusing to write catalog data outside the repo: {data}")
+    if ROOT.resolve() not in data.parents and data != ROOT.resolve():
+        return  # Explicit data volumes outside the source checkout cannot enter its Git history.
+    relative = data.relative_to(ROOT.resolve())
     probes = [
-        "catalog-data/catalog.sqlite",
-        "catalog-data/work.sqlite",
-        "catalog-data/raw/ifixit_en_all_2025-12.zim",
-        "catalog-data/runtime/index.json",
+        str(relative / "catalog.sqlite"),
+        str(relative / "work.sqlite"),
+        str(relative / "raw" / ARCHIVE.name),
+        str(relative / "runtime/index.json"),
     ]
     result = subprocess.run(["git", "-C", str(ROOT), "check-ignore", "--", *probes], capture_output=True, text=True)
     ignored = {line.strip() for line in result.stdout.splitlines()}
@@ -626,13 +633,18 @@ def reclassify():
 
 
 def main():
+    global DATA, RAW, RUNTIME, ARCHIVE
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-dir", type=Path, default=DATA, help="Output/cache directory; defaults to the ignored catalog-data directory.")
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
     parser.add_argument("--reclassify-only", action="store_true", help="Refresh completed catalog category metadata; stop catalog servers first.")
     args = parser.parse_args()
     if sum((args.download_only, args.build_only, args.reclassify_only)) > 1:
         parser.error("Choose one operation or omit both to download and build.")
+    DATA = args.data_dir.resolve()
+    RAW, RUNTIME = DATA / "raw", DATA / "runtime"
+    ARCHIVE = RAW / f"{REVISION}.zim"
     assert_output_untracked()
     if args.reclassify_only:
         reclassify()
