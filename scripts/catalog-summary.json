@@ -1,0 +1,73 @@
+{
+  "revision": "ifixit_en_all_2025-12",
+  "archive": {
+    "filename": "ifixit_en_all_2025-12.zim",
+    "bytes": 3570695757,
+    "sha256": "9bb5f3408707fd0300c6ef47a425c3217187f144cd9154a928183816aa72eead",
+    "officialChecksumVerified": true,
+    "zimChecksumVerified": true,
+    "url": "https://download.kiwix.org/zim/ifixit/ifixit_en_all_2025-12.zim",
+    "catalogUrl": "https://library.kiwix.org/catalog/v2/entries?lang=eng&category=ifixit&count=100"
+  },
+  "content": {
+    "indexedItems": 103473,
+    "kindCounts": {
+      "guide": 56536,
+      "topic": 44856,
+      "article": 2081
+    },
+    "categoryCounts": {
+      "technology": 64804,
+      "household": 15061,
+      "other": 2624,
+      "medical": 7756,
+      "handyman": 9075,
+      "vehicles": 4153
+    },
+    "classificationBasisCounts": {
+      "source_category_ancestry": 99296,
+      "source_title_fallback": 1553,
+      "unclassified_reference": 2624
+    },
+    "uniqueMediaFiles": 575002,
+    "mediaBytes": 3189847285,
+    "articleMediaReferences": 1470069,
+    "fullArticleJsonBytes": 2169391057,
+    "indexBytes": 11041765,
+    "indexGzipBytes": 2598468,
+    "indexSha256": "3e232983deb2ba8142ae84e13b4e99ba72ed0a86c10312beb77c0d4b922c98b4"
+  },
+  "quality": {
+    "allJsonAndGzipMatch": true,
+    "allInternalReferencesResolve": true,
+    "allHtmlAllowlisted": true,
+    "sqliteIntegrity": "ok"
+  },
+  "sourceInstructionAndConclusionSamples": 24,
+  "categoryCorrection": {
+    "changedItems": 937,
+    "reason": "Specific source Software and Smartwatch roots override generic Skills/Apparel ancestors."
+  },
+  "scope": {
+    "excludedCanonicalHtmlByPathPrefix": {
+      "Tools": 1,
+      "User": 150359,
+      "about-us": 2,
+      "home": 7,
+      "promotions": 1,
+      "solutions": 1,
+      "ttps:": 1
+    },
+    "notes": [
+      "Canonical repair guides, device/topic pages and reference articles are indexed; source redirects resolve to canonical items.",
+      "Broad categories follow source taxonomy; source-title fallback and unresolved items remain explicitly counted.",
+      "Source draft guides may have no steps; no missing instructions are invented.",
+      "The archive contains no PDF/audio/video attachments. External manuals remain original external links."
+    ]
+  },
+  "license": {
+    "name": "CC BY-NC-SA 3.0",
+    "url": "https://creativecommons.org/licenses/by-nc-sa/3.0/",
+    "notice": "Source content and adapted guide HTML are CC BY-NC-SA 3.0: attribution, noncommercial and share-alike. Not for AI/model training."
+  }
+}

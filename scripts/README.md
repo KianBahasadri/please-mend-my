@@ -4,8 +4,13 @@
 uv run scripts/ingest_ifixit.py                 # download, verify, and build
 uv run scripts/ingest_ifixit.py --build-only    # reuse the complete download
 uv run scripts/ingest_ifixit.py --download-only
+uv run scripts/ingest_ifixit.py --reclassify-only # refresh source-graph categories only
 uv run scripts/validate_catalog.py              # audit every finished document
 ```
+
+The tracked [catalog summary](catalog-summary.json) records the verified source,
+full item/category counts, index size, and completed audit scope; generated corpus
+files and the detailed quality report stay local and ignored by Git.
 
 The source is the complete English `ifixit_en_all_2025-12.zim` archive listed by
 the [Kiwix catalog](https://browse.library.kiwix.org/#lang=eng&category=iFixit).
@@ -27,7 +32,11 @@ present, is only an ingestion benchmark artifact; it must never be published as
 the finished catalog. Stop local catalog servers before rebuilding their data.
 
 Category assignment follows the source Device category graph; title fallback
-and unresolved items are counted separately in the manifest. The index includes
+and unresolved items are counted separately in the manifest. Specific Software
+and Smartwatch source roots classify as Technology rather than inheriting generic
+Skills/Apparel categories. Category metadata can be refreshed without re-extracting
+images or article content; stop catalog servers before using `--reclassify-only`.
+The index includes
 canonical repair guides, device/topic pages, and useful articles. Redirects are
 resolved, while user profiles and offline error/navigation pages remain in the
 original archive rather than becoming search results.

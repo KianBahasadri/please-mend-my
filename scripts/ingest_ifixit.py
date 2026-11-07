@@ -58,7 +58,7 @@ CATEGORY_ROOTS = {
     "vehicles": {"vehicle", "vehicles", "car and truck", "car", "truck", "bicycle", "motorcycle", "automotive", "bike"},
     "household": {"appliance", "appliances", "home appliance", "household", "home", "kitchen", "small appliance", "major appliance"},
     "handyman": {"clothing", "apparel", "tool", "tools", "household object", "household objects", "furniture", "skills", "bag", "shoe", "shoes", "outdoor", "sporting goods"},
-    "technology": {"electronics", "electronic", "computer hardware", "computer", "phone", "tablet", "pc", "mac", "laptop", "game console", "camera", "audio", "electronics skills"},
+    "technology": {"electronics", "electronic", "computer hardware", "computer", "phone", "tablet", "pc", "mac", "laptop", "game console", "camera", "audio", "electronics skills", "software", "smartwatch"},
 }
 # Titles are a secondary fallback only when the archive contains no source category relationship.
 FALLBACKS = {
@@ -182,6 +182,37 @@ def first(tree, expression):
 
 def parse_page(payload):
     return html.fromstring(payload, parser=html.HTMLParser(encoding="utf-8", recover=True))
+
+
+def category_classifier(title_map, parents, memberships):
+    category_cache, classification_basis = {}, Counter()
+    def category_for(path, title=""):
+        if path in category_cache:
+            return category_cache[path]
+        start = [path] if kind_for(path) == "topic" else sorted(memberships.get(path, []))
+        queue, seen = deque((node, 0) for node in start), set()
+        candidates = []
+        while queue:
+            node, depth = queue.popleft()
+            if node in seen:
+                continue
+            seen.add(node)
+            category_title = tokens(title_map.get(node, node.rsplit("/", 1)[-1]))
+            for category, labels in CATEGORY_ROOTS.items():
+                if category_title in labels:
+                    candidates.append((depth, list(CATEGORY_ROOTS).index(category), category))
+            queue.extend((parent, depth + 1) for parent in sorted(parents.get(node, [])))
+        if candidates:
+            result, basis = min(candidates)[2], "source_category_ancestry"
+        else:
+            haystack = tokens(title + " " + " ".join(title_map.get(node, node.rsplit("/", 1)[-1]) for node in seen))
+            result = next((key for key, expression in FALLBACKS.items() if re.search(expression, haystack)), "other")
+            basis = "source_title_fallback" if result != "other" else "unclassified_reference"
+        category_cache[path] = result
+        classification_basis[basis] += 1
+        return result
+
+    return category_for, classification_basis
 
 
 def build(metadata, sha256):
@@ -312,32 +343,7 @@ def build(metadata, sha256):
     inventory = sqlite3.connect(inventory_path)
     inventory.executescript("CREATE TABLE items(id TEXT PRIMARY KEY,source_path TEXT UNIQUE,title TEXT,category TEXT,kind TEXT,device TEXT,summary TEXT,source_url TEXT); CREATE TABLE source_categories(path TEXT PRIMARY KEY,title TEXT,category TEXT); CREATE TABLE category_edges(parent TEXT,child TEXT,PRIMARY KEY(parent,child)); CREATE TABLE guide_categories(guide TEXT,category TEXT,PRIMARY KEY(guide,category)); CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT);")
 
-    category_cache, classification_basis = {}, Counter()
-    def category_for(path, title=""):
-        if path in category_cache:
-            return category_cache[path]
-        start = [path] if kind_for(path) == "topic" else sorted(memberships.get(path, []))
-        queue, seen = deque((node, 0) for node in start), set()
-        candidates = []
-        while queue:
-            node, depth = queue.popleft()
-            if node in seen:
-                continue
-            seen.add(node)
-            category_title = tokens(title_map.get(node, node.rsplit("/", 1)[-1]))
-            for category, labels in CATEGORY_ROOTS.items():
-                if category_title in labels:
-                    candidates.append((depth, list(CATEGORY_ROOTS).index(category), category))
-            queue.extend((parent, depth + 1) for parent in sorted(parents.get(node, [])))
-        if candidates:
-            result, basis = min(candidates)[2], "source_category_ancestry"
-        else:
-            haystack = tokens(title + " " + " ".join(title_map.get(node, node.rsplit("/", 1)[-1]) for node in seen))
-            result = next((key for key, expression in FALLBACKS.items() if re.search(expression, haystack)), "other")
-            basis = "source_title_fallback" if result != "other" else "unclassified_reference"
-        category_cache[path] = result
-        classification_basis[basis] += 1
-        return result
+    category_for, classification_basis = category_classifier(title_map, parents, memberships)
 
     def media_url(base, reference):
         target = resolve_reference(base, reference)
@@ -560,14 +566,77 @@ def assert_output_untracked():
         raise SystemExit("Refusing to ingest: the catalog database, archive, or runtime files are not gitignored.")
 
 
+def reclassify():
+    """Refresh category metadata from the saved source graph, without extracting content."""
+    index_path = RUNTIME / "index.json"
+    index = json.loads(index_path.read_bytes())
+    manifest = json.loads((RUNTIME / "manifest.json").read_bytes())
+    if index["revision"] != manifest["revision"] or not manifest["archiveChecksumVerified"] or not manifest["zimChecksumVerified"]:
+        raise RuntimeError("Category refresh requires a checksum-verified catalog snapshot.")
+    inventory = sqlite3.connect(DATA / "catalog.sqlite")
+    source = sqlite3.connect(f"file:{DATA / 'work.sqlite'}?mode=ro", uri=True)
+    title_map = dict(source.execute("SELECT path,title FROM pages"))
+    source.close()
+    parents, memberships = defaultdict(set), defaultdict(set)
+    for parent, child in inventory.execute("SELECT parent,child FROM category_edges"):
+        parents[child].add(parent)
+    for guide, category in inventory.execute("SELECT guide,category FROM guide_categories"):
+        memberships[guide].add(category)
+    category_for, classification_basis = category_classifier(title_map, parents, memberships)
+    items = inventory.execute("SELECT id,source_path,title,category FROM items ORDER BY source_path").fetchall()
+    desired = {identifier: category_for(path, title) for identifier, path, title, _ in items}
+    source_categories = [(category_for(path), path) for (path,) in inventory.execute("SELECT path FROM source_categories")]
+    manifest["runtimeComplete"] = False
+    atomic_write(RUNTIME / "manifest.json", json_bytes(manifest))
+    (DATA / "quality-report.json").unlink(missing_ok=True)
+    changed = []
+    for identifier, source_path, title, before in items:
+        category = desired[identifier]
+        if before == category:
+            continue
+        path = RUNTIME / "guides" / f"{identifier}.json"
+        detail = json.loads(path.read_bytes())
+        detail["category"] = category
+        body = json_bytes(detail)
+        atomic_write(path, body)
+        atomic_write(path.with_suffix(".json.gz"), gzip.compress(body, compresslevel=6, mtime=0))
+        changed.append({"id": identifier, "title": title, "from": before, "to": category})
+    inventory.executemany("UPDATE items SET category=? WHERE id=?", [(desired[identifier], identifier) for identifier, _, _, _ in items])
+    inventory.executemany("UPDATE source_categories SET category=? WHERE path=?", source_categories)
+    inventory.commit()
+    inventory.close()
+    counts = Counter()
+    for row in index["items"]:
+        row[2] = desired[row[0]]
+        counts[row[2]] += 1
+    payload = json_bytes(index)
+    packed = gzip.compress(payload, compresslevel=9, mtime=0)
+    atomic_write(index_path, payload)
+    atomic_write(RUNTIME / "index.json.gz", packed)
+    manifest.update({"generatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                     "categoryCounts": dict(counts), "classificationBasisCounts": dict(classification_basis),
+                     "guideJsonBytes": sum(path.stat().st_size for path in (RUNTIME / "guides").glob("*.json")),
+                     "indexBytes": len(payload), "indexGzipBytes": len(packed), "runtimeComplete": True})
+    atomic_write(DATA / "category-refresh.json", json_bytes({"revision": index["revision"], "changedItems": len(changed),
+                 "reason": "Specific source Software and Smartwatch roots override generic Skills/Apparel ancestors.", "changes": changed}))
+    atomic_write(DATA / "manifest.json", json_bytes(manifest))
+    atomic_write(RUNTIME / "manifest.json", json_bytes(manifest))
+    log(f"Category refresh complete: {len(changed):,} items corrected; content and media unchanged")
+    print(json.dumps(dict(counts), indent=2))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--download-only", action="store_true")
     parser.add_argument("--build-only", action="store_true")
+    parser.add_argument("--reclassify-only", action="store_true", help="Refresh completed catalog category metadata; stop catalog servers first.")
     args = parser.parse_args()
-    if args.download_only and args.build_only:
+    if sum((args.download_only, args.build_only, args.reclassify_only)) > 1:
         parser.error("Choose one operation or omit both to download and build.")
     assert_output_untracked()
+    if args.reclassify_only:
+        reclassify()
+        return
     metadata = source_metadata()
     if not args.build_only:
         download(metadata)

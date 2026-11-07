@@ -66,12 +66,16 @@ def main():
     category_counts, kind_counts = Counter(), Counter()
     reference_count = json_bytes = 0
     with ThreadPoolExecutor(max_workers=4) as workers:
-        # map is consumed immediately; bounded rows are already the compact index.
-        for category, kind, references, size in workers.map(audit, index["items"], chunksize=64):
-            category_counts[category] += 1
-            kind_counts[kind] += 1
-            reference_count += references
-            json_bytes += size
+        # Keep pending futures bounded while checking the entire real corpus.
+        for offset in range(0, len(index["items"]), 1024):
+            block = index["items"][offset:offset + 1024]
+            for category, kind, references, size in workers.map(audit, block):
+                category_counts[category] += 1
+                kind_counts[kind] += 1
+                reference_count += references
+                json_bytes += size
+            if offset % 8192 == 0:
+                print(f"Audited {offset + len(block):,}/{len(index['items']):,} articles", flush=True)
     assert category_counts == Counter(manifest["categoryCounts"]), "Category totals differ"
     database = sqlite3.connect(f"file:{ROOT / 'catalog.sqlite'}?mode=ro", uri=True)
     assert database.execute("PRAGMA quick_check").fetchone()[0] == "ok"
