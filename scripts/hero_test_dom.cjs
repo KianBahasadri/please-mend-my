@@ -193,12 +193,17 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100 } = 
   };
   const area = add('section', 'hero-area'); area.classList.add('hero-area');
   const hero = add('h1', 'hero-title', area);
+  const firstMirror = add('span', 'hero-underline', hero);
+  const prefixMirror = add('span', 'hero-prefix', firstMirror);
+  const suffixMirror = add('span', 'hero-suffix', firstMirror);
   const response = add('textarea', 'response', hero);
   const measure = add('span', 'measure', hero);
   const line = add('span', 'clarification-line', hero);
   line.inert = true;
   line.setAttribute('aria-hidden', 'true');
   const secondHero = add('span', 'clarification-hero', line);
+  const question = add('span', 'clarification-question', secondHero);
+  const answerMirror = add('span', 'clarification-underline', secondHero);
   const clarification = add('textarea', 'clarification-response', secondHero);
   const secondMeasure = add('span', 'clarification-measure', secondHero);
   const media = Object.assign(new EventTarget(), { matches: reducedMotion, media: '(prefers-reduced-motion: reduce)' });
@@ -238,7 +243,8 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100 } = 
     }
     clock = end; flushFrames();
   };
-  return { context, window, document, response, clarification, line, hero, measure, secondMeasure,
+  return { context, window, document, response, clarification, question, line, hero, measure, secondMeasure,
+    prefixMirror, suffixMirror, answerMirror,
     add, event: (target, type, options) => { const event = new TestEvent(type, options); target.dispatchEvent(event); return event; },
     advance, flushFrames };
 }

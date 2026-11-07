@@ -3,7 +3,7 @@
 - index.html; run locally; never open/reopen a browser unless asked.
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
-- Hero2 after broad noun idle 2.5s: "my <noun>,\nit's "+symptom, focus after "it's "; typing cancels, phrases skip. Enter/Tab opens now; empty Backspace→1/end, suppress reopen. Protect both prefixes; one native caret; search editable suffixes only.
+- Underline editable areas+idle floaters. Broad noun idle 2.5s→hero "What's wrong with your <noun>?" + blank answer below; focus answer. No added comma/repeated noun/it's. Enter/Tab opens now; phrases skip; empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; search typed text only.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".

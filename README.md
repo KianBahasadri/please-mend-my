@@ -2,12 +2,14 @@
 
 A responsive typing page with rotating fonts and subtle monochrome lighting.
 
-After 2.5 seconds without typing, bare subjects such as `car` or `arm` reveal
-`my <subject>,` with `it's ` below it and focus the caret after that prompt.
-Enter or Tab opens it immediately; Backspace on an empty symptom returns to the
-end of the first line. Both prefixes stay protected, and only the focused native
-textbox has a caret. Full phrases such as `broken arm` use the first line alone.
-Search combines the two editable suffixes locally, excluding the fixed prompts.
+Both typing areas are underlined, matching the little idle typing animations.
+After 2.5 seconds without typing, bare subjects such as `arm` reveal the hero
+question `What's wrong with your arm?` and focus a blank answer field beneath it.
+Enter or Tab opens it immediately; Backspace on an empty answer returns to the
+end of the first line. The prompt and question stay protected, and only the
+focused native textbox has a caret. Full phrases such as `broken arm` use the
+first line alone. Search combines the two editable answers locally, excluding
+the fixed prompt and question.
 Broad queries favor general entries over niche model guides; exact model searches
 keep their priority.
 

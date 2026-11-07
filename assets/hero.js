@@ -4,6 +4,10 @@
   const first = document.getElementById("response");
   const second = document.getElementById("clarification-response");
   const line = document.getElementById("clarification-line");
+  const question = document.getElementById("clarification-question");
+  const fixedUnderline = document.getElementById("hero-prefix");
+  const firstUnderline = document.getElementById("hero-suffix");
+  const secondUnderline = document.getElementById("clarification-underline");
   const heading = document.querySelector("h1");
   const measure = document.getElementById("measure");
   const prompt = document.documentElement.dataset.theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
@@ -62,6 +66,10 @@
   }
 
   function grow(input) {
+    const underline = input === first ? firstUnderline : secondUnderline;
+    if (input === first) fixedUnderline.textContent = state.get(first).prefix;
+    underline.textContent = suffix(input);
+    underline.classList.toggle("is-empty", !underline.textContent);
     input.style.height = "0px";
     input.style.height = `${input.scrollHeight + 2}px`;
   }
@@ -100,11 +108,12 @@
     subject = name;
     open = Boolean(name);
     if (open) {
-      const nextPrefix = `my ${name},\nit's `;
-      if (state.get(second).prefix !== nextPrefix || changedSubject) setPrefix(second, nextPrefix, symptom);
-      second.setAttribute("aria-label", `my ${name}, it's — what is wrong?`);
+      if (changedSubject) setPrefix(second, "", symptom);
+      question.textContent = `What's wrong with your ${name}?`;
+      second.setAttribute("aria-label", question.textContent);
     } else {
-      setPrefix(second, "my ");
+      setPrefix(second, "");
+      question.textContent = "";
       if (active === second || document.activeElement === second) focus(first, true);
     }
     second.disabled = !open;
@@ -178,7 +187,7 @@
   }
 
   for (const input of [first, second]) {
-    const prefix = input === first ? prompt : "my ";
+    const prefix = input === first ? prompt : "";
     state.set(input, { prefix, previous: prefix, composing: false });
     input.value = prefix;
     input.dataset.promptLength = String(prefix.length);

@@ -173,6 +173,49 @@
         caret-color: currentColor;
       }
 
+      .hero-field {
+        position: relative;
+        display: block;
+        width: 100%;
+      }
+
+      .hero-underline {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        color: transparent;
+        -webkit-text-fill-color: transparent;
+        font: inherit;
+        letter-spacing: inherit;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        pointer-events: none;
+        user-select: none;
+      }
+
+      #hero-prefix {
+        visibility: hidden;
+      }
+
+      .hero-suffix,
+      .floater-answer {
+        text-decoration-line: underline;
+        text-decoration-color: var(--ink);
+        text-decoration-thickness: max(1px, 0.018em);
+        text-underline-offset: 0.13em;
+      }
+
+      .hero-suffix.is-empty::after,
+      .floater-answer:empty::after {
+        content: "\00a0\00a0\00a0\00a0";
+      }
+
+      .clarification-question {
+        display: block;
+        margin-bottom: 0.12em;
+        user-select: none;
+      }
+
       .clarification-line {
         display: grid;
         grid-template-rows: 0fr;
@@ -364,9 +407,18 @@
         <section class="hero-area" aria-label="Search the repair library">
           <div class="hero-floaters" aria-hidden="true"></div>
           <h1>
-            <textarea id="response" class="hero-input" aria-label="please, mend my — what would you like to mend?" aria-controls="clarification-line" aria-expanded="false" spellcheck="false" rows="1" autofocus></textarea>
+            <span class="hero-field">
+              <textarea id="response" class="hero-input" aria-label="please, mend my — what would you like to mend?" aria-controls="clarification-line" aria-expanded="false" spellcheck="false" rows="1" autofocus></textarea>
+              <span class="hero-underline" aria-hidden="true" inert><span id="hero-prefix"></span><span id="hero-suffix" class="hero-suffix is-empty"></span></span>
+            </span>
             <span id="clarification-line" class="clarification-line" aria-hidden="true" inert>
-              <span class="clarification-content"><textarea id="clarification-response" class="hero-input" aria-label="What is wrong?" spellcheck="false" rows="1" tabindex="-1" disabled></textarea></span>
+              <span class="clarification-content">
+                <span id="clarification-question" class="clarification-question"></span>
+                <span class="hero-field">
+                  <textarea id="clarification-response" class="hero-input" aria-label="What is wrong?" spellcheck="false" rows="1" tabindex="-1" disabled></textarea>
+                  <span class="hero-underline" aria-hidden="true" inert><span id="clarification-underline" class="hero-suffix is-empty"></span></span>
+                </span>
+              </span>
             </span>
             <span id="measure" aria-hidden="true"></span>
           </h1>

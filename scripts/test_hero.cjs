@@ -28,7 +28,7 @@ async function heroFor(options = {}) {
   return dom;
 }
 
-test('a bare noun waits 2.5 seconds then moves the native caret after the fixed multiline context', async () => {
+test('a bare noun waits 2.5 seconds then asks a separate question and focuses a blank answer', async () => {
   const dom = await heroFor();
   assert.equal(dom.window.mendHero.query(), '');
   assert.equal(dom.visible(), false);
@@ -37,14 +37,21 @@ test('a bare noun waits 2.5 seconds then moves the native caret after the fixed 
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
-  assert.equal(dom.clarification.value, "my arm,\nit's ");
-  assert.equal(dom.prefix(dom.clarification), "my arm,\nit's ");
+  assert.equal(dom.response.value, dom.prefix(dom.response) + 'arm');
+  assert.equal(dom.question.textContent, "What's wrong with your arm?");
+  assert.equal(dom.clarification.getAttribute('aria-label'), dom.question.textContent);
+  assert.equal(dom.prefixMirror.textContent, dom.prefix(dom.response));
+  assert.equal(dom.clarification.value, '');
+  assert.equal(dom.prefix(dom.clarification), '');
   assert.equal(dom.document.activeElement, dom.clarification);
-  assert.equal(dom.clarification.selectionStart, "my arm,\nit's ".length);
-  assert.equal(dom.clarification.selectionEnd, "my arm,\nit's ".length);
+  assert.equal(dom.clarification.selectionStart, 0);
+  assert.equal(dom.clarification.selectionEnd, 0);
+  assert.equal(dom.suffixMirror.textContent, 'arm');
+  assert.equal(dom.answerMirror.textContent, '');
   assert.equal(dom.window.mendHero.query(), 'arm');
   dom.type(dom.clarification, 'hurts');
-  assert.equal(dom.clarification.value, "my arm,\nit's hurts");
+  assert.equal(dom.clarification.value, 'hurts');
+  assert.equal(dom.answerMirror.textContent, 'hurts');
   assert.equal(dom.window.mendHero.query(), 'arm hurts');
   assert.equal(dom.queries.at(-1), 'arm hurts');
 });
@@ -76,7 +83,7 @@ test('the idle deadline resets and continuing a full phrase cancels clarificatio
   assert.equal(dom.visible(), false);
 });
 
-test('Enter and Tab immediately focus the protected second line and preserve Shift+Tab', async () => {
+test('Enter and Tab immediately ask the question, focus its blank answer, and preserve Shift+Tab', async () => {
   for (const key of ['Enter', 'Tab']) {
     const dom = await heroFor();
     dom.type(dom.response, 'car');
@@ -84,8 +91,9 @@ test('Enter and Tab immediately focus the protected second line and preserve Shi
     assert.equal(event.defaultPrevented, true);
     assert.equal(dom.visible(), true);
     assert.equal(dom.document.activeElement, dom.clarification);
-    assert.equal(dom.clarification.value, "my car,\nit's ");
-    assert.equal(dom.clarification.selectionStart, "my car,\nit's ".length);
+    assert.equal(dom.question.textContent, "What's wrong with your car?");
+    assert.equal(dom.clarification.value, '');
+    assert.equal(dom.clarification.selectionStart, 0);
     dom.type(dom.clarification, 'will not start');
     assert.equal(dom.window.mendHero.query(), 'car will not start');
     assert.equal(dom.queries.at(-1), 'car will not start');
@@ -103,6 +111,7 @@ test('Backspace on an empty second suffix dissolves it and suppresses idle reope
   const event = dom.key(dom.clarification, 'Backspace');
   assert.equal(event.defaultPrevented, true);
   assert.equal(dom.visible(), false);
+  assert.equal(dom.question.textContent, '');
   assert.equal(dom.document.activeElement, dom.response);
   assert.equal(dom.response.selectionStart, dom.response.value.length);
   dom.advance(20000);
@@ -133,7 +142,8 @@ test('manual clarification can handle an unfamiliar noun without treating a phra
   assert.equal(dom.visible(), false, 'unfamiliar words do not create speculative automatic prompts');
   dom.key(dom.response, 'Tab');
   assert.equal(dom.visible(), true);
-  assert.equal(dom.clarification.value, "my harpsichord,\nit's ");
+  assert.equal(dom.question.textContent, "What's wrong with your harpsichord?");
+  assert.equal(dom.clarification.value, '');
   dom.type(dom.clarification, 'sounds wrong');
   assert.equal(dom.window.mendHero.query(), 'harpsichord sounds wrong');
   dom.response.focus();
@@ -169,10 +179,11 @@ test('Ctrl/Meta+A, mouse selection, copy, and cut target editable suffixes only'
   assert.equal(cut.defaultPrevented, true);
   assert.equal(data.get('text/plain'), 'screen flickers');
   assert.equal(dom.clarification.value, originalPrefix);
+  assert.equal(dom.answerMirror.textContent, '');
   assert.equal(dom.window.mendHero.query(), 'laptop');
 });
 
-test('prefix deletion is blocked and malformed replacement never edits either prefix', async () => {
+test('the first prefix stays protected while the entire separate answer is editable', async () => {
   const dom = await heroFor();
   dom.reveal('car');
   dom.type(dom.clarification, 'needs repair');
@@ -186,12 +197,18 @@ test('prefix deletion is blocked and malformed replacement never edits either pr
     }
     input.value = 'unexpected autofill';
     dom.event(input, 'input', { inputType: 'insertReplacementText', bubbles: true });
-    assert.ok(input.value.startsWith(prefix));
-    assert.ok(input.selectionStart >= prefix.length);
+    if (input === dom.response) {
+      assert.equal(input.value, prefix + 'car');
+      assert.ok(input.selectionStart >= prefix.length);
+    } else {
+      assert.equal(prefix, '');
+      assert.equal(input.value, 'unexpected autofill');
+      assert.equal(dom.window.mendHero.query(), 'car unexpected autofill');
+    }
   }
 });
 
-test('changing the noun updates the prefix and cannot retain an unrelated symptom', async () => {
+test('changing the noun updates the question and clears an unrelated answer', async () => {
   const dom = await heroFor();
   dom.type(dom.response, 'arm');
   dom.key(dom.response, 'Enter');
@@ -201,10 +218,13 @@ test('changing the noun updates the prefix and cannot retain an unrelated sympto
   dom.type(dom.response, 'laptop');
   assert.equal(dom.window.mendHero.query(), 'laptop');
   dom.advance(2500);
-  assert.equal(dom.clarification.value, "my laptop,\nit's ");
+  assert.equal(dom.question.textContent, "What's wrong with your laptop?");
+  assert.equal(dom.clarification.value, '');
   dom.response.focus();
   dom.type(dom.response, 'broken laptop screen');
   assert.equal(dom.visible(), false);
+  assert.equal(dom.question.textContent, '');
+  assert.equal(dom.clarification.value, '');
   assert.equal(dom.window.mendHero.query(), 'broken laptop screen');
   dom.advance(20000);
   assert.equal(dom.visible(), false);
@@ -290,13 +310,40 @@ test('normal search-result visibility does not cancel a bare noun idle prompt', 
   assert.equal(dom.window.mendHero.query(), 'arm');
 });
 
+test('editable underline content stays in sync through typing, cut, and reset', async () => {
+  const dom = await heroFor();
+  assert.equal(dom.suffixMirror.textContent, '');
+  assert.equal(dom.suffixMirror.classList.contains('is-empty'), true);
+  assert.equal(dom.answerMirror.classList.contains('is-empty'), true);
+  dom.type(dom.response, 'arm');
+  assert.equal(dom.suffixMirror.textContent, 'arm');
+  assert.equal(dom.suffixMirror.classList.contains('is-empty'), false);
+  dom.advance(2500);
+  assert.equal(dom.answerMirror.textContent, '');
+  assert.equal(dom.answerMirror.classList.contains('is-empty'), true);
+  dom.type(dom.clarification, 'hurts');
+  assert.equal(dom.answerMirror.textContent, 'hurts');
+  assert.equal(dom.answerMirror.classList.contains('is-empty'), false);
+  dom.key(dom.clarification, 'a', { ctrlKey: true });
+  dom.event(dom.clarification, 'cut', { clipboardData: { setData() {} } });
+  assert.equal(dom.answerMirror.textContent, '');
+  assert.equal(dom.answerMirror.classList.contains('is-empty'), true);
+  assert.equal(dom.window.mendHero.query(), 'arm');
+  dom.key(dom.clarification, 'Backspace');
+  dom.type(dom.response, '');
+  assert.equal(dom.suffixMirror.textContent, '');
+  assert.equal(dom.suffixMirror.classList.contains('is-empty'), true);
+  assert.equal(dom.window.mendHero.query(), '');
+});
+
 test('all seven themes retain protected prompts and the controller stays static with reduced motion', async () => {
   for (const theme of ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox']) {
     const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
     assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
     dom.reveal('relationship');
     assert.equal(dom.document.activeElement, dom.clarification);
-    assert.equal(dom.prefix(dom.clarification), "my relationship,\nit's ");
+    assert.equal(dom.question.textContent, "What's wrong with your relationship?");
+    assert.equal(dom.prefix(dom.clarification), '');
     dom.type(dom.clarification, 'needs attention');
     assert.equal(dom.window.mendHero.query(), 'relationship needs attention');
     assert.equal(dom.document.activeElement, dom.clarification);
