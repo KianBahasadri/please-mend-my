@@ -68,10 +68,12 @@ if [[ ! -x "$base/tools/uv" ]] || [[ "$("$base/tools/uv" --version | cut -d' ' -
   rm -f "$base/uv-install.sh"
 fi
 state=$(systemctl show please-mend-my-ingest.service --property=ActiveState --value 2>/dev/null || true)
+run_ingestion=false
 if [[ "$state" == activating ]]; then
   [[ -f "$base/current-key" && "$(cat "$base/current-key")" == "$digest" ]] || {
     printf 'A different cloud ingestion is already running; leave it undisturbed.\n' >&2; exit 1;
   }
+  run_ingestion=true
 elif [[ ! -f "$release/ingest.json" ]]; then
   cat > /etc/systemd/system/please-mend-my-ingest.service <<UNIT
 [Unit]
@@ -104,12 +106,15 @@ UNIT
   printf '%s\n' "$digest" > "$base/current-key"
   systemctl daemon-reload
   systemctl reset-failed please-mend-my-ingest.service
-  systemctl start --no-block please-mend-my-ingest.service
-  printf 'EC2 is downloading and ingesting the pinned Kiwix archive.\n' >&2
+  run_ingestion=true
 fi
-while [[ "$(systemctl show please-mend-my-ingest.service --property=ActiveState --value)" == activating ]]; do
-  sleep 3
-done
+if [[ "$run_ingestion" == true ]]; then
+  printf 'EC2 is downloading and ingesting the pinned Kiwix archive.\n' >&2
+  if ! systemctl start please-mend-my-ingest.service; then
+    journalctl -u please-mend-my-ingest.service -n 35 --no-pager >&2
+    exit 1
+  fi
+fi
 if [[ ! -f "$release/ingest.json" ]]; then
   journalctl -u please-mend-my-ingest.service -n 35 --no-pager >&2
   exit 1

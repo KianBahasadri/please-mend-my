@@ -87,7 +87,6 @@ Resources:
             VolumeType: gp3
             VolumeSize: 64
             Iops: 6000
-            Throughput: 250
             Encrypted: true
             DeleteOnTermination: true
       PropagateTagsToVolumeOnCreation: true

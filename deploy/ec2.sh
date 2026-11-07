@@ -88,7 +88,8 @@ server_instance=$("${aws_cmd[@]}" cloudformation describe-stacks --stack-name "$
 touch "$deploy_hosts"
 # Authenticate replacement keys through AWS before updating the same Elastic IP.
 verify_stack_host_key() {
-  for ((attempt = 0; attempt < 40; attempt++)); do
+  local key_attempt
+  for ((key_attempt = 0; key_attempt < 40; key_attempt++)); do
     "${aws_cmd[@]}" ec2 get-console-output --instance-id "$server_instance" --latest \
       --query Output --output text > "$deploy_tmp/console-output"
     if python3 "$deploy_dir/verify_host_key.py" "$deploy_tmp/console-output" "$server_ip" > "$deploy_tmp/host-key"; then
