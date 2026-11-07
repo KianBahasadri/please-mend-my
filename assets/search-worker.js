@@ -63,7 +63,7 @@ self.onmessage = ({ data }) => {
 (async () => {
   try {
     const started = performance.now();
-    const response = await fetch("/api/catalog", { credentials: "same-origin" });
+    const response = await fetch("/api/catalog", { credentials: "same-origin", mode: "same-origin" });
     if (!response.ok) throw new Error(`The repair library is unavailable (${response.status}).`);
     catalog = await response.json();
     if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories)) throw new Error("The repair library format is invalid.");

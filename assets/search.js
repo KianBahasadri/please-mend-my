@@ -191,7 +191,7 @@
       record.state = "loading";
       activeFetches += 1;
       stats.detailRequests += 1;
-      fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin" })
+      fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin", mode: "same-origin" })
         .then((response) => {
           if (!response.ok) throw new Error(`This repair page could not be loaded (${response.status}).`);
           return response.json();
