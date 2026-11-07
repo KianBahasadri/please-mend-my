@@ -15,18 +15,38 @@ from urllib.request import Request, urlopen
 
 
 CONFIG = Path.home() / ".config" / "please-mend-my"
+DOTENV = Path(__file__).resolve().parent.parent / ".env"
+
+
+def read_token(path, dotenv=False):
+    if not path.exists():
+        return ""
+    if path.stat().st_mode & 0o077:
+        raise ValueError(f"Token file must be private: chmod 600 {path}")
+    content = path.read_text()
+    if not dotenv:
+        return content.strip()
+    for line in content.splitlines():
+        name, separator, value = line.partition("=")
+        if separator and name.strip() == "CLOUDFLARE_API_TOKEN":
+            value = value.strip()
+            if value.startswith(("'", '"')):
+                if len(value) < 2 or value[-1] != value[0]:
+                    raise ValueError("Invalid CLOUDFLARE_API_TOKEN quoting in root .env.")
+                value = value[1:-1]
+            return value.strip()
+    return ""
 
 
 class Cloudflare:
     def __init__(self):
         self.token = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
         if not self.token:
-            token_file = CONFIG / "cloudflare-token"
-            if token_file.stat().st_mode & 0o077:
-                raise ValueError(f"Token file must be private: chmod 600 {token_file}")
-            self.token = token_file.read_text().strip()
-        if not self.token or any(char.isspace() for char in self.token):
-            raise ValueError("Provide one Cloudflare API token in the environment or private token file.")
+            self.token = read_token(DOTENV, dotenv=True) or read_token(CONFIG / "cloudflare-token")
+        if not self.token:
+            raise ValueError("Fill CLOUDFLARE_API_TOKEN in repository-root .env.")
+        if any(char.isspace() for char in self.token):
+            raise ValueError("Cloudflare API token must be a single value without whitespace.")
 
     def call(self, path, method="GET", body=None, query=None):
         url = "https://api.cloudflare.com/client/v4" + path
@@ -78,8 +98,12 @@ def inspect(api, zone, domain):
         records.extend({key: record.get(key) for key in ("id", "type", "name", "content", "proxied", "ttl")}
                        for record in found if record["type"] in ("A", "AAAA", "CNAME"))
         other_types[name] = sorted({record["type"] for record in found if record["type"] not in ("A", "AAAA", "CNAME")})
-    settings = {name: api.result(f"/zones/{zone['id']}/settings/{name}")["value"]
-                for name in ("ssl", "always_use_https")}
+    settings = {}
+    for name in ("ssl", "always_use_https"):
+        try:
+            settings[name] = api.result(f"/zones/{zone['id']}/settings/{name}")["value"]
+        except ValueError as error:
+            settings[name] = {"error": str(error)}
     print(json.dumps({"zone": {key: zone.get(key) for key in ("id", "name", "status", "name_servers")},
                       "records": records, "other_record_types": other_types, "settings": settings}, indent=2))
 
