@@ -1,30 +1,32 @@
 .atmosphere {
   --light: 255 255 255;
   --strength: 0.12;
-  --contour: 0.085;
+  --contour: 0.065;
   position: fixed;
   inset: 0;
   z-index: 0;
   pointer-events: none;
   overflow: hidden;
-  background: radial-gradient(ellipse 95% 135% at 100% -22%, rgb(var(--light) / var(--strength)), transparent 78%);
+  background:
+    radial-gradient(ellipse 55% 110% at 94% -15%, rgb(var(--light) / var(--strength)), transparent 80%),
+    radial-gradient(ellipse 38% 65% at 65% 42%, rgb(var(--light) / 0.025), transparent 80%);
 }
 
 .atmosphere::after {
   content: "";
   position: absolute;
-  left: 50%;
-  top: 65%;
-  width: max(180%, 75rem);
-  height: 170%;
-  transform: translateX(-50%) rotate(8deg);
-  background: radial-gradient(ellipse closest-side, transparent 95%, rgb(var(--light) / var(--contour)) 97.5%, transparent 100%);
+  left: -15%;
+  top: 75%;
+  width: 130%;
+  height: clamp(40px, 6vw, 100px);
+  transform: rotate(9deg);
+  background: radial-gradient(ellipse 85% 45% at 65% 50%, rgb(var(--light) / var(--contour)), transparent 78%);
 }
 
 @media (prefers-color-scheme: light) {
   .atmosphere {
     --light: 0 0 0;
     --strength: 0.04;
-    --contour: 0.045;
+    --contour: 0.035;
   }
 }

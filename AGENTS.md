@@ -2,15 +2,16 @@
 - Public: KianBahasadri/please-mend-my.
 - index.html; open `firefox index.html`.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
-- Independently randomize font/BG each refresh; no repeats in row. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
+- Random font/refresh; no repeats in row: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
 - Delegate to subagents; one/repo area at a time; no clobbering.
-- Never: duplicate carets or caret shape changing on typing.
-- BG presets: static/fast subtle monochrome organic topo/vector mesh isolines, radial glow/falloff/edge masks, <5% matte Perlin/fractal grain; recessed resend.com feel; match system; preserve hero/input.
+- Never: duplicate carets, shape changes on typing, busy meshes/curved bands; glow alone misses depth.
+- BG: docs/references/spotlight-wall-floor.png: offscreen spotlight + soft diagonal wall/floor seam, near/brighter→far/faded; system theme; static/fast; preserve input.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
-- Speed is class-1 everywhere: slow => remove/replace; no decorative bottlenecks.
+- Performance + response latency are CLASS-1: measure before/after deploy; slow => optimize/remove; sustained speed > cost; no decorative bottlenecks.
 - Commit AND push regular work milestones.
-- Live: http://32.193.25.68 (us-east-1/c8g.xlarge); redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
-- Cloudflare pleasemendmy.com proxy/Full(strict)HTTPS pending: token absent at `~/.config/please-mend-my/cloudflare-token`; needs ZoneRead/DNSEdit/SSL&CertEdit/ZoneSettingsEdit. Wrangler OAuth expired/refresh failed/no DNS scope; don't retry.
-- Ready: deploy/cloudflare.py inspect/origin-cert/sync, Go TLS/ec2 cert install; SG443 open, TLS listener awaits cert.
+- Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
+- CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
+- TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
+- DNS: authoritative/public resolvers verified; local apex negative cache may linger (www works); never alter global DNS/hosts.
