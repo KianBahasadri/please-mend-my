@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)">
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+    <meta name="description" content="please, mend my — finish the thought.">
+    <title>please, mend my</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="assets/backgrounds.css">
+    <script src="assets/backgrounds.js"></script>
+    <script>
+      const themes = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
+      const theme = window.pickMendVariant("please-mend-my-theme", themes);
+      document.documentElement.dataset.theme = theme;
+    </script>
+    <style>
+      @font-face {
+        font-family: "Pixelify Sans";
+        src: url("assets/fonts/pixelify-sans.woff2") format("woff2");
+        font-weight: 500;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Comic Neue";
+        src: url("assets/fonts/comic-neue.woff2") format("woff2");
+        font-weight: 700;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Bungee";
+        src: url("assets/fonts/bungee.woff2") format("woff2");
+        font-weight: 400;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Space Mono";
+        src: url("assets/fonts/space-mono.woff2") format("woff2");
+        font-weight: 400;
+        font-display: swap;
+      }
+
+      @font-face {
+        font-family: "Dancing Script";
+        src: url("assets/fonts/dancing-script.woff2") format("woff2");
+        font-weight: 600;
+        font-display: swap;
+      }
+
+      :root {
+        color-scheme: dark light;
+        --paper: #111111;
+        --ink: #fafafa;
+        --font: "Times New Roman", "Liberation Serif", serif;
+        --weight: 400;
+        --tracking: -0.055em;
+        --leading: 1.08;
+        --size: clamp(3.5rem, 10.5vw, 10rem);
+      }
+
+      @media (prefers-color-scheme: light) {
+        :root {
+          --paper: #fafafa;
+          --ink: #111111;
+        }
+      }
+
+      [data-theme="pixel"] {
+        --font: "Pixelify Sans", monospace;
+        --weight: 500;
+        --tracking: -0.045em;
+      }
+
+      [data-theme="comic"] {
+        --font: "Comic Sans MS", "Comic Sans", "Comic Neue", cursive;
+        --weight: 700;
+        --tracking: -0.06em;
+        --leading: 1.16;
+      }
+
+      [data-theme="poster"] {
+        --font: "Bungee", sans-serif;
+        --tracking: -0.045em;
+        --leading: 1.15;
+        --size: clamp(3rem, 8.5vw, 8.5rem);
+      }
+
+      [data-theme="typewriter"] {
+        --font: "Space Mono", monospace;
+        --tracking: -0.07em;
+        --leading: 1.2;
+        --size: clamp(3rem, 8.5vw, 8.5rem);
+      }
+
+      [data-theme="handwritten"] {
+        --font: "Dancing Script", cursive;
+        --weight: 600;
+        --tracking: -0.025em;
+        --leading: 1.2;
+        --size: clamp(4rem, 12vw, 11rem);
+      }
+
+      [data-theme="toolbox"] {
+        --font: "Arial Rounded MT Bold", "Trebuchet MS", "DejaVu Sans", sans-serif;
+        --weight: 700;
+        --tracking: -0.065em;
+        --leading: 1.2;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+      }
+
+      main {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        min-height: 100vh;
+        min-height: 100svh;
+        padding: clamp(1.5rem, 6vw, 7rem);
+      }
+
+      h1 {
+        position: relative;
+        width: 100%;
+        min-width: 0;
+        max-width: 90rem;
+        margin: 0 auto;
+        font-family: var(--font);
+        font-size: var(--size);
+        font-weight: var(--weight);
+        letter-spacing: var(--tracking);
+        line-height: var(--leading);
+        overflow-wrap: anywhere;
+      }
+
+      #response {
+        display: block;
+        width: 100%;
+        min-height: 1lh;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        border-radius: 0;
+        outline: none;
+        resize: none;
+        overflow: hidden;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        caret-color: currentColor;
+      }
+
+      #measure {
+        position: absolute;
+        top: 0;
+        left: 0;
+        visibility: hidden;
+        white-space: pre;
+        width: max-content;
+        pointer-events: none;
+      }
+
+      ::selection {
+        color: var(--paper);
+        background: var(--ink);
+      }
+
+    </style>
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+    <main>
+      <h1><textarea id="response" aria-label="please, mend my — what would you like to mend?" spellcheck="false" rows="1" autofocus></textarea><span id="measure" aria-hidden="true"></span></h1>
+    </main>
+    <script>
+      const response = document.getElementById("response");
+      const hero = document.querySelector("h1");
+      const measure = document.getElementById("measure");
+      const prompt = theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
+      response.value = prompt;
+      measure.textContent = `${prompt}relationship`;
+      let previousValue = prompt;
+
+      function grow() {
+        response.style.height = "0px";
+        response.style.height = `${response.scrollHeight + 2}px`;
+      }
+
+      function fit() {
+        hero.style.fontSize = "";
+        const size = parseFloat(getComputedStyle(hero).fontSize);
+        const available = response.clientWidth - 6;
+        const sampleWidth = measure.getBoundingClientRect().width;
+        hero.style.fontSize = `${Math.min(size, size * available / sampleWidth)}px`;
+        grow();
+      }
+
+      response.addEventListener("beforeinput", (event) => {
+        const start = response.selectionStart;
+        const end = response.selectionEnd;
+        if (event.inputType.startsWith("delete") && end <= prompt.length) {
+          event.preventDefault();
+        } else if (start < prompt.length) {
+          response.setSelectionRange(prompt.length, Math.max(prompt.length, end));
+        }
+      });
+
+      response.addEventListener("input", () => {
+        if (!response.value.startsWith(prompt)) {
+          response.value = previousValue;
+          response.setSelectionRange(prompt.length, prompt.length);
+        }
+        previousValue = response.value;
+        grow();
+      });
+
+      document.querySelector("main").addEventListener("click", (event) => {
+        if (event.target === response) return;
+        response.focus({ preventScroll: true });
+        response.setSelectionRange(response.value.length, response.value.length);
+      });
+
+      window.addEventListener("resize", fit);
+      document.fonts.ready.then(fit);
+      fit();
+      response.focus({ preventScroll: true });
+      response.setSelectionRange(prompt.length, prompt.length);
+    </script>
+  </body>
+</html>

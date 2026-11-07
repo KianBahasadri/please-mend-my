@@ -1,0 +1,109 @@
+.atmosphere {
+  --light: 255 255 255;
+  --wash: 0.085;
+  --lines: 0.1;
+  --shade: 0.26;
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  color: rgb(var(--light));
+  background: radial-gradient(ellipse 95% 105% at 87% 15%, rgb(var(--light) / var(--wash)), transparent 75%);
+}
+
+@media (prefers-color-scheme: light) {
+  .atmosphere {
+    --light: 0 0 0;
+    --wash: 0.035;
+    --lines: 0.075;
+    --shade: 0.025;
+  }
+}
+
+.atmosphere::before,
+.atmosphere::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.atmosphere::before {
+  background: radial-gradient(ellipse 85% 85% at 50% 48%, transparent 25%, rgb(0 0 0 / var(--shade)) 100%);
+}
+
+.atmosphere::after {
+  opacity: 0.032;
+  mix-blend-mode: soft-light;
+  background-size: 180px 180px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.75' numOctaves='3' stitchTiles='stitch' seed='8'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23grain)'/%3E%3C/svg%3E");
+}
+
+.atmosphere-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  opacity: var(--lines);
+  mask-image: radial-gradient(ellipse 85% 95% at 50% 50%, rgb(0 0 0 / 0.16) 12%, #000 54%, transparent 94%);
+}
+
+.atmosphere-lines path {
+  vector-effect: non-scaling-stroke;
+}
+
+[data-background="contours"] .atmosphere {
+  background: radial-gradient(ellipse 75% 95% at 83% 78%, rgb(var(--light) / var(--wash)), transparent 78%);
+}
+
+[data-background="dunes"] .atmosphere {
+  background:
+    radial-gradient(ellipse 80% 60% at 15% 85%, rgb(var(--light) / var(--wash)), transparent 80%),
+    radial-gradient(ellipse 75% 80% at 100% 0%, rgb(var(--light) / 0.025), transparent 75%);
+}
+
+[data-background="gravity"] .atmosphere {
+  background: radial-gradient(ellipse 60% 80% at 71% 66%, rgb(var(--light) / var(--wash)), transparent 75%);
+}
+
+[data-background="gravity"] .atmosphere-lines {
+  --lines: 0.075;
+}
+
+[data-background="terrain"] .atmosphere {
+  background: radial-gradient(ellipse 90% 40% at 55% 72%, rgb(var(--light) / var(--wash)), transparent 82%);
+}
+
+[data-background="terrain"] .atmosphere-lines {
+  mask-image: radial-gradient(ellipse 90% 52% at 50% 84%, #000 5%, transparent 95%);
+}
+
+[data-background="spotlight"] .atmosphere {
+  background: radial-gradient(ellipse 65% 75% at 50% 46%, rgb(var(--light) / var(--wash)), transparent 90%);
+}
+
+[data-background="sidelight"] .atmosphere {
+  background:
+    radial-gradient(ellipse 75% 125% at 105% -15%, rgb(var(--light) / var(--wash)), transparent 76%),
+    linear-gradient(135deg, transparent 35%, rgb(var(--light) / 0.025) 58%, transparent 78%);
+}
+
+[data-background="horizon"] .atmosphere {
+  background:
+    radial-gradient(ellipse 95% 27% at 50% 80%, rgb(var(--light) / var(--wash)), transparent 85%),
+    linear-gradient(transparent 72%, rgb(0 0 0 / var(--shade)));
+}
+
+[data-background="horizon"] .atmosphere-lines {
+  mask-image: radial-gradient(ellipse 85% 55% at 50% 78%, #000 5%, transparent 90%);
+}
+
+[data-background="eclipse"] .atmosphere {
+  background:
+    radial-gradient(ellipse 62% 85% at 80% 3%, transparent 40%, rgb(var(--light) / var(--wash)) 48%, transparent 69%),
+    radial-gradient(ellipse 85% 75% at 80% 3%, rgb(0 0 0 / var(--shade)) 20%, transparent 75%);
+}

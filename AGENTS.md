@@ -1,7 +1,13 @@
-# Project instructions
-
-- Whenever the user provides new project requirements, record them in this file as part of the same work. Keep existing requirements up to date as the user changes them.
-
-## Project requirements
-
-- Host this project in a public GitHub repository on the user's account: `KianBahasadri/please-mend-my`.
+- Persistent session memory: read/update each session; log reqs/bugs tersely.
+- Public: KianBahasadri/please-mend-my.
+- index.html; open `firefox index.html`.
+- Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
+- Independently randomize font/BG each refresh; no repeats in row. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
+- Same white/dark palette across fonts; follow system light/dark live.
+- Fit prompt + "relationship" on one line in all fonts/screen sizes.
+- Delegate to subagents; one/repo area at a time; no clobbering.
+- Never: duplicate carets or caret shape changing on typing.
+- BG presets: static/fast subtle monochrome organic topo/vector mesh isolines, radial glow/falloff/edge masks, <5% matte Perlin/fractal grain; recessed resend.com feel; match system; preserve hero/input.
+- Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
+- Speed is class-1 everywhere: slow => remove/replace; no decorative bottlenecks.
+- Commit AND push regular work milestones.
