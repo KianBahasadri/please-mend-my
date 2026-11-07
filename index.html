@@ -285,10 +285,24 @@
         grow();
       });
 
-      document.querySelector("main").addEventListener("click", (event) => {
-        if (event.target.closest("a, button, input, textarea, select") || !event.target.closest(".hero-area")) return;
+      function focusResponse() {
         response.focus({ preventScroll: true });
-        response.setSelectionRange(response.value.length, response.value.length);
+        clampSelection();
+      }
+
+      document.addEventListener("pointerdown", (event) => {
+        if (document.body.classList.contains("reading") || event.button !== 0 ||
+            event.target.closest("a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
+        // Keep native focus and the current caret/selection before the browser can blur it.
+        event.preventDefault();
+        focusResponse();
+      }, { capture: true });
+
+      response.addEventListener("blur", () => {
+        queueMicrotask(() => {
+          if (document.hasFocus() && document.activeElement === document.body &&
+              !document.body.classList.contains("reading")) focusResponse();
+        });
       });
 
       window.addEventListener("resize", fit);

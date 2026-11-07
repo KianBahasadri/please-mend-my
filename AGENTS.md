@@ -3,6 +3,7 @@
 - index.html; run locally; never open/reopen a browser unless asked.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
+- Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Independently randomize font/BG each refresh; no repeats in row. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
