@@ -52,7 +52,9 @@ storage must share a filesystem; article/media files are not duplicated during
 the merge. `prepare_search.py` then rebuilds postings for the combined item
 positions. The completed runtime, index, and constituent-source receipt are
 renamed into the immutable release directory. Source/download/indexing failures leave
-the currently served release intact.
+the currently served release intact. Published runtime directories use mode 0755
+so the unprivileged web service can traverse them; linked source files are not
+modified to achieve this.
 
 WikiMed is the English Wikipedia medicine selection, distinct from the separately
 named MDWiki archive. Full main articles, clinical warnings, and references are
@@ -69,10 +71,37 @@ This preserves source material for the planned LLM restructuring and custom
 entry pages. WikiMed and First Aid use `health` / **Health & medicine**, separate
 from iFixit's `medical` / **Medical equipment** category.
 
-Combined source counts, index size, and search measurements will be recorded
-after the real build. ARM64 ingestion and deployment of this combined release
-have not yet been verified here. The measurements below describe earlier
-iFixit-only releases.
+The completed local release is
+`f55559d274f784f9e90e11cc3b1bb9182dbc2b37abd16c236c8727873d6411c3`:
+
+| Source | Entries | Media files |
+| --- | ---: | ---: |
+| iFixit | 103,473 | 575,002 |
+| WikiMed | 104,200 | 104,500 |
+| First Aid | 18 | 227 |
+| Combined | 207,691 | 679,729 |
+
+Its prepared index is 33,169,530 bytes, or 9,965,255 bytes compressed, with SHA-256
+`806b19edc9f55c34750f63bcca949fcf3457b614a58286e8ad5aaccfa6f0048d`.
+It contains 190,591 surface terms and 55,904 stem mappings. A repeated canonical
+build reused the completed release through its metadata receipt. Local HTTP
+checks opened a guide and image from each source, retained distinct licenses and
+credits, and executed searches with one index fetch and no query-time requests.
+The WikiMed source build took 634.7 seconds; the 227-page PDF build took 6.37 seconds
+on this workstation. These are ingestion measurements, not page or search latency.
+
+EC2 completed the same pinned pipeline on ARM64, downloading and building its
+own three sources. Counts, compressed size, dictionary, and index SHA-256 match
+the local release exactly. An unchanged cloud build reused its completion receipt
+in 0.59 seconds including SSH, without running ingestion. No local corpus was
+transferred.
+
+The full combined catalog remains resident in the browser. Returning only the
+best 100 matches reduces result ranking/storage work; it does not shrink the
+initial index download or parsing cost. Public deployment verification is recorded
+in [the deployment notes](../deploy/README.md): application release `d6d28d6`
+serves this catalog locally and on apex/www, with the same index checksum and
+successful representative page/image checks for all three sources.
 
 Use `CATALOG_DIR=<printed release path> go run .` to serve a completed snapshot.
 `scripts/validate_catalog.py` is an explicit, optional full audit; deployment and
@@ -96,8 +125,11 @@ words with the same [Porter stem](https://tartarus.org/martin/PorterStemmer/def.
 so inflections such as `battery`/`batteries` and `repair`/`repairing` share matches.
 Numeric identifiers are never stemmed.
 
-The browser worker intersects posting lists and retains every match, sending only
-the visible range to the page. It supports word prefixes while typing and bounded
+The browser worker intersects posting lists and keeps the best 100 matches using
+bounded ranking. The page provides continuous scrolling through those results,
+mounts at most 60 cards, and prefetches only visible cards. There is no Show more
+or Clear search control, and an empty result set has no status copy.
+Search supports word prefixes while typing and bounded
 typo matching through a compact word trie: one Levenshtein edit for 5–7 letters,
 two for words of at least 8 letters. Typo recovery applies to ASCII letter words
 when literal/prefix/stem lookup or the combined result is empty. Exact/model matches rank ahead of expanded
@@ -117,6 +149,38 @@ For isolated source work, the three `ingest_*.py` scripts accept `--data-dir` an
 download, extraction, alias, merge, and posting stages automatically.
 `bench_search.cjs` compares actual worker computation against a saved
 baseline without opening a browser; its numbers are not browser end-to-end latency.
+
+On the completed 207,691-entry index, the best-100 worker and compact-trie
+startup optimization were compared with the prior uncapped worker (Linux x64,
+Intel i7-13650HX, Node v26.12.0). The multisource suite measures 270 searches after
+three warmup rounds:
+
+| Probe | Prior worker | Best 100 + compact trie |
+| --- | ---: | ---: |
+| Worker preparation | 659 ms | 493 ms |
+| Local index read/parse through worker ready | 912 ms | 757 ms |
+| All 27 queries, warm p95 | 2.34 ms | 2.43 ms |
+| Common 10 repair queries, warm p95 | 2.21 ms | 2.70 ms |
+| Medical/First Aid queries, warm p95 | 0.80 ms | 0.93 ms |
+| Broad `a`, warm p50 / p95 | 17.04 / 36.72 ms | 9.20 / 21.81 ms |
+| Broad `r`, warm p50 / p95 | 17.23 / 18.55 ms | 13.62 / 16.34 ms |
+| Prepared JS heap growth | 108.57 MiB | 108.58 MiB |
+| Prepared external memory growth (includes ArrayBuffers) | 15.79 MiB | 15.79 MiB |
+
+The benefit is lower broad-query work and faster trie preparation; ordinary
+queries remain a few milliseconds, with no general speedup demonstrated by this
+sample. The initial 9,965,255-byte compressed index and resident index memory are
+unchanged. Broad-query tails can still exceed one frame. Fresh-worker cold probes
+take 12.06 ms for `laptpp batery`, 18.14 ms for `refrxxerator`, and 11.44 ms for
+`noresultzzzz`. Startup excludes network transfer and painting; local read/parse
+is included only in the second row. Memory settles GC identically before and
+after startup; external memory already includes ArrayBuffers.
+
+Thirteen worker tests passed, and 37 queries against the real combined index
+returned exactly the first 100 results from the previous full ranking, including
+ties, aliases, strict models, and empty queries. Each worker fetched the index
+once and made no requests while searching. The complete catalog remains searchable;
+each query exposes at most its 100 best matches.
 
 Historical inverted-index measurements on the 103,473-item iFixit catalog (Linux x64, Intel
 i7-13650HX, Node v26.12.0; isolated processes running the actual worker):
@@ -138,8 +202,8 @@ Separate fresh-process/worker probes measure each typo as the very first query:
 (baseline 21.33, 21.39 and 19.72 ms). Preparation excludes index transfer and JSON
 parsing; memory includes parsed catalog data and settles GC identically for both
 builds. These are worker CPU measurements, not browser input-to-paint timings.
-Single-letter queries still enumerate many matches: warm p95 is 11.13 ms for
-`a` and 14.85 ms for `r`; the result list remains complete.
+Those historical builds kept every match; single-letter warm p95 was 11.13 ms
+for `a` and 14.85 ms for `r`. The current best-100 policy supersedes that behavior.
 
 The prepared dictionary has 44,326 terms and 5,258 nonidentity stem mappings.
 `laptop batteries` improves from 6 to 2,364 matches, `repairing laptop` from 15 to
@@ -153,6 +217,8 @@ Reproduce a comparison against a saved prior worker/index:
 
 ```sh
 node --expose-gc scripts/bench_search.cjs BEFORE.json BEFORE-worker.js AFTER.json assets/search-worker.js
+# Include medical and First Aid queries alongside the repair probes:
+node --expose-gc scripts/bench_search.cjs --suite multisource BEFORE.json BEFORE-worker.js AFTER.json assets/search-worker.js
 ```
 
 Historical alias-stage measurements on the 103,473-item iFixit catalog (Node v26.12.0, isolated
