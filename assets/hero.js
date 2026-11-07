@@ -22,6 +22,19 @@
     "relationship marriage friendship family resume cv code website app software").split(/\s+/));
   for (const name of ["washing machine", "air conditioner", "coffee maker", "game console", "water heater", "mobile phone", "sewing machine"]) broadNouns.add(name);
   const notSubjects = new Set(["broken", "damaged", "hurts", "painful", "fix", "repair", "please", "my", "the", "a", "an", "not"]);
+  // Keep object recognition aligned with the worker's conversational search
+  // contract. Only the displayed question is cleaned; typed input/query is not.
+  const conversational = new Set(["is", "are", "was", "were", "am", "seems", "feels", "has", "have", "does", "do", "did"]);
+  const pronouns = new Set(["it", "this", "that", "they", "i", "we"]);
+  const determiners = new Set(["my", "our", "your", "the", "a", "an"]);
+  const intensifiers = new Set(["fucking", "fuckin", "fucken", "damn", "damned", "goddamn", "goddamned", "frigging", "freaking"]);
+  const contractions = new Set(["it's", "that's", "this's", "there's", "i'm", "you're", "we're", "they're"]);
+  const symptomPredicates = new Set(["hurts", "hurt", "aches", "ache", "bleeds", "bleed", "burns", "burn", "itches", "itch",
+    "tingles", "tingle", "swells", "swell", "leaks", "leak", "rattles", "rattle", "freezes", "freeze", "crashes", "crash"]);
+  const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'t$/;
+  for (const group of [conversational, pronouns, determiners, intensifiers, contractions]) {
+    for (const word of group) notSubjects.add(word);
+  }
   const state = new Map();
   let open = false;
   let subject = "";
@@ -105,7 +118,28 @@
   }
 
   function bareNoun(value, explicit = false) {
-    const name = value.trim().replace(/\s+/g, " ");
+    const pieces = value.trim().split(/\s+/);
+    const labels = pieces.map(piece => piece.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replaceAll("’", "'"));
+    const keys = labels.map(label => label.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase());
+    const kept = [];
+    let construction = true;
+    for (let at = 0; at < pieces.length; at++) {
+      const key = keys[at], next = keys[at + 1] || "";
+      if (/\p{N}/u.test(key)) { kept.push(pieces[at]); construction = false; continue; }
+      if (negativeContraction.test(key)) {
+        kept.push("not"); construction = true;
+      } else if (intensifiers.has(key) || contractions.has(key)) {
+        construction = true;
+      } else if (pronouns.has(key) && (conversational.has(next) || negativeContraction.test(next) ||
+          kept.length && symptomPredicates.has(next))) {
+        construction = true;
+      } else if ((conversational.has(key) || construction && determiners.has(key)) && !/\p{N}/u.test(next)) {
+        construction = true;
+      } else {
+        kept.push(/^[\p{L}\p{M}]+$/u.test(key) ? labels[at] : pieces[at]); construction = false;
+      }
+    }
+    const name = kept.join(" ");
     const normalized = name.toLocaleLowerCase("en");
     if (!name || notSubjects.has(normalized)) return "";
     if (broadNouns.has(normalized) || normalized.endsWith("s") && broadNouns.has(normalized.slice(0, -1))) return name;

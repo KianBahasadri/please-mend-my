@@ -242,6 +242,85 @@ test('manual clarification can handle an unfamiliar noun without treating a phra
   assert.equal(dom.window.mendHero.query(), 'broken harpsichord');
 });
 
+test('qualified bare objects agree with the worker contract for immediate keyboard and mobile clarification', async () => {
+  const worker = vm.createContext({ self: {}, performance: { now: () => 0 },
+    fetch: () => new Promise(() => {}), postMessage() { throw new Error('No worker startup response expected'); } });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8'), worker);
+  const cases = ['dick', 'fucking dick', 'my fucking dick', 'FUCKING, DICK!', 'damn laptop',
+    'the freaking washing machine', 'washing goddamn machine', 'my fuckin harpsichord',
+    ...vm.runInContext('Array.from(intensifiers, value => value + " laptop")', worker)];
+  for (const raw of cases) {
+    worker.rawQuery = raw;
+    const normalized = vm.runInContext('searchPhrase(clean(rawQuery))', worker);
+    for (const shortcut of ['Enter', 'Tab', '?', '.', '!', 'mobile?', 'mobile.', 'mobile!']) {
+      const dom = await heroFor();
+      dom.type(dom.response, raw);
+      const event = shortcut.startsWith('mobile') ? dom.event(dom.response, 'beforeinput', {
+        inputType: 'insertText', data: shortcut.slice(6), bubbles: true,
+      }) : dom.key(dom.response, shortcut, { shiftKey: shortcut === '?' || shortcut === '!' });
+      assert.equal(event.defaultPrevented, true, `${raw}/${shortcut}`);
+      assert.equal(dom.visible(), true);
+      assert.equal(dom.question.textContent.toLowerCase(), `what's wrong with your ${normalized}?`);
+      assert.equal(dom.document.activeElement, dom.clarification);
+      assert.equal(dom.window.mendHero.query(), raw, 'typed qualifiers remain in the raw query API');
+      assert.equal(dom.suffix(dom.response), raw, 'question cleanup never rewrites typed text');
+      dom.type(dom.clarification, "it's broken");
+      assert.equal(dom.window.mendHero.query(), `${raw} it's broken`);
+      dom.response.focus();
+      dom.key(dom.response, 'a', { ctrlKey: true });
+      assert.equal(dom.response.value.slice(dom.response.selectionStart, dom.response.selectionEnd), raw);
+      assert.equal(dom.response.selectionStart, Number(dom.response.dataset.promptLength));
+    }
+  }
+});
+
+test('qualified known objects share the idle delay while unfamiliar nouns remain manual', async () => {
+  for (const [raw, noun] of [['damn laptop', 'laptop'], ['my fucking arm', 'arm'],
+    ['the freaking washing machine', 'washing machine']]) {
+    const dom = await heroFor();
+    dom.type(dom.response, raw);
+    dom.advance(2499);
+    assert.equal(dom.visible(), false);
+    dom.advance(1);
+    assert.equal(dom.visible(), true);
+    assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`);
+    assert.equal(dom.window.mendHero.query(), raw);
+  }
+  for (const raw of ['dick', 'fucking dick', 'my fucking dick']) {
+    const dom = await heroFor();
+    dom.type(dom.response, raw);
+    dom.advance(20000);
+    assert.equal(dom.visible(), false, 'qualifiers do not expand the conservative automatic vocabulary');
+    dom.key(dom.response, 'Enter');
+    assert.equal(dom.question.textContent, "What's wrong with your dick?");
+  }
+});
+
+test('qualifier cleanup preserves symptom phrases and cannot turn grammar alone into an object', async () => {
+  for (const raw of ['broken arm', 'my fucking broken arm', 'arm not working', "my damn arm isn't working",
+    'bloody urine', 'my bloody urine', 'my arm fucking hurts', 'damn', 'fucking', 'my fucking', "it's", 'it is']) {
+    const dom = await heroFor();
+    dom.type(dom.response, raw);
+    dom.advance(20000);
+    assert.equal(dom.visible(), false, raw);
+    for (const shortcut of ['Enter', 'Tab', '?', '.', '!']) {
+      dom.key(dom.response, shortcut, { shiftKey: shortcut === '?' || shortcut === '!' });
+      assert.equal(dom.visible(), false, raw);
+      assert.equal(dom.document.activeElement, dom.response);
+      assert.equal(dom.window.mendHero.query(), raw);
+    }
+  }
+  const dom = await heroFor();
+  dom.event(dom.response, 'compositionstart');
+  dom.type(dom.response, 'my fucking arm', { isComposing: true });
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.key(dom.response, 'Enter', { isComposing: true }).defaultPrevented, false);
+  dom.event(dom.response, 'compositionend');
+  dom.advance(2500);
+  assert.equal(dom.question.textContent, "What's wrong with your arm?");
+});
+
 test('Ctrl/Meta+A, mouse selection, copy, and cut target editable suffixes only', async () => {
   const dom = await heroFor();
   dom.reveal('laptop');

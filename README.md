@@ -19,6 +19,9 @@ words, so `arm broken` favors `Broken arm` over a detailed eyeglasses repair.
 Conversational filler and intensifiers are removed before local lookup, so
 `arm it's broken` searches like `arm broken` and `fucking dick` like `dick`.
 Negation, symptoms, numeric model identifiers, and exact title priority remain.
+The hero uses those same filler rules when deciding whether to ask a follow-up:
+`fucking dick` supports Enter just like `dick`, while the original input remains
+editable and the question uses the cleaned subject.
 
 Check the hero and search interactions without opening a browser:
 
