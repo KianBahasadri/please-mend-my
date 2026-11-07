@@ -100,9 +100,9 @@
     subject = name;
     open = Boolean(name);
     if (open) {
-      const nextPrefix = `my ${name} `;
+      const nextPrefix = `my ${name},\nit's `;
       if (state.get(second).prefix !== nextPrefix || changedSubject) setPrefix(second, nextPrefix, symptom);
-      second.setAttribute("aria-label", `my ${name} — what is wrong?`);
+      second.setAttribute("aria-label", `my ${name}, it's — what is wrong?`);
     } else {
       setPrefix(second, "my ");
       if (active === second || document.activeElement === second) focus(first, true);
@@ -131,10 +131,11 @@
         automaticTimer = setTimeout(() => {
           automaticTimer = null;
           // A continued phrase, background tab, guide, or card focus must never
-          // receive a late prompt. Typing keeps focus on the first native caret.
+          // receive a late prompt. The idle follow-up starts at its symptom.
           if (suffix(first) !== value || value === suppressed || document.activeElement !== first ||
               document.visibilityState === "hidden" || document.body.classList.contains("reading")) return;
           updateLine(name);
+          focus(second, true);
         }, 2500);
       }
     }

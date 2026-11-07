@@ -28,7 +28,7 @@ async function heroFor(options = {}) {
   return dom;
 }
 
-test('a bare noun waits 2.5 seconds after the last input without moving focus', async () => {
+test('a bare noun waits 2.5 seconds then moves the native caret after the fixed multiline context', async () => {
   const dom = await heroFor();
   assert.equal(dom.window.mendHero.query(), '');
   assert.equal(dom.visible(), false);
@@ -37,9 +37,16 @@ test('a bare noun waits 2.5 seconds after the last input without moving focus', 
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
-  assert.equal(dom.clarification.value, 'my arm ');
-  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.clarification.value, "my arm,\nit's ");
+  assert.equal(dom.prefix(dom.clarification), "my arm,\nit's ");
+  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.clarification.selectionStart, "my arm,\nit's ".length);
+  assert.equal(dom.clarification.selectionEnd, "my arm,\nit's ".length);
   assert.equal(dom.window.mendHero.query(), 'arm');
+  dom.type(dom.clarification, 'hurts');
+  assert.equal(dom.clarification.value, "my arm,\nit's hurts");
+  assert.equal(dom.window.mendHero.query(), 'arm hurts');
+  assert.equal(dom.queries.at(-1), 'arm hurts');
 });
 
 test('the idle deadline resets and continuing a full phrase cancels clarification', async () => {
@@ -51,6 +58,7 @@ test('the idle deadline resets and continuing a full phrase cancels clarificatio
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
+  dom.response.focus();
   dom.type(dom.response, 'car');
   dom.advance(2499);
   assert.equal(dom.visible(), false);
@@ -76,8 +84,8 @@ test('Enter and Tab immediately focus the protected second line and preserve Shi
     assert.equal(event.defaultPrevented, true);
     assert.equal(dom.visible(), true);
     assert.equal(dom.document.activeElement, dom.clarification);
-    assert.equal(dom.clarification.value, 'my car ');
-    assert.equal(dom.clarification.selectionStart, 'my car '.length);
+    assert.equal(dom.clarification.value, "my car,\nit's ");
+    assert.equal(dom.clarification.selectionStart, "my car,\nit's ".length);
     dom.type(dom.clarification, 'will not start');
     assert.equal(dom.window.mendHero.query(), 'car will not start');
     assert.equal(dom.queries.at(-1), 'car will not start');
@@ -125,9 +133,10 @@ test('manual clarification can handle an unfamiliar noun without treating a phra
   assert.equal(dom.visible(), false, 'unfamiliar words do not create speculative automatic prompts');
   dom.key(dom.response, 'Tab');
   assert.equal(dom.visible(), true);
-  assert.equal(dom.clarification.value, 'my harpsichord ');
+  assert.equal(dom.clarification.value, "my harpsichord,\nit's ");
   dom.type(dom.clarification, 'sounds wrong');
   assert.equal(dom.window.mendHero.query(), 'harpsichord sounds wrong');
+  dom.response.focus();
   dom.type(dom.response, 'broken harpsichord');
   dom.key(dom.response, 'Enter');
   assert.equal(dom.visible(), false);
@@ -192,7 +201,8 @@ test('changing the noun updates the prefix and cannot retain an unrelated sympto
   dom.type(dom.response, 'laptop');
   assert.equal(dom.window.mendHero.query(), 'laptop');
   dom.advance(2500);
-  assert.equal(dom.clarification.value, 'my laptop ');
+  assert.equal(dom.clarification.value, "my laptop,\nit's ");
+  dom.response.focus();
   dom.type(dom.response, 'broken laptop screen');
   assert.equal(dom.visible(), false);
   assert.equal(dom.window.mendHero.query(), 'broken laptop screen');
@@ -211,6 +221,7 @@ test('composition does not reveal a prompt until committed and pasted full phras
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
+  dom.response.focus();
   dom.type(dom.response, 'broken arm', { inputType: 'insertFromPaste' });
   dom.advance(20000);
   assert.equal(dom.visible(), false);
@@ -275,7 +286,7 @@ test('normal search-result visibility does not cancel a bare noun idle prompt', 
   await Promise.resolve();
   dom.advance(2500);
   assert.equal(dom.visible(), true);
-  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.document.activeElement, dom.clarification);
   assert.equal(dom.window.mendHero.query(), 'arm');
 });
 
@@ -284,7 +295,8 @@ test('all seven themes retain protected prompts and the controller stays static 
     const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
     assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
     dom.reveal('relationship');
-    dom.key(dom.response, 'Tab');
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.prefix(dom.clarification), "my relationship,\nit's ");
     dom.type(dom.clarification, 'needs attention');
     assert.equal(dom.window.mendHero.query(), 'relationship needs attention');
     assert.equal(dom.document.activeElement, dom.clarification);
