@@ -90,6 +90,9 @@ let groupOffsets;
 let groupDocuments;
 let trie;
 let maximumWordLength = 0;
+let broadBonuses;
+let rootTopics;
+const subjectAnchors = new Map();
 const RESULT_LIMIT = 100;
 const tokenCache = new Map();
 let tokenCacheBytes = 0;
@@ -340,9 +343,19 @@ function resolveToken(token, widen = false) {
   return result;
 }
 
-function titleScore(entry, query, tokens, wordPrefixes) {
+function subjectPriority(doc, entry, wordPrefix, anchors) {
+  // Published Wikidata aliases already point to explicit source topic anchors.
+  // A general source root also beats detailed procedures when its first whole
+  // word matches: "Car and Truck", not an acronym/partial word such as "CAR-NK".
+  // Exact requested titles score above both priorities; models and full phrases
+  // never enter this broad-subject branch.
+  if (anchors?.has(doc)) return 850;
+  return rootTopics[doc] && entry.title.startsWith(wordPrefix) ? 750 : -Infinity;
+}
+
+function titleScore(entry, query, tokens, wordPrefixes, bonus) {
   let score = entry.title === query ? 1000 : entry.title.startsWith(query) ? 500 : entry.title.includes(query) ? 250 : 0;
-  if (entry.row[3] === "guide") score += 15;
+  score += bonus;
   for (let at = 0; at < tokens.length; at++) {
     const token = tokens[at];
     if (entry.title.startsWith(token) || entry.title.includes(wordPrefixes[at])) score += 35;
@@ -351,9 +364,8 @@ function titleScore(entry, query, tokens, wordPrefixes) {
   return score;
 }
 
-function singleWordTitleScore(entry, query, wordPrefix) {
+function singleWordTitleScore(entry, query, wordPrefix, bonus) {
   const position = entry.title.indexOf(query);
-  const bonus = entry.row[3] === "guide" ? 15 : 0;
   if (position < 0) return bonus;
   if (position === 0) return bonus + (entry.title.length === query.length ? 1000 : 500) + 35;
   return bonus + 250 + (entry.title.includes(wordPrefix) ? 35 : 10);
@@ -404,10 +416,29 @@ function shortlist() {
   };
 }
 
+function broadSearch(query, list) {
+  // A bare subject has one posting list: avoid the multi-term intersection and
+  // numeric-identifier loops while applying its source-aware ranking.
+  const best = shortlist(), anchors = subjectAnchors.get(query);
+  const wordPrefix = " " + query, subjectPrefix = query + " ";
+  for (const doc of list.documents) {
+    const entry = entries[doc], quality = list.quality[doc], penalty = (quality - 1) * 100;
+    const bonus = broadBonuses[doc];
+    const subject = subjectPriority(doc, entry, subjectPrefix, anchors);
+    const upper = (quality <= 2 ? (entry.title.length === query.length ? 1035 : 535) : 0) + bonus - penalty;
+    if (!best.canBeat(subject > upper ? subject : upper)) continue;
+    const score = (quality <= 2 ? singleWordTitleScore(entry, query, wordPrefix, bonus) : bonus) - penalty;
+    best.add(doc, subject > score ? subject : score);
+  }
+  return best.sorted();
+}
+
 function indexedSearch(query, tokens) {
   if (!tokens.length) return query ? [] : Array.from({ length: Math.min(entries.length, RESULT_LIMIT) }, (_, index) => index);
   const wordPrefixes = tokens.map(token => " " + token);
   const singleWord = tokens.length === 1 && tokens[0] === query;
+  // A one-letter prefix is not yet a subject; keep its cheap original ranking.
+  const broad = singleWord && query.length > 1 && !/\p{N}/u.test(query);
   // Literal punctuation in model identifiers remains significant after word
   // tokenization, e.g. S23+ must not match S23 and WH-1000XM4 stays one model.
   const identifiers = query.split(/\s+/).filter(token => /\p{N}/u.test(token))
@@ -420,6 +451,7 @@ function indexedSearch(query, tokens) {
       lists.push(list);
     }
     lists.sort((a, b) => a.documents.length - b.documents.length);
+    if (broad) return broadSearch(query, lists[0]);
     const best = shortlist();
     for (const doc of lists[0].documents) {
       let penalty = 0, matches = true, literal = false;
@@ -440,8 +472,8 @@ function indexedSearch(query, tokens) {
       // A candidate found solely through aliases/stem changes/typos has no
       // literal title-word bonus. Avoid rescanning thousands of unrelated
       // titles for broad shared aliases such as "cellphone".
-      const score = (literal ? singleWord ? singleWordTitleScore(entry, query, wordPrefixes[0])
-        : titleScore(entry, query, tokens, wordPrefixes) : entry.row[3] === "guide" ? 15 : 0) - penalty * 100;
+      const score = (literal ? singleWord ? singleWordTitleScore(entry, query, wordPrefixes[0], bonus)
+        : titleScore(entry, query, tokens, wordPrefixes, bonus) : bonus) - penalty * 100;
       best.add(doc, score);
     }
     return best.sorted();
@@ -455,6 +487,9 @@ function indexedSearch(query, tokens) {
 function legacySearch(query) {
   const tokens = query.split(/\s+/).filter(Boolean), best = shortlist();
   const wordPrefixes = tokens.map(token => " " + token);
+  const broad = tokens.length === 1 && query.length > 1 && /^\p{L}+$/u.test(query);
+  const anchors = broad ? subjectAnchors.get(query) : null;
+  const subjectPrefix = query + " ";
   // Transitional compatibility while an old catalog is still cached. Published
   // builds have prepared postings; their searches never take this scan path.
   const compact = tokens.length <= 31;
@@ -477,8 +512,10 @@ function legacySearch(query) {
       break;
     }
     if (!matches) continue;
-    const score = titleScore(entry, query, tokens, wordPrefixes);
-    best.add(index, score);
+    const bonus = broad ? broadBonuses[index] : entry.row[3] === "guide" ? 15 : 0;
+    const score = titleScore(entry, query, tokens, wordPrefixes, bonus);
+    const subject = broad ? subjectPriority(index, entry, subjectPrefix, anchors) : -Infinity;
+    best.add(index, subject > score ? subject : score);
   }
   return best.sorted();
 }
@@ -518,8 +555,31 @@ self.onmessage = ({ data }) => {
       itemGroups = Uint32Array.from(metadata.itemGroups);
       delete metadata.itemGroups;
     }
-    entries = catalog.items.map((row) => {
+    // Resolve explicit source paths against their exact normalized topic titles.
+    // This is the same published source vocabulary, not runtime entity guessing.
+    const anchorNames = new Map();
+    for (const source of catalog.search?.sources || []) {
+      if (!Array.isArray(source.ifixitPaths)) continue;
+      const names = [source.label, ...(source.aliases || []), ...(source.curated || [])]
+        .filter(name => typeof name === "string").map(clean);
+      for (const path of source.ifixitPaths) {
+        const title = clean(path.slice(path.lastIndexOf("/") + 1).replaceAll("_", " "));
+        if (!anchorNames.has(title)) anchorNames.set(title, new Set());
+        for (const name of names) anchorNames.get(title).add(name);
+      }
+    }
+    broadBonuses = new Uint8Array(catalog.items.length);
+    rootTopics = new Uint8Array(catalog.items.length);
+    entries = catalog.items.map((row, doc) => {
       const title = clean(row[1]);
+      broadBonuses[doc] = Math.max(0, 60 - title.length) + (row[3] === "topic" ? 30 : row[3] === "article" ? 18 : 0);
+      if (row[3] === "topic") {
+        rootTopics[doc] = itemGroups[doc] === 0 ? 1 : 0;
+        for (const name of anchorNames.get(title) || []) {
+          if (!subjectAnchors.has(name)) subjectAnchors.set(name, new Set());
+          subjectAnchors.get(name).add(doc);
+        }
+      }
       if (!devices.has(row[4])) devices.set(row[4], clean(row[4]));
       return { row, title, text: `${title} ${devices.get(row[4])} ${categories.get(row[2]) || ""}` };
     });

@@ -232,7 +232,7 @@ test('the cap keeps higher-ranked late documents and stable ties in prepared and
   for (let at = 0; at < 130; at++) add('prefix-' + at, 'Laptop Battery Repair ' + at, 'guide');
   add('exact-topic', 'Laptop', 'topic');
   add('exact-guide', 'Laptop', 'guide');
-  const expected = ['exact-guide', 'exact-topic', ...Array.from({ length: 98 }, (_, at) => 'prefix-' + at)];
+  const expected = ['exact-topic', 'exact-guide', ...Array.from({ length: 98 }, (_, at) => 'prefix-' + at)];
   for (const catalog of [index, prepare(index)]) {
     const worker = await workerFor(catalog);
     const result = await worker.search('laptop');
@@ -240,8 +240,102 @@ test('the cap keeps higher-ranked late documents and stable ties in prepared and
     const tail = await worker.next('range');
     assert.equal(result.total, 100);
     assert.deepEqual(Array.from([...result.items, ...tail.items], row => row[0]), expected);
-    assert.equal((await worker.search('laptop')).items[0][0], 'exact-guide', 'repeat queries retain the same ranking');
+    assert.equal((await worker.search('laptop')).items[0][0], 'exact-topic', 'repeat queries retain the same ranking');
     assert.equal(worker.fetches(), 1);
+  }
+});
+
+test('bare subjects prefer general concise entries over long niche repair titles', async () => {
+  const index = fixture();
+  index.items = [
+    ['niche-dick', 'Dick smith 2 channel dvd player Disassembly', 'technology', 'guide', ''],
+    ['general-dick', 'Dick problems', 'technology', 'article', ''],
+    ['prefix-dick', 'Dickey', 'technology', 'article', ''],
+    ['niche-car', 'Car audio KDC-BT44U firmware update', 'technology', 'guide', ''],
+    ['general-car', 'Car and Truck', 'technology', 'topic', ''],
+    ['niche-laptop', 'Laptop Cooling Pad Airflow Improvement and Performance Optimization Technique', 'technology', 'guide', ''],
+    ['general-laptop', 'Laptop Cooling Pad', 'technology', 'topic', ''],
+    ['model-topic', 'S23', 'technology', 'topic', ''],
+    ['model-guide', 'S23', 'technology', 'guide', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    const dick = (await worker.search('dick')).items.map(row => row[0]);
+    assert.ok(dick.indexOf('general-dick') < dick.indexOf('niche-dick'));
+    if (catalog.search.inverted) assert.equal(dick[0], 'general-dick', 'literal word quality still outranks a shorter partial-word hit');
+    for (const [query, expected] of [['car', 'general-car'], ['laptop', 'general-laptop']]) {
+      assert.equal((await worker.search(query)).items[0][0], expected, query);
+    }
+    assert.equal((await worker.search('Dick smith 2 channel dvd player Disassembly')).items[0][0], 'niche-dick',
+      'an exact detailed request still leads to its requested procedure');
+    assert.equal((await worker.search('Car audio KDC-BT44U firmware update')).items[0][0], 'niche-car');
+    assert.equal((await worker.search('S23')).items[0][0], 'model-guide', 'numeric model scoring keeps its original priority');
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+test('generality-aware bounded ranking matches exhaustive scoring without pruning', async () => {
+  const index = fixture();
+  index.items = [];
+  index.search = { version: 1, groups: ['', 'laptop'], itemGroups: [] };
+  for (let at = 0; at < 420; at++) {
+    const kind = at % 3 === 0 ? 'topic' : at % 3 === 1 ? 'guide' : 'article';
+    const title = at < 160 ? 'Laptop ' + 'Highly Specific Model Procedure '.repeat(2 + at % 3)
+      : at < 300 ? 'Laptop ' + ['care', 'repair', 'overview', 'maintenance'][at % 4]
+      : at < 400 ? 'Notebook Battery Replacement ' + at : 'Laptop';
+    index.items.push(['rank-' + at, title, 'technology', kind, '']);
+    index.search.itemGroups.push(at >= 300 && at < 400 ? 1 : 0);
+  }
+  index.items.push(['canonical-alias', 'PC Laptop', 'technology', 'topic', 'PC Laptop']);
+  index.search.itemGroups.push(1);
+  index.search.sources = [{ label: 'laptop', aliases: ['notebook'], ifixitPaths: ['Device/PC_Laptop'] }];
+  // With a capacity greater than this fixture the same scorer visits and sorts
+  // every match, so no candidate can be discarded by the 100-result upper bound.
+  const source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8');
+  const exhaustive = source.replace('const RESULT_LIMIT = 100;', 'const RESULT_LIMIT = 10000;');
+  assert.notEqual(exhaustive, source);
+  const prepared = prepare(index);
+  const limitedWorker = await workerFor(prepared);
+  const fullWorker = await workerFor(prepared, exhaustive);
+  for (const query of ['laptop', 'lap', 'notebook', 'laptpp', 'laptop care']) {
+    const limited = await limitedWorker.search(query);
+    limitedWorker.send({ type: 'range', requestId: limited.requestId, rangeId: 1, start: 60, count: 60 });
+    const tail = await limitedWorker.next('range');
+    const full = await fullWorker.search(query);
+    fullWorker.send({ type: 'range', requestId: full.requestId, rangeId: 1, start: 60, count: 40 });
+    const fullTail = await fullWorker.next('range');
+    assert.equal(limited.total, Math.min(100, full.total), query);
+    assert.deepEqual(Array.from([...limited.items, ...tail.items], row => row[0]),
+      Array.from([...full.items, ...fullTail.items], row => row[0]), query);
+  }
+});
+
+test('published subject anchors and source roots beat components and unrelated short acronyms', async () => {
+  const index = fixture();
+  index.items = [
+    ['car-acronym', 'CAR-NK', 'technology', 'article', ''],
+    ['car-component', 'Car Seat', 'technology', 'topic', 'Car Seat'],
+    ['car-root', 'Car and Truck', 'technology', 'topic', 'Car and Truck'],
+    ['laptop-component', 'Laptop Cooling Pad', 'technology', 'topic', 'Laptop Cooling Pad'],
+    ['laptop-specific', 'Laptop Lenovo G510 Keyboard Replacement', 'technology', 'guide', ''],
+    ['laptop-root', 'PC Laptop', 'technology', 'topic', 'PC Laptop'],
+    ['laptop-mac', 'Mac Laptop', 'technology', 'topic', 'Mac Laptop'],
+    ['laptop-exact', 'Laptop', 'technology', 'article', ''],
+  ];
+  index.search = { version: 1, groups: ['', 'laptop\nnotebook\nlaptops', 'electronics'],
+    itemGroups: [0, 2, 0, 2, 2, 1, 1, 0],
+    sources: [{ label: 'laptop', aliases: ['notebook'], curated: ['laptops'],
+      ifixitPaths: ['Device/PC_Laptop', 'Device/Mac_Laptop'] }] };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    assert.equal((await worker.search('car')).items[0][0], 'car-root');
+    const laptop = (await worker.search('laptop')).items.map(row => row[0]);
+    assert.equal(laptop[0], 'laptop-exact', 'exact title stays ahead of canonical aliases');
+    assert.ok(laptop.indexOf('laptop-root') < laptop.indexOf('laptop-component'));
+    assert.ok(laptop.indexOf('laptop-mac') < laptop.indexOf('laptop-specific'));
+    assert.equal((await worker.search('notebook')).items[0][0], 'laptop-root');
+    assert.equal((await worker.search('Laptop Lenovo G510 Keyboard Replacement')).items[0][0], 'laptop-specific');
   }
 });
 

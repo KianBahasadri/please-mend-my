@@ -8,6 +8,8 @@ Enter or Tab opens it immediately; Backspace on an empty symptom returns to the
 end of the first line. Both prefixes stay protected, and only the focused native
 textbox has a caret. Full phrases such as `broken arm` use the first line alone.
 Search combines the two editable suffixes locally, excluding the fixed prompts.
+Broad queries favor general entries over niche model guides; exact model searches
+keep their priority.
 
 Check the hero and search interactions without opening a browser:
 
