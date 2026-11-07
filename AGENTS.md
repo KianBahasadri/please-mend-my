@@ -29,6 +29,7 @@
 - Sources: add full English WikiMed + Army FM4-25.11 PDF chapters; same pinned local/EC2 pipeline; preserve raw text/media/provenance/licenses.
 - Rough pages OK; future LLM custom-generates each entry page.
 - Attribution: credits only, no formatting/sanitizing notices; license separate.
+- No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.

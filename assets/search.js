@@ -6,7 +6,6 @@
   const results = document.getElementById("search-results");
   const cards = document.getElementById("result-cards");
   const count = document.getElementById("result-count");
-  const empty = document.getElementById("no-results");
   const panel = document.getElementById("guide-panel");
   const body = document.getElementById("guide-body");
   const navigationError = document.getElementById("guide-nav-error");
@@ -254,8 +253,7 @@
     rangeSerial += 1;
     requestedStart = 0;
     requestedCount = pendingSearch.count;
-    count.textContent = `${message.total.toLocaleString()} ${message.total === 1 ? "match" : "matches"}`;
-    empty.hidden = message.total !== 0;
+    count.textContent = message.total ? `${message.total.toLocaleString()} ${message.total === 1 ? "match" : "matches"}` : "";
     renderWindow(message.items, 0);
     updateWindow();
     stats.inputToResultsMs.push(performance.now() - inputAt);

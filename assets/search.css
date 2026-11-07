@@ -116,12 +116,6 @@ body.reading main {
   text-overflow: ellipsis;
 }
 
-.empty-state {
-  padding: 2rem 0;
-  color: color-mix(in srgb, var(--ink) 65%, transparent);
-}
-
-
 button:focus-visible,
 a:focus-visible {
   outline: 2px solid var(--ink);
