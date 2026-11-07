@@ -218,6 +218,25 @@ class WikiMedTests(unittest.TestCase):
         for payload in (runtimes[0] / "guides").iterdir():
             self.assertEqual(payload.read_bytes(), (runtimes[1] / "guides" / payload.name).read_bytes())
 
+    def test_unpublished_inventory_avoids_per_batch_durable_fsync(self):
+        archive = self.root / "fixture.zim"
+        make_zim(archive)
+        checksum = ingest.digest_file(archive)
+        data = self.root / "data"
+        data.mkdir()
+        statements = []
+        connect = sqlite3.connect
+        def traced_connect(path, *args, **kwargs):
+            connection = connect(path, *args, **kwargs)
+            if Path(path).name == "catalog-building.sqlite":
+                connection.set_trace_callback(statements.append)
+            return connection
+        with patch.object(ingest.sqlite3, "connect", side_effect=traced_connect):
+            ingest.build(data, archive, {"sha256": checksum}, checksum)
+        self.assertIn("PRAGMA journal_mode=OFF", statements)
+        self.assertIn("PRAGMA synchronous=OFF", statements)
+        self.assertTrue(json.loads((data / "runtime/manifest.json").read_bytes())["runtimeComplete"])
+
 
 if __name__ == "__main__":
     unittest.main()

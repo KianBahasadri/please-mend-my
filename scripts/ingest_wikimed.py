@@ -447,6 +447,10 @@ def build(data_dir, archive, metadata, sha256, worker_count=None):
     database_path = data_dir / "catalog-building.sqlite"
     database_path.unlink(missing_ok=True)
     inventory = sqlite3.connect(database_path)
+    # This disposable inventory is unpublished and rebuilt after interruption.
+    # Avoid a durable fsync for every small batch; completion is published last.
+    inventory.execute("PRAGMA journal_mode=OFF")
+    inventory.execute("PRAGMA synchronous=OFF")
     inventory.executescript("CREATE TABLE items(id TEXT PRIMARY KEY,source_path TEXT UNIQUE,title TEXT,category TEXT,kind TEXT,device TEXT,summary TEXT,source_url TEXT); CREATE TABLE source_categories(path TEXT PRIMARY KEY,title TEXT,category TEXT); CREATE TABLE category_edges(parent TEXT,child TEXT,PRIMARY KEY(parent,child)); CREATE TABLE guide_categories(guide TEXT,category TEXT,PRIMARY KEY(guide,category)); CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); CREATE TABLE redirects(path TEXT PRIMARY KEY,title TEXT,target TEXT); CREATE TABLE media(path TEXT PRIMARY KEY,filename TEXT,mime TEXT,bytes INTEGER); CREATE TABLE media_attribution(article_id TEXT,url TEXT,source_path TEXT,file_page_url TEXT,PRIMARY KEY(article_id,url,source_path,file_page_url));")
     inventory.executemany("INSERT INTO media VALUES(?,?,?,?)", media_rows)
     inventory.executemany("INSERT INTO redirects SELECT ?,?,?", [(path, title, target) for path, title, target in work.execute("SELECT path,title,redirect FROM inventory WHERE redirect!=''")])
