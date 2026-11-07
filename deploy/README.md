@@ -2,13 +2,15 @@ Deploy the embedded Go server directly on a non-burstable `c8g.xlarge` (4 vCPU, 
 
 Live deployment: [https://pleasemendmy.com](https://pleasemendmy.com) and [https://www.pleasemendmy.com](https://www.pleasemendmy.com), proxied through Cloudflare to `32.193.25.68`; stack `please-mend-my`, `us-east-1`, instance `i-00b3468454b650217` (`aarch64`, 4 vCPU, 64 GiB root). The former 20 GiB instance was replaced; the Elastic IP and DNS were retained. Direct IP HTTP remains available for health probes. Cloudflare uses Full (strict) and redirects HTTP to HTTPS.
 
-Measured in this environment:
+Initial measurements in this environment, before catalog integration:
 
 - Loopback `GET /`, 5 warmups then 200 gzip/keep-alive transactions: p50 **0.076 ms**, p95 **0.092 ms**.
 - Workstation network TTFB, 40 warm requests: p50 **31.81 ms**, p95 **35.18 ms**.
 - Independent cold Firefox navigation: DOMContentLoaded **288 ms**, load **365 ms**, **32,011 bytes** transferred.
 
 Systemd reported **11,894,784 bytes (~11.3 MiB)** of service memory. These samples describe these probes, not maximum capacity or latency from other locations. Verified compute pricing at deployment: **$0.15952/hour (~$116.45 per 730 hours)**, plus disk, public IPv4, and egress.
+
+After the 2026-11-07 VM replacement, release `e592145` serves the catalog built directly on EC2: **103,473 items and 575,002 media files**. The cloud-built index matches the original local SHA-256, `3e232983deb2ba8142ae84e13b4e99ba72ed0a86c10312beb77c0d4b922c98b4`. Subsequent deployments reused it without downloading/building or uploading local catalog data. Public HTTPS, deployed HTML/worker bytes and connection policies, and a sample guide/image were verified on apex/www. Page TTFB was **174 ms before replacement** (one sample), then **141 ms median afterward** (five separate requests). The complete compressed catalog response took **415 ms**, with **153 ms TTFB**, from this workstation. These small network samples are delivery checks, not search latency or capacity measurements. Go tests, six Python release/key tests, and atomic publication under the corrected systemd mount policy passed. A single writable parent mount allows the work-to-release rename; separately bind-mounting both directories caused `EXDEV` despite sharing the same disk.
 
 Prerequisites: authenticated AWS CLI, Go matching `go.mod`, Python 3, Git, OpenSSH, and curl. Commit and push the ingestion scripts before deployment: EC2 fetches them directly from the public GitHub commit. From the repository:
 
@@ -17,7 +19,7 @@ aws login
 AWS_REGION=us-east-1 bash deploy/ec2.sh
 ```
 
-The script builds a static Linux/ARM64 binary locally, chooses a zone offering `c8g.xlarge`, imports a project SSH public key, creates/updates CloudFormation stack `please-mend-my`, waits for cloud-init, prepares the cloud-built catalog, installs the binary atomically, restarts systemd, and checks `/healthz`. Re-run it for updates. `AWS_PROFILE`, `AWS_REGION`, `PMM_STACK`, `PMM_SSH_KEY`, and `PMM_KEY_NAME` can override defaults. The imported key must match the local key and carry `Project=please-mend-my`; unrelated stacks/keys are rejected.
+The script builds a static Linux/ARM64 binary locally from a pinned committed Git snapshot, chooses a zone offering `c8g.xlarge`, imports a project SSH public key, creates/updates CloudFormation stack `please-mend-my`, waits for cloud-init, prepares the cloud-built catalog, installs the binary atomically, restarts systemd, and checks `/healthz`. Uncommitted workspace edits are excluded. Re-run it for updates. `AWS_PROFILE`, `AWS_REGION`, `PMM_STACK`, `PMM_SSH_KEY`, and `PMM_KEY_NAME` can override defaults; `PMM_DEPLOY_COMMIT` pins a specific pushed commit (default: HEAD). The imported key must match the local key and carry `Project=please-mend-my`; unrelated stacks/keys are rejected.
 
 `catalog.sh` runs the same [Python build pipeline](../scripts/build_catalog.py) used locally. EC2 fetches the two Python scripts from the pushed GitHub commit, verifies their hashes, installs pinned uv/Python and script dependencies, and downloads the pinned Kiwix archive directly. It builds its own SQLite inventory, sanitized guides, images, and browser index. No local archive, SQLite database, or generated runtime files are uploaded; deployment does not depend on a local catalog.
 
