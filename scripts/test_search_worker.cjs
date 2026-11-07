@@ -177,6 +177,139 @@ test('accent normalization and word separators agree with the offline producer',
   assert.equal((await worker.search('WH-1000XM5 battery')).total, 0);
 });
 
+test('conversational qualifiers and intensifiers do not become required search terms', async () => {
+  const index = fixture();
+  index.items = [
+    ['arm', 'Broken Arm', 'technology', 'article', ''],
+    ['arm-guide', 'Arm Bone Broken Repair', 'technology', 'guide', ''],
+    ['dick', 'Dick problems', 'technology', 'article', ''],
+    ['niche', 'Dick smith 2 channel dvd player Disassembly', 'technology', 'guide', ''],
+    ['hurt', 'Arm Hurts', 'technology', 'article', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    const ids = async query => Array.from((await worker.search(query)).items, row => row[0]);
+    const broken = await ids('arm broken');
+    for (const query of ["arm it's broken", 'arm it’s broken', 'arm it is broken', 'MY ARM IS BROKEN',
+      "my fucking arm it's broken", 'the damn arm is broken']) {
+      assert.deepEqual(await ids(query), broken, query);
+    }
+    const dick = await ids('dick');
+    for (const query of ['fucking dick', 'my fucking dick', 'FUCKING, DICK!', 'goddamn dick']) {
+      assert.deepEqual(await ids(query), dick, query);
+      assert.equal((await worker.search(query)).items[0][0], 'dick');
+    }
+    assert.deepEqual(await ids('arm it hurts'), await ids('arm hurts'));
+    assert.equal((await worker.search('arm it hurts')).items[0][0], 'hurt');
+    assert.equal(worker.fetches(), 1, 'conversational searches use only the already fetched browser index');
+  }
+});
+
+test('negation and medical symptom adjectives remain required', async () => {
+  const index = fixture();
+  index.items = [
+    ['positive', 'Laptop Working', 'technology', 'guide', ''],
+    ['notebook', 'Laptop Notebook Working', 'technology', 'guide', ''],
+    ['negative', 'Laptop Not Working', 'technology', 'guide', ''],
+    ['power', 'Laptop Power', 'technology', 'guide', ''],
+    ['no-power', 'Laptop No Power', 'technology', 'guide', ''],
+    ['urine', 'Urine care', 'technology', 'article', ''],
+    ['bloody', 'Bloody Urine', 'technology', 'article', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    for (const query of ['laptop not working', "laptop it's not working", 'laptop it is not working',
+      "laptop isn't working", 'laptop it isn’t working', 'laptop it does not work']) {
+      assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), ['negative'], query);
+    }
+    assert.deepEqual(Array.from((await worker.search("laptop it's no power")).items, row => row[0]), ['no-power']);
+    assert.deepEqual(Array.from((await worker.search('my bloody urine')).items, row => row[0]), ['bloody']);
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+test('qualifier handling preserves exact literal titles, possessives and strict model identifiers', async () => {
+  const index = fixture();
+  index.items = [
+    ['plain', 'Arm Broken', 'technology', 'article', ''],
+    ['literal', "Arm It's Broken", 'technology', 'guide', ''],
+    ['profanity', 'Fucking Dick', 'technology', 'guide', ''],
+    ['general', 'Dick problems', 'technology', 'article', ''],
+    ['single', 'Fucking', 'technology', 'article', ''],
+    ['possessive', "John's Laptop Repair", 'technology', 'guide', ''],
+    ['s23', 'Samsung Galaxy S23 Screen Replacement', 'technology', 'guide', ''],
+    ['s24', 'Samsung Galaxy S24 Screen Replacement', 'technology', 'guide', ''],
+    ['is-model', 'Lexus IS 200 Screen Replacement', 'technology', 'guide', ''],
+    ['es-model', 'Lexus ES 200 Screen Replacement', 'technology', 'guide', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    assert.equal((await worker.search("Arm It's Broken")).items[0][0], 'literal');
+    assert.equal((await worker.search('Fucking Dick')).items[0][0], 'profanity');
+    assert.equal((await worker.search('fucking')).items[0][0], 'single', 'standalone intensifiers retain their search meaning');
+    assert.equal((await worker.search("John's Laptop Repair")).items[0][0], 'possessive');
+    assert.deepEqual(Array.from((await worker.search('my Samsung Galaxy S23 screen')).items, row => row[0]), ['s23']);
+    assert.equal((await worker.search('my Samsung Galaxy S23+ screen')).total, 0);
+    assert.equal((await worker.search('my Samsung Galaxy S25 screen')).total, 0);
+    assert.deepEqual(Array.from((await worker.search('my Lexus IS 200 screen')).items, row => row[0]), ['is-model']);
+  }
+});
+
+test('qualifier-expanded broad searches still expose only the best 100 entries', async () => {
+  const index = fixture();
+  index.items = Array.from({ length: 180 }, (_, at) => ['arm-' + at, 'Arm Broken ' + at, 'technology', 'guide', '']);
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  const worker = await workerFor(prepare(index));
+  const result = await worker.search("my fucking arm it's broken");
+  assert.equal(result.total, 100);
+  worker.send({ type: 'range', requestId: result.requestId, rangeId: 1, start: 100, count: 60 });
+  assert.equal((await worker.next('range')).items.length, 0);
+  assert.equal(worker.fetches(), 1);
+});
+
+test('negative contractions retain exact literal titles even when their expanded token is absent', async () => {
+  const index = fixture();
+  index.items = [
+    ['plain', 'Laptop Not Working', 'technology', 'guide', ''],
+    ['literal', "Laptop Isn't Working", 'technology', 'guide', ''],
+    ['panic', "Don't Panic", 'technology', 'article', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    assert.equal((await worker.search("Laptop Isn't Working")).items[0][0], 'literal');
+    assert.equal((await worker.search("Don't Panic")).items[0][0], 'panic');
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+test('complete literal title words outrank partial niche guides while exact order stays first', async () => {
+  const index = fixture();
+  index.items = [
+    ['niche', 'How to Fix a Broken Temple Arm of Gaoye Blue Light Eyeglasses', 'technology', 'guide', ''],
+    ['complete', 'Broken arm', 'technology', 'article', ''],
+    ['duplicate', 'Arm arm', 'technology', 'guide', 'Broken'],
+    ['prefix', 'Arm Broken Hardware Specific Device Repair', 'technology', 'guide', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: index.items.map(() => 0) };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    for (const query of ['arm broken', "arm it's broken", 'my fucking arm it is broken']) {
+      assert.equal((await worker.search(query)).items[0][0], 'complete', query);
+    }
+    assert.equal((await worker.search(index.items[0][1])).items[0][0], 'niche', 'an exact detailed title remains first');
+    assert.equal((await worker.search(index.items[3][1])).items[0][0], 'prefix');
+    assert.equal(worker.fetches(), 1);
+  }
+  index.items.push(['ordered', 'Arm broken', 'technology', 'article', '']);
+  index.search.itemGroups.push(0);
+  const worker = await workerFor(prepare(index));
+  assert.equal((await worker.search('arm broken')).items[0][0], 'ordered', 'exact requested order outranks reordered words');
+});
+
 test('long queries retain every required term beyond the old compact mask width', async () => {
   const index = fixture();
   const terms = Array.from({ length: 33 }, (_, index) => 'required' + index);
@@ -298,7 +431,7 @@ test('generality-aware bounded ranking matches exhaustive scoring without prunin
   const prepared = prepare(index);
   const limitedWorker = await workerFor(prepared);
   const fullWorker = await workerFor(prepared, exhaustive);
-  for (const query of ['laptop', 'lap', 'notebook', 'laptpp', 'laptop care']) {
+  for (const query of ['laptop', 'lap', 'notebook', 'laptpp', 'laptop care', 'care laptop']) {
     const limited = await limitedWorker.search(query);
     limitedWorker.send({ type: 'range', requestId: limited.requestId, rangeId: 1, start: 60, count: 60 });
     const tail = await limitedWorker.next('range');

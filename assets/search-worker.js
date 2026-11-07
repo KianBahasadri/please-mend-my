@@ -5,6 +5,42 @@ const clean = (value) => {
   return /[^\x00-\x7f]/.test(text) ? text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase() : text.toLowerCase();
 };
 const words = (value) => value.match(/[\p{L}\p{N}]+/gu) || [];
+const conversational = new Set(["is", "are", "was", "were", "am", "seems", "feels", "has", "have", "does", "do", "did"]);
+const pronouns = new Set(["it", "this", "that", "they", "i", "we"]);
+const determiners = new Set(["my", "our", "your", "the", "a", "an"]);
+const intensifiers = new Set(["fucking", "fuckin", "fucken", "damn", "damned", "goddamn", "goddamned", "frigging", "freaking"]);
+const contractions = new Set(["it's", "that's", "this's", "there's", "i'm", "you're", "we're", "they're"]);
+const symptomPredicates = new Set(["hurts", "hurt", "aches", "ache", "bleeds", "bleed", "burns", "burn", "itches", "itch",
+  "tingles", "tingle", "swells", "swell", "leaks", "leak", "rattles", "rattle", "freezes", "freeze", "crashes", "crash"]);
+const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'t$/;
+
+function searchPhrase(query) {
+  // These are conversational constructions, not general English stopwords.
+  // Keep symptom words (including bloody), negation and literal model tokens.
+  if (!/\b(?:it|this|that|there|they|i|we|you|my|our|your|the|a|an|is|are|was|were|am|seems|feels|has|have|does|do|did|fucking|fuckin|fucken|damn|damned|goddamn|goddamned|frigging|freaking|isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)['’\s,.!?]/.test(query + " ")) return query;
+  const pieces = query.split(/\s+/);
+  const keys = pieces.map(piece => piece.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replaceAll("’", "'"));
+  const kept = [];
+  let construction = true;
+  for (let at = 0; at < pieces.length; at++) {
+    const key = keys[at], next = keys[at + 1] || "";
+    if (/\p{N}/u.test(key)) { kept.push(pieces[at]); construction = false; continue; }
+    if (negativeContraction.test(key)) {
+      kept.push("not"); construction = true;
+    } else if (intensifiers.has(key) || contractions.has(key)) {
+      construction = true;
+    } else if (pronouns.has(key) && (conversational.has(next) || negativeContraction.test(next) ||
+        kept.length && symptomPredicates.has(next))) {
+      construction = true;
+    } else if ((conversational.has(key) || construction && determiners.has(key)) && !/\p{N}/u.test(next)) {
+      construction = true;
+    } else {
+      kept.push(/^[\p{L}\p{M}]+$/u.test(key) ? key : pieces[at]); construction = false;
+    }
+  }
+  // Typing only a qualifier must not turn into an empty query/all catalog.
+  return kept.length ? kept.join(" ") : query;
+}
 const step2 = Object.entries({ ational: "ate", tional: "tion", enci: "ence", anci: "ance", izer: "ize",
   abli: "able", alli: "al", entli: "ent", eli: "e", ousli: "ous", ization: "ize", ation: "ate",
   ator: "ate", alism: "al", iveness: "ive", fulness: "ful", ousness: "ous", aliti: "al", iviti: "ive", biliti: "ble" })
@@ -285,9 +321,9 @@ function fuzzyTerms(token, matches) {
   }
 }
 
-function resolveToken(token, widen = false) {
-  const cacheKey = (widen ? "+" : "=") + token;
-  const narrow = widen ? tokenCache.get("=" + token) : null;
+function resolveToken(token, widen = false, strict = false) {
+  const cacheKey = (strict ? "!" : widen ? "+" : "=") + token;
+  const narrow = widen && !strict ? tokenCache.get("=" + token) : null;
   if (narrow?.expanded) return narrow;
   if (tokenCache.has(cacheKey)) {
     const result = tokenCache.get(cacheKey);
@@ -296,20 +332,22 @@ function resolveToken(token, widen = false) {
     return result;
   }
   const matches = new Map(), terms = inverted.terms;
-  for (let at = lowerBound(terms, token); at < terms.length && terms[at].startsWith(token); at++) {
+  for (let at = lowerBound(terms, token); at < terms.length && terms[at].startsWith(token) && (!strict || terms[at] === token); at++) {
     matches.set(at, terms[at] === token ? 1 : 2);
   }
-  const root = porter(token), surfaceRoot = lowerBound(terms, root), stem = lowerBound(inverted.stemTerms, root);
-  if (terms[surfaceRoot] === root && !matches.has(surfaceRoot)) matches.set(surfaceRoot, 3);
-  if (inverted.stemTerms[stem] === root) {
-    const { offsets, values } = inverted.stems;
-    for (let at = offsets[stem]; at < offsets[stem + 1]; at++) {
-      const term = values[at];
-      if (!matches.has(term)) matches.set(term, 3);
+  if (!strict) {
+    const root = porter(token), surfaceRoot = lowerBound(terms, root), stem = lowerBound(inverted.stemTerms, root);
+    if (terms[surfaceRoot] === root && !matches.has(surfaceRoot)) matches.set(surfaceRoot, 3);
+    if (inverted.stemTerms[stem] === root) {
+      const { offsets, values } = inverted.stems;
+      for (let at = offsets[stem]; at < offsets[stem + 1]; at++) {
+        const term = values[at];
+        if (!matches.has(term)) matches.set(term, 3);
+      }
     }
   }
   const expanded = !matches.size || widen;
-  if (expanded) fuzzyTerms(token, matches);
+  if (expanded && !strict) fuzzyTerms(token, matches);
   const quality = new Uint8Array(matches.size ? entries.length : 0), groupQuality = new Uint8Array(matches.size ? searchGroups.length : 0);
   const documents = [], groups = [];
   const addDocument = (doc, cost) => {
@@ -355,6 +393,13 @@ function subjectPriority(doc, entry, wordPrefix, anchors) {
 
 function titleScore(entry, query, tokens, wordPrefixes, bonus) {
   let score = entry.title === query ? 1000 : entry.title.startsWith(query) ? 500 : entry.title.includes(query) ? 250 : 0;
+  // A complete title such as "Broken arm" is closer to "arm broken" than a
+  // detailed procedure containing those two words somewhere in a longer title.
+  // Only tokenize short candidates; exact requested title order stays first.
+  if (score < 950 && tokens.length > 1 && entry.title.length <= query.length + 2) {
+    const titleWords = words(entry.title);
+    if (titleWords.length === tokens.length && tokens.every(token => titleWords.includes(token))) score = 950;
+  }
   score += bonus;
   for (let at = 0; at < tokens.length; at++) {
     const token = tokens[at];
@@ -446,7 +491,7 @@ function indexedSearch(query, tokens) {
   const intersect = (widen) => {
     const lists = [];
     for (const token of tokens) {
-      const list = resolveToken(token, widen);
+      const list = resolveToken(token, widen, tokens.length > 1 && (token === "not" || token === "no"));
       if (!list.documents.length) return [];
       lists.push(list);
     }
@@ -484,9 +529,10 @@ function indexedSearch(query, tokens) {
   return literal.length ? literal : intersect(true);
 }
 
-function legacySearch(query) {
+function legacySearch(query, literalQuery = "") {
   const tokens = query.split(/\s+/).filter(Boolean), best = shortlist();
   const wordPrefixes = tokens.map(token => " " + token);
+  const negations = tokens.map(token => token === "not" ? /\bnot\b/ : token === "no" ? /\bno\b/ : null);
   const broad = tokens.length === 1 && query.length > 1 && /^\p{L}+$/u.test(query);
   const anchors = broad ? subjectAnchors.get(query) : null;
   const subjectPrefix = query + " ";
@@ -497,7 +543,7 @@ function legacySearch(query) {
   const wideMatches = compact ? null : tokens.map(() => new Uint8Array(searchGroups.length));
   for (let group = 1; group < searchGroups.length; group++) {
     for (let term = 0; term < tokens.length; term++) {
-      if (searchGroups[group].includes(tokens[term])) {
+      if (negations[term] ? negations[term].test(searchGroups[group]) : searchGroups[group].includes(tokens[term])) {
         if (compact) groupMasks[group] |= 1 << term;
         else wideMatches[term][group] = 1;
       }
@@ -505,9 +551,14 @@ function legacySearch(query) {
   }
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index], group = itemGroups[index], aliasMask = groupMasks[group];
+    if (literalQuery && entry.title === literalQuery) {
+      best.add(index, 3000 + (entry.row[3] === "guide" ? 15 : 0));
+      continue;
+    }
     let matches = true;
     for (let term = 0; term < tokens.length; term++) {
-      if ((compact ? aliasMask & (1 << term) : wideMatches[term][group]) || entry.text.includes(tokens[term])) continue;
+      if ((compact ? aliasMask & (1 << term) : wideMatches[term][group]) ||
+          (negations[term] ? negations[term].test(entry.text) : entry.text.includes(tokens[term]))) continue;
       matches = false;
       break;
     }
@@ -520,9 +571,37 @@ function legacySearch(query) {
   return best.sorted();
 }
 
+function literalTitles(query) {
+  // Keep an exact original title above conversational interpretations. Recover
+  // it from its smallest direct posting, without a title map/catalog scan.
+  const { terms, postings } = inverted;
+  let first = 0, last = Infinity;
+  for (const token of words(query)) {
+    const term = lowerBound(terms, token);
+    if (terms[term] !== token) return [];
+    const start = postings.offsets[term], end = postings.offsets[term + 1];
+    if (end - start < last - first) { first = start; last = end; }
+  }
+  const matches = [];
+  if (!Number.isFinite(last)) return matches;
+  for (let at = first; at < last; at++) {
+    const doc = postings.values[at];
+    if (doc < entries.length && entries[doc].title === query) matches.push(doc);
+  }
+  return matches.sort((a, b) => Number(entries[b].row[3] === "guide") - Number(entries[a].row[3] === "guide") || a - b);
+}
+
 function search(request) {
-  const started = performance.now(), query = clean(request.query).trim();
-  ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query);
+  const started = performance.now(), literal = clean(request.query).trim(), query = searchPhrase(literal);
+  const exact = query === literal ? "" : literal;
+  ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
+  if (inverted && exact) {
+    const titles = literalTitles(literal);
+    if (titles.length) {
+      const seen = new Set(titles);
+      ranked = [...titles, ...ranked.filter(doc => !seen.has(doc))].slice(0, RESULT_LIMIT);
+    }
+  }
   activeRequest = request.requestId;
   postMessage({ type: "results", requestId: activeRequest, total: ranked.length,
     items: ranked.slice(0, Math.min(60, request.count || 30)).map((index) => catalog.items[index]), duration: performance.now() - started });

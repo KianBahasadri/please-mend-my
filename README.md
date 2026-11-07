@@ -14,7 +14,11 @@ the fixed prompt and question.
 Each font keeps its size when the full question fits; otherwise the hero scales
 down to keep the question on one line. Long editable answers still wrap.
 Broad queries favor general entries over niche model guides; exact model searches
-keep their priority.
+keep their priority. Complete title matches also win when the query reorders the
+words, so `arm broken` favors `Broken arm` over a detailed eyeglasses repair.
+Conversational filler and intensifiers are removed before local lookup, so
+`arm it's broken` searches like `arm broken` and `fucking dick` like `dick`.
+Negation, symptoms, numeric model identifiers, and exact title priority remain.
 
 Check the hero and search interactions without opening a browser:
 

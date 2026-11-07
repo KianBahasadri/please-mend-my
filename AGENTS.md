@@ -19,7 +19,8 @@
 - Ingest via the same pinned Python pipeline locally/EC2; cloud downloads sources/builds its own catalog; never upload local corpus.
 - Prepare all enrichment/aliases/categories before publish; searches use our index/DB only; no external API calls.
 - Search: offline aliases+inverted postings+Porter stems; typo edits 1 for 5–7 letters, 2 for ≥8; numeric/model tokens strict; exact/model matches first; benchmark size/startup/memory/query before deploy.
-- Broad queries: general entries before niche model guides; exact/model intent wins.
+- General entries before niche guides; complete title words win even reordered ("arm broken"→"Broken arm"); exact/model intent wins.
+- Search ignores conversational filler/intensifiers ("it's", "fucking"); retain negation/symptoms/exact title+model intent; browser only.
 - VM replacement authorized: rebuild with 64GiB root (no extra data volume); retain EIP/domain; regenerate catalog on EC2.
 - Prod: i-00b3468454b650217/64GiB; cloud-built 207691 items/679729 media; unchanged runs reuse; no corpus uploads.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
