@@ -10,7 +10,7 @@
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
-- BG: preserve approved dark look in docs/references/approved-spotlight.css; mix spotlight/wall-floor variants. Visible beam in BOTH themes, receding seam, static/fast. Reference: docs/references/spotlight-wall-floor.png.
+- BG: preserve docs/references/approved-spotlight.css; mix wall-floor variants. Visible white beam in dark/BLACK in light, receding seam, static/fast. Ref: docs/references/spotlight-wall-floor.png.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
 - Performance + response latency are CLASS-1: measure before/after deploy; slow => optimize/remove; sustained speed > cost; no decorative bottlenecks.
 - Commit AND push regular work milestones.

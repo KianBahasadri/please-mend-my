@@ -114,13 +114,13 @@
 
 @media (prefers-color-scheme: light) {
   .atmosphere {
-    --ambient-base: #e4e4e4;
-    --light: 255 255 255;
-    --strength: 0.8;
-    --beam: 0.65;
-    --pool: 0.55;
-    --fringe: 0.08;
-    --seam-color: 55 55 55;
-    --contour: 0.16;
+    --ambient-base: var(--paper);
+    --light: 0 0 0;
+    --strength: 0.12;
+    --beam: 0.14;
+    --pool: 0.065;
+    --fringe: 0.02;
+    --seam-color: var(--light);
+    --contour: 0.12;
   }
 }
