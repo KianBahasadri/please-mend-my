@@ -33,6 +33,8 @@
 - Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
 - Sources: add full English WikiMed + Army FM4-25.11 PDF chapters; same pinned local/EC2 pipeline; preserve raw text/media/provenance/licenses.
 - Rough pages OK; future LLM custom-generates each entry page.
+- v2: build-only validated stage3_cache/<id>.json overlay+gzip, else v1; static Go unchanged; client dispatches steps/legacy HTML. No runtime AI/router I/O.
+- Offline stage2 clean→async OpenRouter qwen/qwen3.6-35b-a3b strict-schema; SHA cache covers raw/model/prompt/config/schema; preserve provenance/safety. Pilot 25 each first aid/software/handyman/hardware; report source gaps.
 - Attribution: credits only, no formatting/sanitizing notices; license separate.
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
