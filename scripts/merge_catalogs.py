@@ -287,6 +287,13 @@ def merge_catalogs(source_runtimes, output_runtime):
         (stage / "index.json").write_bytes(body)
         (stage / "index.json.gz").write_bytes(packed)
         (stage / "manifest.json").write_bytes(json_bytes(manifest))
+        # mkdtemp keeps the unfinished stage private (0700). The web service
+        # runs as a different user, so the published root must be traversable.
+        # Change only merger-owned paths, never hardlinked source payloads.
+        for name in ("index.json", "index.json.gz", "manifest.json"):
+            (stage / name).chmod(0o644)
+        for path in (stage / "guides", stage / "media", stage):
+            path.chmod(0o755)
         if output.exists():
             output.rmdir()  # Only a still-empty destination may be replaced.
         stage.rename(output)

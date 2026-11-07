@@ -157,6 +157,18 @@ catalog_snapshot=$2
 catalog_link=/opt/please-mend-my/catalog
 catalog_config=/etc/systemd/system/please-mend-my.service.d/catalog.conf
 previous_catalog=$(readlink "$catalog_link" || true)
+# Confirm public-reader access before changing the live binary or catalog link.
+# Ingestion runs as a different user; a private staging directory must not reach
+# the DynamicUser web service, even when root can read its completion metadata.
+if [[ -n "$catalog_snapshot" ]]; then
+  [[ "$catalog_snapshot" =~ ^/opt/please-mend-my/catalogs/[0-9a-f]{64}$ ]]
+  for catalog_file in index.json index.json.gz manifest.json; do
+    sudo -u nobody test -r "$catalog_snapshot/$catalog_file"
+  done
+  for catalog_directory in guides media; do
+    sudo -u nobody test -x "$catalog_snapshot/$catalog_directory"
+  done
+fi
 had_server=false
 had_config=false
 if [[ -f /opt/please-mend-my/server ]]; then

@@ -2,9 +2,12 @@
 import gzip
 import hashlib
 import json
+import os
 from pathlib import Path
+import stat
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import merge_catalogs as merger
 import prepare_search
@@ -121,6 +124,35 @@ class MergeTests(unittest.TestCase):
         self.assertEqual(prepared["documents"], 2)
         self.assertIn("asthmatic", json.loads((self.output / "index.json").read_bytes())["search"]["inverted"]["terms"])
         self.assertNotIn("inverted", json.loads((other / "index.json").read_bytes())["search"])
+
+    def test_published_directories_are_traversable_without_changing_source_modes(self):
+        source = self.source("wikimed", [("a" * 20, "Asthma", "asthmatic")], category="health")
+        guide = source / "guides" / ("a" * 20 + ".json")
+        guide.chmod(0o640)
+        image = next((source / "media").iterdir())
+        original_modes = {path: stat.S_IMODE(path.stat().st_mode) for path in (guide, image)}
+        stage_modes = []
+        hardlink = merger._hardlink
+        def observe_private_stage(source_path, destination):
+            stage_modes.append(stat.S_IMODE(destination.parent.parent.stat().st_mode))
+            return hardlink(source_path, destination)
+        old_umask = os.umask(0o077)
+        try:
+            with patch.object(merger, "_hardlink", side_effect=observe_private_stage):
+                merger.merge_catalogs([source], self.output)
+        finally:
+            os.umask(old_umask)
+        self.assertTrue(stage_modes)
+        self.assertEqual(set(stage_modes), {0o700}, "Unfinished merge stays private")
+        for path in (self.output, self.output / "guides", self.output / "media"):
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o755, str(path))
+        for name in ("index.json", "index.json.gz", "manifest.json"):
+            self.assertEqual(stat.S_IMODE((self.output / name).stat().st_mode), 0o644, name)
+        for path, mode in original_modes.items():
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), mode)
+            linked = self.output / path.parent.name / path.name
+            self.assertEqual(linked.stat().st_ino, path.stat().st_ino)
+            self.assertEqual(stat.S_IMODE(linked.stat().st_mode), mode)
 
     def test_duplicate_ids_and_categories_rejected_before_output(self):
         first = self.source("ifixit", [("a" * 20, "Laptop", "")])

@@ -32,6 +32,7 @@
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
 - Disposable ingest SQLite: journal/sync OFF; unlink scratch on restart (no GB-scale DROP); publish complete snapshots only.
+- Publish runtime dirs 0755; verify unprivileged read before swapping live binary/catalog.
 - Additional sources proposed: Appropedia ZIM (CC BY-SA) + public domain textile/garment mending + procedural datasets.
 - Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms). Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
