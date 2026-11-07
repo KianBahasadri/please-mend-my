@@ -36,15 +36,6 @@ body.reading main {
   display: none !important;
 }
 
-.more-results {
-  padding: 0.55rem 0.9rem;
-  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
-  border-radius: 100px;
-  background: color-mix(in srgb, var(--paper) 78%, transparent);
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-}
 
 .results-heading {
   display: flex;
@@ -71,18 +62,21 @@ body.reading main {
 }
 
 .result-cards {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  position: relative;
+  --card-height: 208px;
+  --columns: 3;
   gap: 0.85rem;
+  overflow-anchor: none;
 }
 
 .repair-card {
-  position: relative;
+  position: absolute;
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
   min-width: 0;
-  min-height: 10rem;
+  height: var(--card-height);
+  overflow: hidden;
   padding: 1.2rem;
   border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
   border-radius: 0.75rem;
@@ -102,6 +96,10 @@ body.reading main {
   font-weight: 550;
   line-height: 1.35;
   overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
 }
 
 .card-meta,
@@ -113,6 +111,9 @@ body.reading main {
 
 .card-device {
   margin-top: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .empty-state {
@@ -120,10 +121,6 @@ body.reading main {
   color: color-mix(in srgb, var(--ink) 65%, transparent);
 }
 
-.more-results {
-  display: block;
-  margin: 1.5rem auto 0;
-}
 
 button:focus-visible,
 a:focus-visible {
@@ -235,11 +232,10 @@ body.reading .search-results {
 }
 
 @media (max-width: 850px) {
-  .result-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .result-cards { --columns: 2; }
 }
 
 @media (max-width: 520px) {
-  .result-cards { grid-template-columns: 1fr; }
-  .repair-card { min-height: 8rem; }
+  .result-cards { --columns: 1; }
   .catalog-status { font-size: 0.8rem; }
 }

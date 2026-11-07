@@ -5,6 +5,8 @@ let catalog;
 let entries = [];
 let pending;
 let scheduled = false;
+let ranked = [];
+let activeRequest = 0;
 
 function schedule(request) {
   pending = request;
@@ -18,19 +20,21 @@ function schedule(request) {
   }, 0);
 }
 
+function sendRange(request) {
+  if (request.requestId !== activeRequest) return;
+  const start = Math.max(0, Math.min(ranked.length, request.start || 0));
+  const end = Math.min(ranked.length, start + Math.min(60, request.count || 30));
+  postMessage({ type: "range", requestId: activeRequest, rangeId: request.rangeId,
+    start, items: ranked.slice(start, end).map((index) => catalog.items[index]) });
+}
+
 function search(request) {
-  if (!catalog) {
-    pending = request;
-    return;
-  }
-  const start = performance.now();
+  const started = performance.now();
   const query = clean(request.query).trim();
   const tokens = query.split(/\s+/).filter(Boolean);
-  const top = [];
-  let total = 0;
+  const buckets = new Map();
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index];
-    if (request.category && entry.row[2] !== request.category) continue;
     if (!tokens.every((token) => entry.text.includes(token))) continue;
     let score = entry.title === query ? 1000 : entry.title.startsWith(query) ? 500 : entry.title.includes(query) ? 250 : 0;
     if (entry.row[3] === "guide") score += 15;
@@ -38,29 +42,27 @@ function search(request) {
       if (entry.title.startsWith(token) || entry.title.includes(` ${token}`)) score += 35;
       else if (entry.title.includes(token)) score += 10;
     }
-    total += 1;
-    if (top.length === request.limit && score <= top[top.length - 1].score) continue;
-    let low = 0, high = top.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      if (top[middle].score >= score) low = middle + 1;
-      else high = middle;
-    }
-    top.splice(low, 0, { index, score });
-    if (top.length > request.limit) top.pop();
+    if (!buckets.has(score)) buckets.set(score, []);
+    buckets.get(score).push(index);
   }
-  const items = top.map((match) => catalog.items[match.index]);
-  postMessage({ type: "results", requestId: request.requestId, query: request.query, category: request.category,
-    total, items, duration: performance.now() - start });
+  // Rank the entire match set once. Only viewport rows cross to the main thread.
+  ranked = [];
+  for (const score of [...buckets.keys()].sort((a, b) => b - a)) {
+    for (const index of buckets.get(score)) ranked.push(index);
+  }
+  activeRequest = request.requestId;
+  postMessage({ type: "results", requestId: activeRequest, total: ranked.length,
+    items: ranked.slice(0, request.count || 30).map((index) => catalog.items[index]), duration: performance.now() - started });
 }
 
 self.onmessage = ({ data }) => {
   if (data.type === "search") schedule(data);
+  else if (data.type === "range") sendRange(data);
 };
 
 (async () => {
   try {
-    const start = performance.now();
+    const started = performance.now();
     const response = await fetch("/api/catalog", { credentials: "same-origin" });
     if (!response.ok) throw new Error(`The repair library is unavailable (${response.status}).`);
     catalog = await response.json();
@@ -71,7 +73,7 @@ self.onmessage = ({ data }) => {
       return { row, title, text: `${title} ${clean(row[4])} ${clean(categories.get(row[2]))}` };
     });
     postMessage({ type: "ready", total: entries.length, categories: catalog.categories, source: catalog.source,
-      revision: catalog.revision, loadDuration: performance.now() - start });
+      revision: catalog.revision, loadDuration: performance.now() - started });
     if (pending) schedule(pending);
   } catch (error) {
     postMessage({ type: "error", message: error.message || "The repair library could not be loaded." });

@@ -3,6 +3,9 @@
   --strength: 0.14;
   --beam: 0.115;
   --contour: 0.075;
+  --pool: 0.035;
+  --fringe: 0.025;
+  --seam-color: var(--light);
   --wash-size: 55% 110%;
   --wash-origin: 94% -15%;
   --beam-origin: 92% -18%;
@@ -20,8 +23,9 @@
   pointer-events: none;
   overflow: hidden;
   transform: scaleX(var(--mirror));
-  background:
-    radial-gradient(ellipse var(--pool-size) at var(--pool-origin), rgb(var(--light) / 0.035), transparent 80%),
+  background-color: var(--ambient-base, transparent);
+  background-image:
+    radial-gradient(ellipse var(--pool-size) at var(--pool-origin), rgb(var(--light) / var(--pool)), transparent 80%),
     radial-gradient(ellipse var(--wash-size) at var(--wash-origin), rgb(var(--light) / var(--strength)), transparent 80%);
 }
 
@@ -29,7 +33,7 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: conic-gradient(from var(--beam-turn) at var(--beam-origin), transparent 2deg, rgb(var(--light) / 0.025) 14deg, rgb(var(--light) / var(--beam)) 25deg, rgb(var(--light) / 0.025) 39deg, transparent 51deg);
+  background: conic-gradient(from var(--beam-turn) at var(--beam-origin), transparent 2deg, rgb(var(--light) / var(--fringe)) 14deg, rgb(var(--light) / var(--beam)) 25deg, rgb(var(--light) / var(--fringe)) 39deg, transparent 51deg);
   mask-image: radial-gradient(ellipse var(--beam-size) at var(--beam-origin), #000 18%, rgb(0 0 0 / 0.8) 46%, transparent 88%);
 }
 
@@ -41,7 +45,7 @@
   width: 130%;
   height: clamp(40px, 6vw, 100px);
   transform: rotate(var(--seam-turn));
-  background: radial-gradient(ellipse 85% 45% at var(--seam-focus), rgb(var(--light) / var(--contour)), transparent 78%);
+  background: radial-gradient(ellipse 85% 45% at var(--seam-focus), rgb(var(--seam-color) / var(--contour)), transparent 78%);
 }
 
 [data-background="left"] .atmosphere { --mirror: -1; }
@@ -110,9 +114,13 @@
 
 @media (prefers-color-scheme: light) {
   .atmosphere {
-    --light: 0 0 0;
-    --strength: 0.04;
-    --beam: 0.025;
-    --contour: 0.035;
+    --ambient-base: #e4e4e4;
+    --light: 255 255 255;
+    --strength: 0.8;
+    --beam: 0.65;
+    --pool: 0.55;
+    --fringe: 0.08;
+    --seam-color: 55 55 55;
+    --contour: 0.16;
   }
 }
