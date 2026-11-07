@@ -44,7 +44,7 @@ if ! id "$worker" >/dev/null 2>&1; then
   useradd --system --home-dir "$base" --shell /sbin/nologin "$worker"
 fi
 install -d -o root -g root -m 0755 "$base" "$source_dir/scripts"
-for directory in work cache python tools; do
+for directory in work cache python tools config; do
   install -d -o "$worker" -g "$worker" -m 0755 "$base/$directory"
 done
 install -d -o "$worker" -g "$worker" -m 0755 "$release_root"
@@ -64,7 +64,7 @@ fetch_script build_catalog.py "$builder_hash"
 if [[ ! -x "$base/tools/uv" ]] || [[ "$("$base/tools/uv" --version | cut -d' ' -f1-2)" != 'uv 0.13.5' ]]; then
   curl --fail --silent --show-error --location --retry 3 --connect-timeout 10 --max-time 120 \
     https://astral.sh/uv/0.13.5/install.sh -o "$base/uv-install.sh"
-  sudo -u "$worker" env UV_INSTALL_DIR="$base/tools" UV_NO_MODIFY_PATH=1 sh "$base/uv-install.sh" >&2
+  sudo -u "$worker" env UV_INSTALL_DIR="$base/tools" UV_NO_MODIFY_PATH=1 XDG_CONFIG_HOME="$base/config" sh "$base/uv-install.sh" >&2
   rm -f "$base/uv-install.sh"
 fi
 state=$(systemctl show please-mend-my-ingest.service --property=ActiveState --value 2>/dev/null || true)
@@ -87,6 +87,7 @@ User=$worker
 Group=$worker
 WorkingDirectory=$base
 Environment=HOME=$base
+Environment=XDG_CONFIG_HOME=$base/config
 Environment=UV_CACHE_DIR=$base/cache
 Environment=UV_PYTHON_INSTALL_DIR=$base/python
 ExecStart=/usr/bin/python3 $source_dir/scripts/build_catalog.py --uv $base/tools/uv --data-dir $base/work --release-root $release_root
@@ -100,7 +101,7 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$base/work $base/cache $base/python $release_root
+ReadWritePaths=$base/work $base/cache $base/python $base/config $release_root
 UMask=0022
 UNIT
   printf '%s\n' "$digest" > "$base/current-key"
