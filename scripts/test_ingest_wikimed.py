@@ -237,6 +237,19 @@ class WikiMedTests(unittest.TestCase):
         self.assertIn("PRAGMA synchronous=OFF", statements)
         self.assertTrue(json.loads((data / "runtime/manifest.json").read_bytes())["runtimeComplete"])
 
+    def test_interrupted_corrupt_scratch_can_be_rebuilt(self):
+        archive = self.root / "fixture.zim"
+        make_zim(archive)
+        checksum = ingest.digest_file(archive)
+        data = self.root / "data"
+        data.mkdir()
+        (data / "work.sqlite").write_bytes(b"interrupted disposable scratch, not a SQLite database")
+        manifest = ingest.build(data, archive, {"sha256": checksum}, checksum)
+        self.assertTrue(manifest["runtimeComplete"])
+        self.assertEqual(manifest["indexedItems"], 2)
+        with sqlite3.connect(data / "work.sqlite") as database:
+            self.assertEqual(database.execute("SELECT count(*) FROM pages").fetchone()[0], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

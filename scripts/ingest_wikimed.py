@@ -368,10 +368,15 @@ def build(data_dir, archive, metadata, sha256, worker_count=None):
     for name in ("guides", "media"):
         (runtime / name).mkdir(exist_ok=True)
     atomic_write(runtime / "manifest.json", json_bytes({"version": 1, "revision": REVISION, "runtimeComplete": False}))
-    work = sqlite3.connect(data_dir / "work.sqlite")
+    # The scratch database is rebuilt in full, including after interruption.
+    # Unlink it rather than making SQLite walk gigabytes of old overflow pages
+    # during DROP TABLE; the original archive and completed runtime stay intact.
+    work_path = data_dir / "work.sqlite"
+    work_path.unlink(missing_ok=True)
+    work = sqlite3.connect(work_path)
     work.execute("PRAGMA journal_mode=OFF")
     work.execute("PRAGMA synchronous=OFF")
-    work.executescript("DROP TABLE IF EXISTS inventory; DROP TABLE IF EXISTS pages; CREATE TABLE inventory(path TEXT PRIMARY KEY,title TEXT,mime TEXT,redirect TEXT,bytes INTEGER); CREATE TABLE pages(path TEXT PRIMARY KEY,title TEXT,html BLOB);")
+    work.executescript("CREATE TABLE inventory(path TEXT PRIMARY KEY,title TEXT,mime TEXT,redirect TEXT,bytes INTEGER); CREATE TABLE pages(path TEXT PRIMARY KEY,title TEXT,html BLOB);")
     article_ids, canonical, titles, aliases, redirects_to = {}, {}, {}, defaultdict(set), {}
     total = html_count = redirects = 0
     exclusions, mime_counts = Counter(), Counter()
