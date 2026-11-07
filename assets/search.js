@@ -9,7 +9,7 @@
   const panel = document.getElementById("guide-panel");
   const body = document.getElementById("guide-body");
   const navigationError = document.getElementById("guide-nav-error");
-  const promptLength = Number(input.dataset.promptLength);
+  const hero = window.mendHero;
   const categoryNames = new Map();
   const details = new Map();
   const prefetchedImages = new Set();
@@ -109,7 +109,7 @@
   window.addEventListener("resize", scheduleWindow);
   window.addEventListener("mend:layout", scheduleWindow);
 
-  const query = () => input.value.slice(promptLength).trim();
+  const query = () => hero ? hero.query() : input.value.slice(Number(input.dataset.promptLength)).trim();
   const node = (tag, className, text) => {
     const element = document.createElement(tag);
     if (className) element.className = className;
@@ -399,7 +399,8 @@
     runSearch();
     window.scrollTo(0, resultsScrollY);
     scheduleWindow();
-    input.focus({ preventScroll: true });
+    if (hero) hero.focus();
+    else input.focus({ preventScroll: true });
   }
 
   document.addEventListener("click", (event) => {
@@ -411,7 +412,9 @@
     showGuide(url.searchParams.get("guide"));
   });
 
-  input.addEventListener("input", () => { cancelPendingGuide(); runSearch(); });
+  const queryChanged = () => { cancelPendingGuide(); runSearch(); };
+  if (hero) window.addEventListener("mend:querychange", queryChanged);
+  else input.addEventListener("input", queryChanged);
   document.getElementById("close-guide").addEventListener("click", () => closeGuide());
   window.addEventListener("popstate", () => {
     const id = new URL(location.href).searchParams.get("guide");

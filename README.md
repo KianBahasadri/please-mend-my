@@ -2,6 +2,12 @@
 
 A responsive typing page with rotating fonts and subtle monochrome lighting.
 
+Bare subjects such as `car` or `arm` reveal a second hero line, `my <subject>`,
+after 2.5 seconds without typing. Enter or Tab opens it immediately; Backspace on an empty symptom returns
+to the end of the first line. Both prefixes stay protected, and only the focused
+native textbox has a caret. Full phrases such as `broken arm` use the first line
+alone. Search combines the two editable suffixes locally.
+
 Run locally with Go 1.25+:
 
 ```sh

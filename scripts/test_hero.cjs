@@ -1,0 +1,294 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const test = require('node:test');
+const vm = require('node:vm');
+const { makeDOM } = require('./hero_test_dom.cjs');
+
+// Run the shipped controller, not a duplicate of its state machine. The fixture
+// models native textarea selection/events; font metrics and CSS paint are not
+// available here, and no browser is opened by these tests.
+async function heroFor(options = {}) {
+  const dom = makeDOM(options);
+  dom.queries = [];
+  dom.window.addEventListener('mend:querychange', () => dom.queries.push(dom.window.mendHero.query()));
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8'), vm.createContext(dom.context));
+  await Promise.resolve();
+  dom.flushFrames();
+  dom.prefix = input => input.value.slice(0, Number(input.dataset.promptLength));
+  dom.suffix = input => input.value.slice(Number(input.dataset.promptLength));
+  dom.type = (input, suffix, options = {}) => {
+    input.value = dom.prefix(input) + suffix;
+    input.setSelectionRange(input.value.length, input.value.length);
+    dom.event(input, 'input', { bubbles: true, inputType: 'insertText', ...options });
+  };
+  dom.key = (input, key, options = {}) => dom.event(input, 'keydown', { key, bubbles: true, ...options });
+  dom.visible = () => dom.line.getAttribute('aria-hidden') !== 'true' && !dom.line.inert;
+  dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(2500); assert.equal(dom.visible(), true); };
+  return dom;
+}
+
+test('a bare noun waits 2.5 seconds after the last input without moving focus', async () => {
+  const dom = await heroFor();
+  assert.equal(dom.window.mendHero.query(), '');
+  assert.equal(dom.visible(), false);
+  dom.type(dom.response, 'arm');
+  dom.advance(2499);
+  assert.equal(dom.visible(), false);
+  dom.advance(1);
+  assert.equal(dom.visible(), true);
+  assert.equal(dom.clarification.value, 'my arm ');
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.window.mendHero.query(), 'arm');
+});
+
+test('the idle deadline resets and continuing a full phrase cancels clarification', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.advance(2000);
+  dom.type(dom.response, 'arms');
+  dom.advance(2499);
+  assert.equal(dom.visible(), false);
+  dom.advance(1);
+  assert.equal(dom.visible(), true);
+  dom.type(dom.response, 'car');
+  dom.advance(2499);
+  assert.equal(dom.visible(), false);
+  dom.type(dom.response, 'arm hurts');
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.window.mendHero.query(), 'arm hurts');
+  dom.type(dom.response, 'broken arm');
+  for (const key of ['Enter', 'Tab']) {
+    dom.key(dom.response, key);
+    assert.equal(dom.visible(), false);
+    assert.notEqual(dom.document.activeElement, dom.clarification);
+  }
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+});
+
+test('Enter and Tab immediately focus the protected second line and preserve Shift+Tab', async () => {
+  for (const key of ['Enter', 'Tab']) {
+    const dom = await heroFor();
+    dom.type(dom.response, 'car');
+    const event = dom.key(dom.response, key);
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(dom.visible(), true);
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.clarification.value, 'my car ');
+    assert.equal(dom.clarification.selectionStart, 'my car '.length);
+    dom.type(dom.clarification, 'will not start');
+    assert.equal(dom.window.mendHero.query(), 'car will not start');
+    assert.equal(dom.queries.at(-1), 'car will not start');
+    assert.equal(dom.document.activeElement, dom.clarification);
+    dom.key(dom.clarification, 'Tab', { shiftKey: true });
+    assert.equal(dom.document.activeElement, dom.response);
+    assert.equal(dom.window.mendHero.query(), 'car will not start');
+  }
+});
+
+test('Backspace on an empty second suffix dissolves it and suppresses idle reopening', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.key(dom.response, 'Enter');
+  const event = dom.key(dom.clarification, 'Backspace');
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.response.selectionStart, dom.response.value.length);
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  dom.key(dom.response, 'Enter');
+  assert.equal(dom.visible(), true);
+  dom.type(dom.clarification, 'hurts');
+  const nonempty = dom.key(dom.clarification, 'Backspace');
+  assert.equal(nonempty.defaultPrevented, false, 'native Backspace edits a nonempty symptom');
+  assert.equal(dom.visible(), true);
+});
+
+test('mobile backward deletion of an empty second suffix returns to the first line', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.key(dom.response, 'Enter');
+  const event = dom.event(dom.clarification, 'beforeinput', { inputType: 'deleteContentBackward', bubbles: true });
+  assert.equal(event.defaultPrevented, true);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.window.mendHero.query(), 'arm');
+});
+
+test('manual clarification can handle an unfamiliar noun without treating a phrase as a noun', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'harpsichord');
+  dom.advance(20000);
+  assert.equal(dom.visible(), false, 'unfamiliar words do not create speculative automatic prompts');
+  dom.key(dom.response, 'Tab');
+  assert.equal(dom.visible(), true);
+  assert.equal(dom.clarification.value, 'my harpsichord ');
+  dom.type(dom.clarification, 'sounds wrong');
+  assert.equal(dom.window.mendHero.query(), 'harpsichord sounds wrong');
+  dom.type(dom.response, 'broken harpsichord');
+  dom.key(dom.response, 'Enter');
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.window.mendHero.query(), 'broken harpsichord');
+});
+
+test('Ctrl/Meta+A, mouse selection, copy, and cut target editable suffixes only', async () => {
+  const dom = await heroFor();
+  dom.reveal('laptop');
+  dom.type(dom.clarification, 'screen flickers');
+  for (const [input, expected] of [[dom.response, 'laptop'], [dom.clarification, 'screen flickers']]) {
+    input.focus();
+    for (const modifier of ['ctrlKey', 'metaKey']) {
+      const event = dom.key(input, 'a', { [modifier]: true });
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(input.selectionStart, Number(input.dataset.promptLength));
+      assert.equal(input.selectionEnd, input.value.length);
+    }
+    input.setSelectionRange(0, input.value.length, 'backward');
+    dom.event(input, 'select');
+    assert.equal(input.selectionStart, Number(input.dataset.promptLength));
+    const data = new Map();
+    const copy = dom.event(input, 'copy', { clipboardData: { setData: (type, value) => data.set(type, value) } });
+    assert.equal(copy.defaultPrevented, true);
+    assert.equal(data.get('text/plain'), expected);
+  }
+  const data = new Map();
+  const originalPrefix = dom.prefix(dom.clarification);
+  const cut = dom.event(dom.clarification, 'cut', { clipboardData: { setData: (type, value) => data.set(type, value) } });
+  assert.equal(cut.defaultPrevented, true);
+  assert.equal(data.get('text/plain'), 'screen flickers');
+  assert.equal(dom.clarification.value, originalPrefix);
+  assert.equal(dom.window.mendHero.query(), 'laptop');
+});
+
+test('prefix deletion is blocked and malformed replacement never edits either prefix', async () => {
+  const dom = await heroFor();
+  dom.reveal('car');
+  dom.type(dom.clarification, 'needs repair');
+  for (const input of [dom.response, dom.clarification]) {
+    input.focus();
+    const prefix = dom.prefix(input);
+    for (const inputType of ['deleteContentBackward', 'deleteWordBackward']) {
+      input.setSelectionRange(prefix.length, prefix.length);
+      const event = dom.event(input, 'beforeinput', { inputType, bubbles: true });
+      assert.equal(event.defaultPrevented, true);
+    }
+    input.value = 'unexpected autofill';
+    dom.event(input, 'input', { inputType: 'insertReplacementText', bubbles: true });
+    assert.ok(input.value.startsWith(prefix));
+    assert.ok(input.selectionStart >= prefix.length);
+  }
+});
+
+test('changing the noun updates the prefix and cannot retain an unrelated symptom', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.key(dom.response, 'Enter');
+  dom.type(dom.clarification, 'hurts');
+  assert.equal(dom.window.mendHero.query(), 'arm hurts');
+  dom.response.focus();
+  dom.type(dom.response, 'laptop');
+  assert.equal(dom.window.mendHero.query(), 'laptop');
+  dom.advance(2500);
+  assert.equal(dom.clarification.value, 'my laptop ');
+  dom.type(dom.response, 'broken laptop screen');
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.window.mendHero.query(), 'broken laptop screen');
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+});
+
+test('composition does not reveal a prompt until committed and pasted full phrases remain single-line', async () => {
+  const dom = await heroFor();
+  dom.event(dom.response, 'compositionstart', { bubbles: true });
+  dom.type(dom.response, 'arm', { isComposing: true, inputType: 'insertCompositionText' });
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  dom.event(dom.response, 'compositionend', { bubbles: true });
+  dom.advance(2499);
+  assert.equal(dom.visible(), false);
+  dom.advance(1);
+  assert.equal(dom.visible(), true);
+  dom.type(dom.response, 'broken arm', { inputType: 'insertFromPaste' });
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.window.mendHero.query(), 'broken arm');
+});
+
+test('background clicks retain the active second selection while cards and guide focus stay usable', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'car');
+  dom.key(dom.response, 'Enter');
+  dom.type(dom.clarification, 'battery flat');
+  const start = Number(dom.clarification.dataset.promptLength) + 2;
+  dom.clarification.setSelectionRange(start, start + 4);
+  const background = dom.add('div', 'background');
+  const backgroundDown = dom.event(background, 'pointerdown', { bubbles: true });
+  assert.equal(backgroundDown.defaultPrevented, true);
+  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.clarification.selectionStart, start);
+  assert.equal(dom.clarification.selectionEnd, start + 4);
+  const card = dom.add('a', 'card');
+  card.setAttribute('href', '/?guide=fixture');
+  const cardDown = dom.event(card, 'pointerdown', { bubbles: true });
+  assert.equal(cardDown.defaultPrevented, false);
+  card.focus();
+  await Promise.resolve();
+  assert.equal(dom.document.activeElement, card);
+  dom.document.body.classList.add('reading');
+  dom.document.body.focus();
+  dom.event(background, 'pointerdown', { bubbles: true });
+  await Promise.resolve();
+  assert.equal(dom.document.activeElement, dom.document.body);
+  dom.document.body.classList.remove('reading');
+  dom.window.mendHero.focus();
+  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.clarification.selectionStart, start);
+  assert.equal(dom.clarification.selectionEnd, start + 4);
+});
+
+test('pending automatic reveal is cancelled while the document is hidden or a guide is open', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.advance(1000);
+  dom.document.visibilityState = 'hidden';
+  dom.event(dom.document, 'visibilitychange');
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+  dom.document.visibilityState = 'visible';
+  dom.event(dom.document, 'visibilitychange');
+  dom.type(dom.response, 'car');
+  dom.document.body.classList.add('reading');
+  await Promise.resolve();
+  dom.document.body.classList.remove('reading');
+  await Promise.resolve();
+  dom.advance(20000);
+  assert.equal(dom.visible(), false);
+});
+
+test('normal search-result visibility does not cancel a bare noun idle prompt', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  dom.document.body.classList.add('searching');
+  await Promise.resolve();
+  dom.advance(2500);
+  assert.equal(dom.visible(), true);
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.window.mendHero.query(), 'arm');
+});
+
+test('all seven themes retain protected prompts and the controller stays static with reduced motion', async () => {
+  for (const theme of ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox']) {
+    const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
+    assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
+    dom.reveal('relationship');
+    dom.key(dom.response, 'Tab');
+    dom.type(dom.clarification, 'needs attention');
+    assert.equal(dom.window.mendHero.query(), 'relationship needs attention');
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.document.animations, 0, 'the controller must not start a decorative animation loop');
+    assert.ok(Number.isFinite(parseFloat(dom.hero.style.fontSize)));
+  }
+});

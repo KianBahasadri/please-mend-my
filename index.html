@@ -11,6 +11,7 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/backgrounds.css">
     <link rel="stylesheet" href="/assets/search.css">
+    <script src="/assets/hero.js" defer></script>
     <script src="/assets/search.js" defer></script>
     <script src="assets/backgrounds.js"></script>
     <script>
@@ -148,7 +149,7 @@
         overflow-wrap: anywhere;
       }
 
-      #response {
+      .hero-input {
         display: block;
         width: 100%;
         min-height: 1lh;
@@ -165,7 +166,34 @@
         letter-spacing: inherit;
         white-space: pre-wrap;
         overflow-wrap: anywhere;
+        caret-color: transparent;
+      }
+
+      .hero-input:focus {
         caret-color: currentColor;
+      }
+
+      .clarification-line {
+        display: grid;
+        grid-template-rows: 0fr;
+        margin-top: 0;
+        opacity: 0;
+        transform: translateY(-0.08em);
+        transition: grid-template-rows 180ms ease, margin-top 180ms ease,
+          opacity 180ms ease, transform 180ms ease;
+      }
+
+      .clarification-line.is-visible {
+        grid-template-rows: 1fr;
+        margin-top: 0.12em;
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .clarification-content {
+        display: block;
+        min-height: 0;
+        overflow: hidden;
       }
 
       #measure {
@@ -324,6 +352,7 @@
 
       @media (prefers-reduced-motion: reduce) {
         .hero-floaters { display: none; }
+        .clarification-line { transition: none; }
       }
 
     </style>
@@ -334,7 +363,13 @@
       <div class="search-shell">
         <section class="hero-area" aria-label="Search the repair library">
           <div class="hero-floaters" aria-hidden="true"></div>
-          <h1><textarea id="response" aria-label="please, mend my — what would you like to mend?" spellcheck="false" rows="1" autofocus></textarea><span id="measure" aria-hidden="true"></span></h1>
+          <h1>
+            <textarea id="response" class="hero-input" aria-label="please, mend my — what would you like to mend?" aria-controls="clarification-line" aria-expanded="false" spellcheck="false" rows="1" autofocus></textarea>
+            <span id="clarification-line" class="clarification-line" aria-hidden="true" inert>
+              <span class="clarification-content"><textarea id="clarification-response" class="hero-input" aria-label="What is wrong?" spellcheck="false" rows="1" tabindex="-1" disabled></textarea></span>
+            </span>
+            <span id="measure" aria-hidden="true"></span>
+          </h1>
           <p id="catalog-status" class="catalog-status" role="status" hidden></p>
         </section>
         <section id="search-results" class="search-results" aria-label="Repair search results" hidden>
@@ -350,110 +385,9 @@
     </main>
     <script>
       const response = document.getElementById("response");
-      const hero = document.querySelector("h1");
-      const measure = document.getElementById("measure");
       const prompt = theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
       response.value = prompt;
       response.dataset.promptLength = prompt.length;
-      measure.textContent = `${prompt}relationship`;
-      let previousValue = prompt;
-
-      function clampSelection() {
-        const start = Math.max(prompt.length, response.selectionStart);
-        const end = Math.max(prompt.length, response.selectionEnd);
-        if (start !== response.selectionStart || end !== response.selectionEnd) {
-          response.setSelectionRange(start, end, response.selectionDirection);
-        }
-      }
-
-      response.addEventListener("keydown", (event) => {
-        if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a") {
-          event.preventDefault();
-          response.setSelectionRange(prompt.length, response.value.length);
-        }
-      });
-      response.addEventListener("select", clampSelection);
-      response.addEventListener("pointerup", clampSelection);
-      response.addEventListener("keyup", clampSelection);
-      document.addEventListener("selectionchange", () => {
-        if (document.activeElement === response) clampSelection();
-      });
-      for (const operation of ["copy", "cut"]) {
-        response.addEventListener(operation, (event) => {
-          clampSelection();
-          const start = response.selectionStart;
-          const end = response.selectionEnd;
-          if (!event.clipboardData || start === end) return;
-          event.clipboardData.setData("text/plain", response.value.slice(start, end));
-          event.preventDefault();
-          if (operation === "cut") {
-            response.setRangeText("", start, end, "start");
-            response.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteByCut" }));
-          }
-        });
-      }
-
-      function grow() {
-        response.style.height = "0px";
-        response.style.height = `${response.scrollHeight + 2}px`;
-      }
-
-      function fit() {
-        if (!response.clientWidth) return;
-        hero.style.fontSize = "";
-        const size = parseFloat(getComputedStyle(hero).fontSize);
-        const available = response.clientWidth - 6;
-        const sampleWidth = measure.getBoundingClientRect().width;
-        hero.style.fontSize = `${Math.min(size, size * available / sampleWidth)}px`;
-        grow();
-      }
-
-      response.addEventListener("beforeinput", (event) => {
-        clampSelection();
-        const start = response.selectionStart;
-        const end = response.selectionEnd;
-        if (event.inputType.startsWith("delete") && event.inputType.endsWith("Backward") && end <= prompt.length) {
-          event.preventDefault();
-        } else if (start < prompt.length) {
-          response.setSelectionRange(prompt.length, Math.max(prompt.length, end));
-        }
-      });
-
-      response.addEventListener("input", () => {
-        if (!response.value.startsWith(prompt)) {
-          response.value = previousValue;
-          response.setSelectionRange(prompt.length, prompt.length);
-        }
-        previousValue = response.value;
-        grow();
-      });
-
-      function focusResponse() {
-        response.focus({ preventScroll: true });
-        clampSelection();
-      }
-
-      document.addEventListener("pointerdown", (event) => {
-        if (document.body.classList.contains("reading") || event.button !== 0 ||
-            event.target.closest("a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
-        // Keep native focus and the current caret/selection before the browser can blur it.
-        event.preventDefault();
-        focusResponse();
-      }, { capture: true });
-
-      response.addEventListener("blur", () => {
-        queueMicrotask(() => {
-          if (document.hasFocus() && document.activeElement === document.body &&
-              !document.body.classList.contains("reading")) focusResponse();
-        });
-      });
-
-      window.addEventListener("resize", fit);
-      window.addEventListener("mend:layout", fit);
-      document.fonts.ready.then(fit);
-      fit();
-      response.focus({ preventScroll: true });
-      response.setSelectionRange(prompt.length, prompt.length);
 
       const floaterStage = document.querySelector(".hero-floaters");
       const floaterStyles = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
@@ -668,6 +602,7 @@
       document.addEventListener("visibilitychange", syncFloaters);
       floaterMotion.addEventListener("change", syncFloaters);
       response.addEventListener("input", syncFloaters);
+      window.addEventListener("mend:querychange", syncFloaters);
       document.fonts.ready.then(syncFloaters);
     </script>
   </body>
