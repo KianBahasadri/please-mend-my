@@ -338,8 +338,8 @@
           <p id="catalog-status" class="catalog-status" role="status" hidden></p>
         </section>
         <section id="search-results" class="search-results" aria-label="Repair search results" hidden>
-          <div class="results-heading"><p id="result-count" aria-live="polite"></p></div>
           <div id="result-cards" class="result-cards" role="list"></div>
+          <div class="results-heading"><p id="result-count" aria-live="polite"></p></div>
           <p id="no-results" class="empty-state" hidden>No matches yet. Try a device name, part, or repair.</p>
         </section>
         <section id="guide-panel" class="guide-panel" aria-label="Repair guide" hidden>
@@ -634,9 +634,15 @@
 
       async function floaterLoop(generation) {
         await wait(900);
+        let shown = 0;
         while (floatersRunning && generation === floaterGeneration) {
-          if (activeFloaters.size < floaterLimit()) spawnFloater(generation);
-          await wait(3200 + Math.random() * 1800);
+          if (activeFloaters.size < floaterLimit()) {
+            const before = activeFloaters.size;
+            spawnFloater(generation);
+            if (activeFloaters.size > before) shown += 1;
+          }
+          const gap = 3200 + Math.random() * 1800;
+          await wait(shown >= 3 ? gap * 2 : gap);
         }
       }
 
