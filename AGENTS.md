@@ -6,12 +6,15 @@
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt + "relationship" on one line in all fonts/screen sizes.
 - Delegate to subagents; one/repo area at a time; no clobbering.
-- Never: duplicate carets, shape changes on typing, busy meshes/curved bands; glow alone misses depth.
-- BG: docs/references/spotlight-wall-floor.png: offscreen spotlight + soft diagonal wall/floor seam, near/brighter→far/faded; system theme; static/fast; preserve input.
+- Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
+- BG: docs/references/spotlight-wall-floor.png: visible offscreen upper-right spotlight on wall/floor + soft diagonal seam, near/brighter→far/faded; system theme; static/fast.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
 - Performance + response latency are CLASS-1: measure before/after deploy; slow => optimize/remove; sustained speed > cost; no decorative bottlenecks.
 - Commit AND push regular work milestones.
+- Current work local only; no live/AWS deploy.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
 - CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
 - DNS: authoritative/public resolvers verified; local apex negative cache may linger (www works); never alter global DNS/hosts.
+- Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
+- Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.

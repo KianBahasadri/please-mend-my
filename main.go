@@ -24,7 +24,7 @@ import (
 
 // Embed only public site files; repository files cannot be requested.
 //
-//go:embed index.html assets/backgrounds.css assets/backgrounds.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
+//go:embed index.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
 var siteFiles embed.FS
 
 type representation struct {
@@ -41,7 +41,8 @@ type staticAsset struct {
 }
 
 type siteHandler struct {
-	assets map[string]*staticAsset
+	assets  map[string]*staticAsset
+	catalog *catalogHandler
 }
 
 func newHandler() (*siteHandler, error) {
@@ -95,7 +96,17 @@ func newHandler() (*siteHandler, error) {
 		}
 		return nil
 	})
+	if err == nil && os.Getenv("CATALOG_DIR") != "" {
+		handler.catalog, err = openCatalog(os.Getenv("CATALOG_DIR"))
+	}
 	return handler, err
+}
+
+func (handler *siteHandler) Close() error {
+	if handler.catalog != nil {
+		return handler.catalog.root.Close()
+	}
+	return nil
 }
 
 func newRepresentation(body []byte) representation {
@@ -118,11 +129,24 @@ func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Reque
 		}
 		return
 	}
+	if request.URL.Path == "/api/catalog" || strings.HasPrefix(request.URL.Path, "/api/guides/") || strings.HasPrefix(request.URL.Path, "/media/") {
+		if handler.catalog == nil {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Error(w, "catalog unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		handler.catalog.ServeHTTP(w, request)
+		return
+	}
 	asset, found := handler.assets[request.URL.Path]
 	if !found {
 		http.NotFound(w, request)
 		return
 	}
+	serveStaticAsset(w, request, asset)
+}
+
+func serveStaticAsset(w http.ResponseWriter, request *http.Request, asset *staticAsset) {
 	selected := &asset.plain
 	gzipQuality, identityQuality := encodingQualities(request.Header.Values("Accept-Encoding"))
 	if asset.compressed.body != nil {
@@ -211,6 +235,7 @@ func serve(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("prepare static assets: %w", err)
 	}
+	defer handler.Close()
 	address := os.Getenv("ADDR")
 	if address == "" {
 		address = ":8080"

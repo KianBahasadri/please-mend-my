@@ -18,6 +18,7 @@ func testHandler(t *testing.T) *siteHandler {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = handler.Close() })
 	return handler
 }
 
