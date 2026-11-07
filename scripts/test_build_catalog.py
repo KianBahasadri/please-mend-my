@@ -23,89 +23,157 @@ class ReleaseTests(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.data, self.releases = self.root / "build", self.root / "releases"
-        self.ingest = self.root / "ingest.py"
-        self.ingest.write_text("# pinned fixture input\n")
-        self.input = patch.object(builder, "INGEST", self.ingest)
-        self.input.start()
-        self.addCleanup(self.input.stop)
+        # Every mutable input is a tiny fixture, independent of source builds.
+        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX"):
+            path = self.root / (name.lower() + ".py")
+            path.write_text("# pinned fixture " + name + "\n")
+            fixture = patch.object(builder, name, path)
+            fixture.start()
+            self.addCleanup(fixture.stop)
+        self.ingest, self.wikimed = builder.INGEST, builder.WIKIMED
         self.space = patch.object(builder.shutil, "disk_usage", return_value=type("Space", (), {"free": 64 * 1024**3})())
         self.space.start()
         self.addCleanup(self.space.stop)
+        self.commands = []
+
+    @staticmethod
+    def script(args):
+        return Path(args[args.index("--script") + 1]) if "--script" in args else None
+
+    @staticmethod
+    def argument(args, flag):
+        return Path(args[args.index(flag) + 1])
+
+    def write_runtime(self, runtime, sources):
+        runtime.mkdir(parents=True, exist_ok=True)
+        (runtime / "guides").mkdir(exist_ok=True)
+        (runtime / "media").mkdir(exist_ok=True)
+        for source in sources:
+            (runtime / "guides" / (source + ".json")).write_text(source + " guide")
+            (runtime / "media" / (source + ".png")).write_bytes(source.encode())
+        index = json.dumps({"items": [[source, source + " fixture"] for source in sources]}).encode()
+        packed = gzip.compress(index, mtime=0)
+        (runtime / "index.json").write_bytes(index)
+        (runtime / "index.json.gz").write_bytes(packed)
+        pins = [{"id": source, "archiveChecksumVerified": True, "zimChecksumVerified": True,
+                 "archiveSha256": ("a" if source == "ifixit" else "b") * 64,
+                 "expectedSha256": ("a" if source == "ifixit" else "b") * 64} for source in sources]
+        for pin in pins:
+            if pin["id"] == "first-aid":
+                pin.update(sourceFormat="pdf", documentVerified=True, zimChecksumVerified=None)
+        manifest = {"runtimeComplete": True, "archiveChecksumVerified": True, "zimChecksumVerified": True,
+                    "archiveSha256": pins[0]["archiveSha256"], "expectedSha256": pins[0]["expectedSha256"],
+                    "revision": "fixture", "indexedItems": len(sources), "uniqueMediaFiles": len(sources),
+                    "indexBytes": len(index), "indexGzipBytes": len(packed)}
+        if len(sources) > 1:
+            manifest["sources"] = pins
+            manifest.update(sourceFormat="collection", sourceChecksumVerified=True, zimChecksumVerified=None)
+            manifest["searchEnrichment"] = {"version": 1}
+        elif sources == ["first-aid"]:
+            manifest.update(sourceFormat="pdf", documentVerified=True, zimChecksumVerified=None)
+        (runtime / "manifest.json").write_text(json.dumps(manifest))
+
+    @staticmethod
+    def update_manifest(runtime, **changes):
+        path = runtime / "manifest.json"
+        manifest = json.loads(path.read_text())
+        manifest.update(changes)
+        path.write_text(json.dumps(manifest))
 
     def fake_command(self, args, **kwargs):
         if args[1:] == ["--version"]:
             return subprocess.CompletedProcess(args, 0, "uv " + builder.UV_VERSION + "\n")
-        self.assertIn(builder.PYTHON_VERSION, args)
-        self.assertEqual(args[-2:], ["--data-dir", str(self.data)])
-        if str(builder.ENRICH) in args:
-            manifest = self.data / "runtime/manifest.json"
-            data = json.loads(manifest.read_text())
-            data["searchEnrichment"] = {"version": 1}
-            manifest.write_text(json.dumps(data))
-            return subprocess.CompletedProcess(args, 0)
-        if str(builder.SEARCH_INDEX) in args:
-            manifest = self.data / "runtime/manifest.json"
-            data = json.loads(manifest.read_text())
-            data["searchIndex"] = {"version": 1}
-            manifest.write_text(json.dumps(data))
-            return subprocess.CompletedProcess(args, 0)
-        runtime = self.data / "runtime"
-        runtime.mkdir(parents=True, exist_ok=True)
-        (runtime / "guides").mkdir(exist_ok=True)
-        (runtime / "media").mkdir(exist_ok=True)
-        index = b'{"items":[["fixture","Example repair"]]}'
-        packed = gzip.compress(index, mtime=0)
-        (runtime / "index.json").write_bytes(index)
-        (runtime / "index.json.gz").write_bytes(packed)
-        manifest = {"runtimeComplete": True, "archiveChecksumVerified": True, "zimChecksumVerified": True,
-                    "archiveSha256": "a" * 64, "expectedSha256": "a" * 64,
-                    "revision": "fixture", "indexedItems": 1, "uniqueMediaFiles": 1,
-                    "indexBytes": len(index), "indexGzipBytes": len(packed)}
-        (runtime / "manifest.json").write_text(json.dumps(manifest))
+        self.assertEqual(args[1:5], ["run", "--python", builder.PYTHON_VERSION, "--script"])
+        script = self.script(args)
+        self.commands.append(script)
+        if script == builder.INGEST:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data)
+            self.write_runtime(self.data / "runtime", ["ifixit"])
+        elif script == builder.ENRICH:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data)
+            self.update_manifest(self.data / "runtime", searchEnrichment={"version": 1})
+        elif script == builder.WIKIMED:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data / "wikimed")
+            self.write_runtime(self.data / "wikimed/runtime", ["wikimed"])
+        elif script == builder.FIRST_AID:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data / "first-aid")
+            self.write_runtime(self.data / "first-aid/runtime", ["first-aid"])
+        elif script == builder.MERGE:
+            source_paths = [Path(args[i + 1]) for i, arg in enumerate(args) if arg == "--source-runtime"]
+            self.assertEqual(source_paths, [self.data / "runtime", self.data / "wikimed/runtime",
+                                            self.data / "first-aid/runtime"])
+            runtime = self.argument(args, "--runtime-dir")
+            self.assertEqual(runtime.parent, self.data)
+            self.assertTrue(runtime.name.startswith(".merge-"))
+            self.assertEqual(list(runtime.iterdir()), [], "Each merge needs a fresh empty staging directory")
+            self.write_runtime(runtime, ["ifixit", "wikimed", "first-aid"])
+        elif script == builder.SEARCH_INDEX:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data)
+            runtime = self.argument(args, "--runtime-dir")
+            self.assertTrue(runtime.name.startswith(".merge-"))
+            self.update_manifest(runtime, searchIndex={"version": 1})
+        else:
+            self.fail("Unexpected pipeline command: " + str(args))
         return subprocess.CompletedProcess(args, 0)
+
+    def previous_release(self):
+        previous = self.releases / "previous"
+        previous.mkdir(parents=True)
+        (previous / "live").write_text("keep")
+        return previous
+
+    def assert_not_published(self, previous=None):
+        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assertEqual(list(self.data.glob(".merge-*")), [], "Failed staging must be cleaned up")
+        if previous:
+            self.assertEqual((previous / "live").read_text(), "keep")
 
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 4)
+            self.assertEqual(run.call_count, 7)
+        self.assertEqual(self.commands, [builder.INGEST, builder.ENRICH, builder.WIKIMED, builder.FIRST_AID, builder.MERGE,
+                                         builder.SEARCH_INDEX])
         self.assertEqual(release.name, builder.pipeline_key())
-        self.assertFalse((self.data / "runtime").exists())
+        self.assertTrue((self.data / "runtime/source-build.json").is_file())
+        self.assertTrue((self.data / "wikimed/runtime/manifest.json").is_file())
+        self.assertEqual((self.data / "runtime/guides/ifixit.json").read_text(), "ifixit guide")
+        self.assertEqual((release / "guides/wikimed.json").read_text(), "wikimed guide")
         receipt = json.loads((release / "ingest.json").read_text())
         self.assertEqual(receipt["pipelineSha256"], release.name)
         self.assertEqual(receipt["pythonVersion"], builder.PYTHON_VERSION)
+        self.assertEqual(receipt["uvVersion"], builder.UV_VERSION)
         self.assertEqual(receipt["searchIndex"], {"version": 1})
+        self.assertEqual([source["id"] for source in receipt["sources"]], ["ifixit", "wikimed", "first-aid"])
+        self.assertTrue(receipt["sources"][2]["documentVerified"])
+        self.assertIsNone(receipt["sources"][2]["zimChecksumVerified"])
         with patch.object(builder.subprocess, "run") as run:
             self.assertEqual(builder.build_release(self.data, self.releases), release)
             run.assert_not_called()
 
     def test_failed_build_leaves_previous_release_untouched(self):
-        previous = self.releases / "previous"
-        previous.mkdir(parents=True)
-        (previous / "live").write_text("keep")
+        previous = self.previous_release()
         def fail(args, **kwargs):
             result = self.fake_command(args, **kwargs)
-            if args[1] == "run":
+            if self.script(args) == builder.INGEST:
                 raise subprocess.CalledProcessError(1, args)
             return result
         with patch.object(builder.subprocess, "run", side_effect=fail):
             with self.assertRaises(subprocess.CalledProcessError):
                 builder.build_release(self.data, self.releases)
-        self.assertEqual((previous / "live").read_text(), "keep")
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assert_not_published(previous)
 
     def test_incomplete_metadata_cannot_publish(self):
+        previous = self.previous_release()
         def incomplete(args, **kwargs):
             result = self.fake_command(args, **kwargs)
-            if args[1] == "run":
-                manifest = self.data / "runtime/manifest.json"
-                data = json.loads(manifest.read_text())
-                data["runtimeComplete"] = False
-                manifest.write_text(json.dumps(data))
+            if self.script(args) == builder.MERGE:
+                self.update_manifest(self.argument(args, "--runtime-dir"), runtimeComplete=False)
             return result
         with patch.object(builder.subprocess, "run", side_effect=incomplete):
             with self.assertRaisesRegex(RuntimeError, "complete checksum-verified"):
                 builder.build_release(self.data, self.releases)
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assert_not_published(previous)
 
     def test_changed_pipeline_builds_a_separate_release(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
@@ -116,6 +184,37 @@ class ReleaseTests(unittest.TestCase):
         self.assertNotEqual(first, second)
         self.assertEqual((first / "ingest.json").read_bytes(), first_receipt)
         self.assertTrue((second / "ingest.json").is_file())
+        self.assertEqual(self.commands.count(builder.INGEST), 2)
+        self.assertEqual(self.commands.count(builder.ENRICH), 2)
+
+    def test_only_wikimed_change_reuses_ifixit_source_cache(self):
+        with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
+            first = builder.build_release(self.data, self.releases)
+            first_index = (first / "index.json").read_bytes()
+            ifixit_manifest = (self.data / "runtime/manifest.json").read_bytes()
+            self.commands.clear()
+            self.wikimed.write_text("# changed WikiMed archive pin\n")
+            second = builder.build_release(self.data, self.releases)
+        self.assertNotEqual(first, second)
+        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+        self.assertEqual((self.data / "runtime/manifest.json").read_bytes(), ifixit_manifest)
+        self.assertEqual((first / "index.json").read_bytes(), first_index)
+        self.assertTrue((second / "ingest.json").is_file())
+
+    def test_constituent_bad_pin_cannot_publish(self):
+        previous = self.previous_release()
+        def wrong_pin(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.MERGE:
+                runtime = self.argument(args, "--runtime-dir")
+                manifest = json.loads((runtime / "manifest.json").read_text())
+                manifest["sources"][1]["expectedSha256"] = "c" * 64
+                self.update_manifest(runtime, sources=manifest["sources"])
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=wrong_pin):
+            with self.assertRaisesRegex(RuntimeError, "checksum-verified"):
+                builder.build_release(self.data, self.releases)
+        self.assert_not_published(previous)
 
     def test_concurrent_build_is_rejected(self):
         self.data.mkdir()
@@ -126,18 +225,85 @@ class ReleaseTests(unittest.TestCase):
 
     def test_alias_failure_cannot_publish_completed_core_data(self):
         def fail_aliases(args, **kwargs):
-            if str(builder.ENRICH) in args:
+            if self.script(args) == builder.ENRICH:
                 raise subprocess.CalledProcessError(1, args)
             return self.fake_command(args, **kwargs)
         with patch.object(builder.subprocess, "run", side_effect=fail_aliases):
             with self.assertRaises(subprocess.CalledProcessError):
                 builder.build_release(self.data, self.releases)
         self.assertTrue((self.data / "runtime/manifest.json").is_file())
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assertFalse((self.data / "runtime/source-build.json").exists())
+        self.assert_not_published()
+
+    def test_wikimed_failure_cannot_publish_or_damage_cached_ifixit(self):
+        previous = self.previous_release()
+        def fail_wikimed(args, **kwargs):
+            if self.script(args) == builder.WIKIMED:
+                raise subprocess.CalledProcessError(1, args)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=fail_wikimed):
+            with self.assertRaises(subprocess.CalledProcessError):
+                builder.build_release(self.data, self.releases)
+        self.assertTrue(builder.ifixit_cached(self.data))
+        self.assertEqual((self.data / "runtime/guides/ifixit.json").read_text(), "ifixit guide")
+        self.assert_not_published(previous)
+        self.commands.clear()
+        with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
+            builder.build_release(self.data, self.releases)
+        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+
+    def test_incomplete_wikimed_cannot_reach_merge(self):
+        previous = self.previous_release()
+        def incomplete(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.WIKIMED:
+                self.update_manifest(self.data / "wikimed/runtime", zimChecksumVerified=False)
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=incomplete):
+            with self.assertRaisesRegex(RuntimeError, "complete checksum-verified"):
+                builder.build_release(self.data, self.releases)
+        self.assertNotIn(builder.MERGE, self.commands)
+        self.assert_not_published(previous)
+
+    def test_pdf_failure_or_missing_document_proof_cannot_reach_merge(self):
+        previous = self.previous_release()
+        def fail_pdf(args, **kwargs):
+            if self.script(args) == builder.FIRST_AID:
+                raise subprocess.CalledProcessError(1, args)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=fail_pdf):
+            with self.assertRaises(subprocess.CalledProcessError):
+                builder.build_release(self.data, self.releases)
+        self.assertNotIn(builder.MERGE, self.commands)
+        self.assert_not_published(previous)
+        self.commands.clear()
+        def unverified_pdf(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.FIRST_AID:
+                self.update_manifest(self.data / "first-aid/runtime", documentVerified=False)
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=unverified_pdf):
+            with self.assertRaisesRegex(RuntimeError, "checksum-verified"):
+                builder.build_release(self.data, self.releases)
+        self.assertNotIn(builder.MERGE, self.commands)
+        self.assert_not_published(previous)
+
+    def test_missing_merged_aliases_cannot_reach_index_preparation(self):
+        def missing_aliases(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.MERGE:
+                self.update_manifest(self.argument(args, "--runtime-dir"), searchEnrichment={})
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=missing_aliases):
+            with self.assertRaisesRegex(RuntimeError, "Merged alias enrichment did not finish"):
+                builder.build_release(self.data, self.releases)
+        self.assertNotIn(builder.SEARCH_INDEX, self.commands)
+        self.assert_not_published()
 
     def test_search_index_failure_cannot_publish_enriched_data(self):
+        previous = self.previous_release()
         def fail_index(args, **kwargs):
-            if str(builder.SEARCH_INDEX) in args:
+            if self.script(args) == builder.SEARCH_INDEX:
                 raise subprocess.CalledProcessError(1, args)
             return self.fake_command(args, **kwargs)
         with patch.object(builder.subprocess, "run", side_effect=fail_index):
@@ -145,17 +311,45 @@ class ReleaseTests(unittest.TestCase):
                 builder.build_release(self.data, self.releases)
         manifest = json.loads((self.data / "runtime/manifest.json").read_bytes())
         self.assertEqual(manifest["searchEnrichment"], {"version": 1})
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assert_not_published(previous)
 
     def test_missing_search_index_metadata_cannot_publish(self):
         def skip_index(args, **kwargs):
-            if str(builder.SEARCH_INDEX) in args:
+            if self.script(args) == builder.SEARCH_INDEX:
                 return subprocess.CompletedProcess(args, 0)
             return self.fake_command(args, **kwargs)
         with patch.object(builder.subprocess, "run", side_effect=skip_index):
             with self.assertRaisesRegex(RuntimeError, "Inverted search index did not finish"):
                 builder.build_release(self.data, self.releases)
-        self.assertFalse((self.releases / builder.pipeline_key()).exists())
+        self.assert_not_published()
+
+    def test_pipeline_key_tracks_every_script_and_pinned_runtime(self):
+        original = builder.pipeline_key()
+        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX"):
+            with self.subTest(input=name):
+                path = getattr(builder, name)
+                data = path.read_bytes()
+                path.write_bytes(data + b"# changed\n")
+                self.assertNotEqual(builder.pipeline_key(), original)
+                path.write_bytes(data)
+                self.assertEqual(builder.pipeline_key(), original)
+        for name in ("PYTHON_VERSION", "UV_VERSION"):
+            with self.subTest(input=name), patch.object(builder, name, "changed"):
+                self.assertNotEqual(builder.pipeline_key(), original)
+
+    def test_inputs_changed_during_build_cannot_publish_under_old_fingerprint(self):
+        previous = self.previous_release()
+        original_key = builder.pipeline_key()
+        def changed_inputs(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.SEARCH_INDEX:
+                builder.WIKIMED.write_text("# changed while building\n")
+            return result
+        with patch.object(builder.subprocess, "run", side_effect=changed_inputs):
+            with self.assertRaisesRegex(RuntimeError, "inputs changed during ingestion"):
+                builder.build_release(self.data, self.releases)
+        self.assertFalse((self.releases / original_key).exists())
+        self.assert_not_published(previous)
 
 
 class ConsoleKeyTests(unittest.TestCase):

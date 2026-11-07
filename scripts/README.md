@@ -1,28 +1,86 @@
 # Repair catalog ingestion
 
 ```sh
-python3 scripts/build_catalog.py              # same pinned, immutable build locally or on EC2
-uv run scripts/ingest_ifixit.py                 # download, verify, and build
-uv run scripts/ingest_ifixit.py --build-only    # reuse the complete download
-uv run scripts/ingest_ifixit.py --download-only
-uv run scripts/ingest_ifixit.py --reclassify-only # refresh source-graph categories only
+python3 scripts/build_catalog.py
+# The identical pipeline can use an EC2/local data directory on another disk:
+python3 scripts/build_catalog.py --data-dir /mnt/catalog/work --release-root /mnt/catalog/releases
 ```
 
-`build_catalog.py` pins uv 0.13.5 and Python 3.12.12; the ingestion script pins
-libzim/lxml and the archive revision, size, and SHA-256. Its default work cache is
+`build_catalog.py` downloads and combines iFixit, English WikiMed, and the U.S.
+military First Aid manual. It pins uv 0.13.5 and Python 3.12.12; the source scripts
+pin libzim 4.1.0, lxml 6.1.3, and PyMuPDF 1.28.2. Its default work cache is
 `catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
-The ingestion/build/enrichment/search scripts and vocabulary pins are fingerprinted; an unchanged completed release is reused
-without scanning its corpus. Interrupted downloads/extraction can resume, failed
-builds cannot publish a release, and a filesystem lock prevents overlapping builds.
-The same command runs on EC2 with `--data-dir` and `--release-root` pointing to
-server directories. EC2 downloads directly from public sources; it needs no local
-catalog upload. The existing local `catalog-data/runtime` is unaffected.
+The fingerprint covers the toolchain pins and all eight pipeline input files:
+`build_catalog.py`, `ingest_ifixit.py`, `enrich_search.py`, `search-vocabulary.json`,
+`ingest_wikimed.py`, `ingest_first_aid.py`, `merge_catalogs.py`, and `prepare_search.py`.
+An unchanged completed release is reused without downloading or scanning its
+corpus. A lock prevents overlapping builds; failed builds cannot replace a
+published release. EC2 downloads the same public sources and builds its own
+catalog; no local corpus, SQLite database, or response cache is uploaded.
+
+Pinned inputs:
+
+| Source | Archive | Bytes | SHA-256 |
+| --- | --- | ---: | --- |
+| iFixit | [ifixit_en_all_2025-12.zim](https://download.kiwix.org/zim/ifixit/ifixit_en_all_2025-12.zim) | 3,570,695,757 | `9bb5f3408707fd0300c6ef47a425c3217187f144cd9154a928183816aa72eead` |
+| WikiMed | [wikipedia_en_medicine_maxi_2026-10.zim](https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-10.zim) | 1,864,210,320 | `9a1570f2f346aa18694ee520e0483f19b7447f69e0970e2f727c53ccf0dcc7d6` |
+| First Aid | [UsArmyFirstAidManual.pdf](https://archive.org/download/UsArmyFirstAidManualFm4-25.11/UsArmyFirstAidManual.pdf) | 2,621,944 | `95fb01c941cdb385c152d045081ae011b59805931524e03192e953dc4e57af2f` |
+
+The Kiwix inputs require the pinned official Metalink size/SHA-256 and libzim's
+internal checksum. The PDF requires its pinned hashes/size, Archive.org source
+metadata, and successful parsing of all 227 pages. These are separate source
+proofs: a PDF never receives a fabricated ZIM-checksum flag. The combined
+`sources[]` metadata retains each proof, attribution, license, and source count;
+its top-level `archiveSha256` is explicitly an aggregate digest of source pins,
+not the checksum of another archive.
+
+The builder keeps source caches separate:
+
+- `<data-dir>/runtime/`: iFixit articles, media, and aliases. `source-build.json`
+  records the ingestion/enrichment/vocabulary input key for reuse.
+- `<data-dir>/wikimed/runtime/`: WikiMed articles and redirect-name aliases;
+  its raw ZIM, inventory, and media attribution remain beside that runtime.
+- `<data-dir>/first-aid/runtime/`: rough First Aid chapter entries and page
+  images. `first-aid/source/` preserves the original PDF, every page's extracted
+  text, full outline, and document/provenance metadata.
+
+`merge_catalogs.py` builds a fresh stage, hardlinks article/media files, retains
+distinct source licenses, and remaps shared alias groups after deterministic
+sorting. It rejects incomplete sources, conflicting IDs/categories, symlinks,
+missing files, and unequal media with a colliding name. Source caches and release
+storage must share a filesystem; article/media files are not duplicated during
+the merge. `prepare_search.py` then rebuilds postings for the combined item
+positions. The completed runtime, index, and constituent-source receipt are
+renamed into the immutable release directory. Source/download/indexing failures leave
+the currently served release intact.
+
+WikiMed is the English Wikipedia medicine selection, distinct from the separately
+named MDWiki archive. Full main articles, clinical warnings, and references are
+retained; navigation/executable markup is removed and links/images become local.
+Redirect titles supply aliases without inferred disease equivalences. Text keeps
+CC BY-SA 4.0 attribution and original/history links. Images retain separate
+licensing; archive paths and encountered file-description links are recorded.
+The original archive and inventory retain provenance.
+
+First Aid is **23 December 2002, Change 1 dated 15 July 2004**, in the public domain
+as U.S. federal government material. Entries follow PDF chapter/bookmark
+boundaries and deliberately retain rough page text with rendered page images.
+This preserves source material for the planned LLM restructuring and custom
+entry pages. WikiMed and First Aid use `health` / **Health & medicine**, separate
+from iFixit's `medical` / **Medical equipment** category.
+
+Combined source counts, index size, and search measurements will be recorded
+after the real build. ARM64 ingestion and deployment of this combined release
+have not yet been verified here. The measurements below describe earlier
+iFixit-only releases.
 
 Use `CATALOG_DIR=<printed release path> go run .` to serve a completed snapshot.
 `scripts/validate_catalog.py` is an explicit, optional full audit; deployment and
-the build wrapper never invoke it. Actual English-content filtering remains pending.
+the build wrapper never invoke it. It currently describes the older iFixit-only
+catalog. Actual English-content filtering remains pending. Never rebuild a source
+runtime while a server serves it; serve an immutable release instead.
 
-The canonical build also runs `enrich_search.py` before publication. It downloads
+The iFixit stage runs `enrich_search.py` before merging. It downloads
 21 explicitly mapped Wikidata object classes at pinned revisions, caches their
 source JSON in `raw/wikidata`, and extracts English labels/aliases. Exact iFixit
 device/category paths anchor those classes; guides inherit them through the saved
@@ -47,21 +105,20 @@ matches; numeric-bearing query chunks remain literal. All dictionaries and
 postings are prepared before publication. Queries use only the browser's loaded
 data, with no server or external search requests.
 
-For an unpublished completed local core snapshot only:
+Tests use tiny generated fixtures and the pinned native dependencies:
 
 ```sh
-python3 scripts/enrich_search.py --data-dir catalog-data
-python3 scripts/prepare_search.py --data-dir catalog-data
-python3 -m unittest discover -s scripts -p 'test_*.py'
+uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==1.28.2 python -m unittest discover -s scripts -p 'test_*.py'
 node --test scripts/test_search_worker.cjs
 ```
 
-Never enrich a snapshot while a server serves it. Production enrichment runs only
-inside the unpublished build; download/enrichment failure leaves the live release
-unchanged. `bench_search.cjs` compares actual worker computation against a saved
+For isolated source work, the three `ingest_*.py` scripts accept `--data-dir` and
+`--download-only` / `--build-only`; the canonical builder handles all required
+download, extraction, alias, merge, and posting stages automatically.
+`bench_search.cjs` compares actual worker computation against a saved
 baseline without opening a browser; its numbers are not browser end-to-end latency.
 
-Inverted-index measurements on the 103,473-item catalog (Linux x64, Intel
+Historical inverted-index measurements on the 103,473-item iFixit catalog (Linux x64, Intel
 i7-13650HX, Node v26.12.0; isolated processes running the actual worker):
 
 | Probe | Aliases + linear scan | Inverted + stems + typos |
@@ -98,7 +155,7 @@ Reproduce a comparison against a saved prior worker/index:
 node --expose-gc scripts/bench_search.cjs BEFORE.json BEFORE-worker.js AFTER.json assets/search-worker.js
 ```
 
-Earlier alias-stage measurements on the 103,473-item catalog (Node v26.12.0, isolated
+Historical alias-stage measurements on the 103,473-item iFixit catalog (Node v26.12.0, isolated
 processes, 30 warmup searches followed by 100 measured searches each):
 
 | Probe | Before | With aliases |
@@ -116,30 +173,31 @@ remains at 53 matches. The benchmark permits one index request at startup and no
 requests while searching. These are workstation Node measurements; browser/mobile
 latency and memory will differ.
 
-The tracked [catalog summary](catalog-summary.json) records the verified source,
-full item/category counts, index size, and completed audit scope; generated corpus
+The tracked [catalog summary](catalog-summary.json) records the historical iFixit
+source, item/category counts, index size, and completed audit scope; generated corpus
 files and the detailed quality report stay local and ignored by Git.
 
-The source is the complete English `ifixit_en_all_2025-12.zim` archive listed by
+The iFixit source is the complete English `ifixit_en_all_2025-12.zim` archive listed by
 the [Kiwix catalog](https://browse.library.kiwix.org/#lang=eng&category=iFixit).
 The official Metalink size and SHA-256 and libzim's internal checksum are checked
 before extraction. Downloads and extracted media can resume after interruption.
 
-Generated data stays in the Git-ignored `catalog-data/` directory:
+For each ZIM source cache, generated data stays below the ignored data directory:
 
 - `raw/`: original ZIM, Metalink, and source references.
 - `catalog.sqlite`: normalized item inventory, source category graph, and provenance.
-- `runtime/`: complete compact browser index, full sanitized article JSON/gzip,
+- `runtime/`: source browser index, full sanitized article JSON/gzip,
   and content-addressed local images.
 - `manifest.json`: source checksums, counts, transformations, and license details.
-- `quality-report.json`: complete JSON/gzip, HTML, link/media, and database checks.
+- `quality-report.json`, when present: a historical explicitly requested audit;
+  the build and deployment do not produce one.
 
 `runtime/manifest.json` is written last, with `runtimeComplete: true`, after all
 indexed articles and media have been processed. `index-preview.json`, when
 present, is only an ingestion benchmark artifact; it must never be published as
 the finished catalog. Stop local catalog servers before rebuilding their data.
 
-Category assignment follows the source Device category graph; title fallback
+For iFixit, category assignment follows the source Device category graph; title fallback
 and unresolved items are counted separately in the manifest. Specific Software
 and Smartwatch source roots classify as Technology rather than inheriting generic
 Skills/Apparel categories. Category metadata can be refreshed without re-extracting
@@ -151,6 +209,6 @@ original archive rather than becoming search results.
 
 Source content and adapted article HTML retain [iFixit's CC BY-NC-SA 3.0
 license](https://www.ifixit.com/Info/Licensing): attribution, noncommercial use,
-and share-alike. Each article carries the author/source/license and identifies
-formatting changes. This ingestion retrieves documents for reading and search;
+and share-alike. Each article carries the author/source/license; transformation
+details remain in the source manifest. This ingestion retrieves documents for reading and search;
 it does not train a model. Missing external manuals remain external source links.
