@@ -11,3 +11,5 @@
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
 - Speed is class-1 everywhere: slow => remove/replace; no decorative bottlenecks.
 - Commit AND push regular work milestones.
+- Live: http://32.193.25.68 (us-east-1/c8g.xlarge); redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
+- Connect pleasemendmy.com via user's Cloudflare DNS/proxy/HTTPS.

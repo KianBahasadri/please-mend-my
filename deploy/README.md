@@ -1,0 +1,55 @@
+Deploy the embedded Go server directly on a non-burstable `c8g.xlarge` (4 vCPU, 8 GiB), encrypted 20 GiB gp3, and a stable Elastic IP. No proxy, container, or server-side build. The stack owns its VPC/subnet; HTTP 80 and HTTPS 443 are public and SSH 22 admits only your current IPv4 `/32`.
+
+Live deployment: [http://32.193.25.68](http://32.193.25.68), stack `please-mend-my`, `us-east-1`, instance `i-02c98fc866ab3b13b` (`aarch64`, 4 vCPU). `/healthz` and the systemd service are active.
+
+Measured in this environment:
+
+- Loopback `GET /`, 5 warmups then 200 gzip/keep-alive transactions: p50 **0.076 ms**, p95 **0.092 ms**.
+- Workstation network TTFB, 40 warm requests: p50 **31.81 ms**, p95 **35.18 ms**.
+- Independent cold Firefox navigation: DOMContentLoaded **288 ms**, load **365 ms**, **32,011 bytes** transferred.
+
+Systemd reported **11,894,784 bytes (~11.3 MiB)** of service memory. These samples describe these probes, not maximum capacity or latency from other locations. Verified compute pricing at deployment: **$0.15952/hour (~$116.45 per 730 hours)**, plus disk, public IPv4, and egress.
+
+Prerequisites: authenticated AWS CLI, Go matching `go.mod`, OpenSSH, and curl. From the repository:
+
+```bash
+aws login
+AWS_REGION=us-east-1 bash deploy/ec2.sh
+```
+
+The script builds a static Linux/ARM64 binary locally, chooses a zone offering `c8g.xlarge`, imports a project SSH public key, creates/updates CloudFormation stack `please-mend-my`, waits for cloud-init, installs the binary atomically, restarts systemd, and checks `/healthz`. Re-run it for updates; deployment never builds or installs dependencies on EC2. `AWS_PROFILE`, `AWS_REGION`, `PMM_STACK`, `PMM_SSH_KEY`, and `PMM_KEY_NAME` can override defaults. The imported key must match the local key and carry `Project=please-mend-my`; unrelated stacks/keys are rejected.
+
+Private keys stay under `~/.ssh/`; build files live in an automatically removed temporary directory. Project host keys use `~/.ssh/please-mend-my_known_hosts`, with trust on first use for a new IP and strict verification afterward. A changed host key stops deployment: verify the replacement instance's fingerprint through AWS before intentionally removing that IP's old entry. No credentials or deployment state belong in the repository.
+
+The [public SSM AMI parameter](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/finding-an-ami-parameter-store.html) selects Amazon Linux 2023 ARM64 at stack deployment. Systemd runs the binary as a dynamic unprivileged user with only the capability to bind port 80. CloudFormation outputs `PublicIp`, `Url`, and `InstanceId`.
+
+Inspect the deployment:
+
+```bash
+aws cloudformation describe-stacks --stack-name please-mend-my --query 'Stacks[0].Outputs'
+ssh -i ~/.ssh/please-mend-my_ec2_ed25519 -o UserKnownHostsFile=~/.ssh/please-mend-my_known_hosts ec2-user@PUBLIC_IP 'sudo systemctl status please-mend-my; sudo journalctl -u please-mend-my -n 30 --no-pager'
+```
+
+Removing the CloudFormation stack terminates this instance and deletes its disk/network/Elastic IP; the imported SSH key remains available for reuse.
+
+Cloudflare setup for `pleasemendmy.com` is explicit and separate from EC2 deployment. Save a zone-scoped token with Zone Read, DNS Edit, SSL and Certificates Edit, and Zone Settings Edit at `~/.config/please-mend-my/cloudflare-token` (mode `0600`), or set `CLOUDFLARE_API_TOKEN`. Python 3 and OpenSSL are needed locally; credentials never belong in the repo.
+
+```bash
+python3 deploy/cloudflare.py                 # Read only: zone, apex/www DNS, SSL settings.
+python3 deploy/cloudflare.py origin-cert     # Issue/reuse local P-256 Origin CA certificate.
+AWS_REGION=us-east-1 bash deploy/ec2.sh       # Install binary and local TLS credentials.
+# Verify origin TLS and hostname using Cloudflare's Origin CA trust before switching DNS.
+python3 deploy/cloudflare.py sync            # Explicitly apply DNS and SSL changes.
+```
+
+Certificates stay at `~/.config/please-mend-my/tls/origin.crt` and `origin.key` (`PMM_TLS_DIR` overrides). If both exist, `ec2.sh` uploads them through a private temporary directory, root-installs them under `/etc/please-mend-my/tls`, and adds this systemd drop-in before restart:
+
+```ini
+[Service]
+LoadCredential=tls.crt:/etc/please-mend-my/tls/origin.crt
+LoadCredential=tls.key:/etc/please-mend-my/tls/origin.key
+Environment=TLS_CERT=%d/tls.crt
+Environment=TLS_KEY=%d/tls.key
+```
+
+The Go process serves TLS directly on 443 and keeps HTTP 80 active. With neither local TLS file, deployment stays HTTP-only and preserves any existing remote TLS drop-in; exactly one file is rejected. Keep both local files for redeployments or instance replacement. `cloudflare.py sync` creates/updates only a proxied apex A record to `32.193.25.68` and proxied `www` CNAME to the apex, sets Full (strict) and Always Use HTTPS, and refuses conflicting/duplicate DNS records without deleting anything. It never changes MX/TXT or unrelated names. The [Origin CA documentation](https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/) explains certificate issuance and trust; these origin certificates are for Cloudflare-to-server TLS, while Cloudflare presents its publicly trusted edge certificate to browsers.

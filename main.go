@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"crypto/tls"
 	"embed"
 	"errors"
 	"fmt"
@@ -183,6 +184,24 @@ func encodingQualities(headers []string) (gzipQuality, identityQuality float64) 
 }
 
 func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return serve(ctx)
+}
+
+func serve(ctx context.Context) error {
+	certificateFile, keyFile := os.Getenv("TLS_CERT"), os.Getenv("TLS_KEY")
+	if (certificateFile == "") != (keyFile == "") {
+		return errors.New("TLS_CERT and TLS_KEY must be set together")
+	}
+	var tlsConfig *tls.Config
+	if certificateFile != "" {
+		certificate, err := tls.LoadX509KeyPair(certificateFile, keyFile)
+		if err != nil {
+			return fmt.Errorf("load TLS certificate and key: %w", err)
+		}
+		tlsConfig = &tls.Config{MinVersion: tls.VersionTLS12, Certificates: []tls.Certificate{certificate}}
+	}
 	handler, err := newHandler()
 	if err != nil {
 		return fmt.Errorf("prepare static assets: %w", err)
@@ -191,37 +210,78 @@ func run() error {
 	if address == "" {
 		address = ":8080"
 	}
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		return err
+	type endpoint struct {
+		address   string
+		tlsConfig *tls.Config
 	}
-	server := &http.Server{
-		Handler:           handler,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    16 << 10,
-	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	serveError := make(chan error, 1)
-	go func() { serveError <- server.Serve(listener) }()
-	log.Printf("serving embedded site on %s", listener.Addr())
-	select {
-	case err = <-serveError:
-	case <-ctx.Done():
-		stop()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		if err = server.Shutdown(shutdownCtx); err != nil {
-			_ = server.Close()
-			return fmt.Errorf("shutdown: %w", err)
+	endpoints := []endpoint{{address: address}}
+	if tlsConfig != nil {
+		tlsAddress := os.Getenv("TLS_ADDR")
+		if tlsAddress == "" {
+			tlsAddress = ":443"
 		}
-		err = <-serveError
+		endpoints = append(endpoints, endpoint{tlsAddress, tlsConfig})
+	}
+	type runningServer struct {
+		server   *http.Server
+		listener net.Listener
+	}
+	var servers []runningServer
+	defer func() {
+		for _, running := range servers {
+			_ = running.server.Close()
+			_ = running.listener.Close()
+		}
+	}()
+	// Prepare all listeners before serving either protocol, so startup is atomic.
+	for _, endpoint := range endpoints {
+		listener, err := net.Listen("tcp", endpoint.address)
+		if err != nil {
+			return fmt.Errorf("listen on %s: %w", endpoint.address, err)
+		}
+		server := &http.Server{
+			Handler:           handler,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      15 * time.Second,
+			IdleTimeout:       60 * time.Second,
+			MaxHeaderBytes:    16 << 10,
+			TLSConfig:         endpoint.tlsConfig,
+		}
+		servers = append(servers, runningServer{server, listener})
+	}
+	serveErrors := make(chan error, len(servers))
+	for _, running := range servers {
+		go func() {
+			if running.server.TLSConfig != nil {
+				serveErrors <- running.server.ServeTLS(running.listener, "", "")
+			} else {
+				serveErrors <- running.server.Serve(running.listener)
+			}
+		}()
+		protocol := "HTTP"
+		if running.server.TLSConfig != nil {
+			protocol = "HTTPS"
+		}
+		log.Printf("serving embedded site over %s on %s", protocol, running.listener.Addr())
+	}
+	select {
+	case err = <-serveErrors:
+	case <-ctx.Done():
 	}
 	if errors.Is(err, http.ErrServerClosed) {
-		return nil
+		err = nil
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	shutdownErrors := make(chan error, len(servers))
+	for _, running := range servers {
+		go func() { shutdownErrors <- running.server.Shutdown(shutdownCtx) }()
+	}
+	for range servers {
+		if shutdownErr := <-shutdownErrors; shutdownErr != nil {
+			err = errors.Join(err, fmt.Errorf("shutdown: %w", shutdownErr))
+		}
 	}
 	return err
 }

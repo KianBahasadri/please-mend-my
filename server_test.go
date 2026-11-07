@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -126,5 +127,20 @@ func TestFontRangesAndHealth(t *testing.T) {
 		if method == http.MethodHead && response.Body.Len() != 0 || method == http.MethodGet && response.Body.String() != "ok\n" {
 			t.Fatal("health response must obey GET/HEAD semantics")
 		}
+	}
+}
+
+func TestPartialTLSConfigurationFailsBeforeListening(t *testing.T) {
+	for _, provided := range []string{"TLS_CERT", "TLS_KEY"} {
+		t.Run(provided, func(t *testing.T) {
+			t.Setenv("ADDR", "invalid listening address")
+			t.Setenv("TLS_CERT", "")
+			t.Setenv("TLS_KEY", "")
+			t.Setenv(provided, "/missing/credential.pem")
+			err := serve(context.Background())
+			if err == nil || err.Error() != "TLS_CERT and TLS_KEY must be set together" {
+				t.Fatalf("partial TLS configuration must fail before binding: %v", err)
+			}
+		})
 	}
 }
