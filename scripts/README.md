@@ -1,5 +1,8 @@
 # Repair catalog ingestion
 
+For offline AI restructuring, the source-backed 100-entry pilot, strict v2
+validation, and static guide overlays, see [the restructuring pipeline](../docs/structured-guides.md).
+
 ```sh
 python3 scripts/build_catalog.py
 # The identical pipeline can use an EC2/local data directory on another disk:
@@ -10,9 +13,11 @@ python3 scripts/build_catalog.py --data-dir /mnt/catalog/work --release-root /mn
 military First Aid manual. It pins uv 0.13.5 and Python 3.12.12; the source scripts
 pin libzim 4.1.0, lxml 6.1.3, and PyMuPDF 1.28.2. Its default work cache is
 `catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
-The fingerprint covers the toolchain pins and all eight pipeline input files:
+The fingerprint covers the toolchain pins, active structured-guide cache, and
+all ten pipeline input files:
 `build_catalog.py`, `ingest_ifixit.py`, `enrich_search.py`, `search-vocabulary.json`,
-`ingest_wikimed.py`, `ingest_first_aid.py`, `merge_catalogs.py`, and `prepare_search.py`.
+`ingest_wikimed.py`, `ingest_first_aid.py`, `merge_catalogs.py`, `prepare_search.py`,
+`overlay_guides.py`, and `structured_guides.py`.
 An unchanged completed release is reused without downloading or scanning its
 corpus. A lock prevents overlapping builds; failed builds cannot replace a
 published release. EC2 downloads the same public sources and builds its own

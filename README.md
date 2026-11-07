@@ -55,6 +55,12 @@ External lookups run during ingestion only. User searches use the prepared
 browser index and same-origin catalog endpoints; page and worker connection
 policies block requests to outside services.
 
+Guide responses support both original HTML and offline-generated v2 steps,
+checklists, safety notes, and code-copy controls. The build overlays validated
+structured guides before publication; the Go handler keeps serving static,
+precompressed files. See [the restructuring pipeline](docs/structured-guides.md)
+for the repeatable source-backed pilot, cache, and local rollout commands.
+
 Build a self-contained Linux ARM64 binary for a Graviton EC2 instance:
 
 ```sh

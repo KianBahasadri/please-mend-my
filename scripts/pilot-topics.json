@@ -1,0 +1,669 @@
+{
+  "version": 1,
+  "description": "Deterministic source-title selectors; absent requested topics are reported and filled only from the same domain. No synthetic guides or new ingestion.",
+  "buckets": [
+    {
+      "id": "emergency-first-aid",
+      "quota": 25,
+      "categories": [
+        "health"
+      ],
+      "include": "first aid|bleeding|fracture|burn|choking|cardiopulmonary|resuscitation|shock|frostbite|hypothermia|heat stroke|anaphylaxis|poisoning|seizure|drowning|nosebleed|sprain|concussion|heart attack|cardiac arrest|myocardial infarction",
+      "exclude": "\\((?:album|song|EP|film)\\)|choking game|shell shock|shock index|burn mask|burn surgery|sock burn|glove burn|powder burn|nuclear|authentication|cover|table of contents|glossary|references|index —|preface",
+      "topics": [
+        {
+          "name": "Army basic first-aid measures",
+          "patterns": [
+            "^Chapter 2 Basic Measures For First Aid"
+          ]
+        },
+        {
+          "name": "Army specific injuries",
+          "patterns": [
+            "^Chapter 3 First Aid For Specific Injuries"
+          ]
+        },
+        {
+          "name": "Army fracture first aid",
+          "patterns": [
+            "^Chapter 4 First Aid For Fractures"
+          ]
+        },
+        {
+          "name": "Army climatic injuries",
+          "patterns": [
+            "^Chapter 5 First Aid For Climatic Injuries"
+          ]
+        },
+        {
+          "name": "Bleeding",
+          "patterns": [
+            "^Bleeding$"
+          ]
+        },
+        {
+          "name": "Burns",
+          "patterns": [
+            "^Burn$"
+          ]
+        },
+        {
+          "name": "Choking",
+          "patterns": [
+            "^Choking$"
+          ]
+        },
+        {
+          "name": "CPR",
+          "patterns": [
+            "^Cardiopulmonary resuscitation$"
+          ]
+        },
+        {
+          "name": "Bone fracture",
+          "patterns": [
+            "^Bone fracture$"
+          ]
+        },
+        {
+          "name": "Broken arm",
+          "patterns": [
+            "^Broken arm$",
+            "^Arm fracture$"
+          ]
+        },
+        {
+          "name": "Broken leg",
+          "patterns": [
+            "^Leg fracture$"
+          ]
+        },
+        {
+          "name": "Shock",
+          "patterns": [
+            "^Shock \\(circulatory\\)$",
+            "^Circulatory shock$"
+          ]
+        },
+        {
+          "name": "Heat stroke",
+          "patterns": [
+            "^Heat stroke$"
+          ]
+        },
+        {
+          "name": "Hypothermia",
+          "patterns": [
+            "^Hypothermia$"
+          ]
+        },
+        {
+          "name": "Frostbite",
+          "patterns": [
+            "^Frostbite$"
+          ]
+        },
+        {
+          "name": "Anaphylaxis",
+          "patterns": [
+            "^Anaphylaxis$"
+          ]
+        },
+        {
+          "name": "Poisoning",
+          "patterns": [
+            "^Poisoning$"
+          ]
+        },
+        {
+          "name": "Seizure",
+          "patterns": [
+            "^Seizure$"
+          ]
+        },
+        {
+          "name": "Drowning",
+          "patterns": [
+            "^Drowning$"
+          ]
+        },
+        {
+          "name": "Nosebleed",
+          "patterns": [
+            "^Nosebleed$"
+          ]
+        },
+        {
+          "name": "Sprain",
+          "patterns": [
+            "^Sprain$"
+          ]
+        },
+        {
+          "name": "Concussion",
+          "patterns": [
+            "^Concussion$"
+          ]
+        },
+        {
+          "name": "Cardiac arrest",
+          "patterns": [
+            "^Cardiac arrest$"
+          ]
+        },
+        {
+          "name": "Heart attack",
+          "patterns": [
+            "^Heart attack$",
+            "^Myocardial infarction$"
+          ]
+        },
+        {
+          "name": "First aid",
+          "patterns": [
+            "^First aid$"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "software-os",
+      "quota": 25,
+      "categories": [
+        "technology"
+      ],
+      "include": "linux|ubuntu|windows|macos|software|firmware|factory reset|bluetooth|wi-fi|wifi|boot|recovery|driver|reinstall|formatting|password|disk utility",
+      "exclude": "battery|screen|motherboard|logic board|display|speaker driver|driver replacement|wi.?fi (?:card|board|antenna|chip)|bluetooth (?:module|replacement)|teardown|WLAN|replacement|^iPad.*Wi-Fi|Remplacement|Bluetooth hat muscory|module cable|cable disconnection",
+      "topics": [
+        {
+          "name": "Linux audio",
+          "patterns": [
+            "linux.*(?:audio|sound)|pipewire"
+          ]
+        },
+        {
+          "name": "Wi-Fi disconnections",
+          "patterns": [
+            "(?:wi-fi|wifi).*(?:keeps? disconnecting|disconnects? frequently|disconnects? randomly)|(?:fix|troubleshoot).*(?:wi-fi|wifi).*(?:disconnect|unstable)"
+          ]
+        },
+        {
+          "name": "Windows boot repair",
+          "patterns": [
+            "windows.*(?:boot|startup).*repair|boot mgr missing"
+          ]
+        },
+        {
+          "name": "Bluetooth pairing",
+          "patterns": [
+            "^Bluetooth Pairing$"
+          ]
+        },
+        {
+          "name": "Bluetooth unstable connection",
+          "patterns": [
+            "^Fix unstable bluetooth connection$"
+          ]
+        },
+        {
+          "name": "Windows basic repair",
+          "patterns": [
+            "^How to Perform Basic Windows Repair$"
+          ]
+        },
+        {
+          "name": "Windows reset",
+          "patterns": [
+            "^Resetting Windows 10$"
+          ]
+        },
+        {
+          "name": "Windows USB installation",
+          "patterns": [
+            "^How to install Windows 10 over USB$"
+          ]
+        },
+        {
+          "name": "Windows password recovery",
+          "patterns": [
+            "^Windows 10 Login Password Forgot$"
+          ]
+        },
+        {
+          "name": "Ubuntu installation",
+          "patterns": [
+            "^How to Install Ubuntu Linux$"
+          ]
+        },
+        {
+          "name": "Arch Linux installation",
+          "patterns": [
+            "^Arch Linux Installation Guide$"
+          ]
+        },
+        {
+          "name": "Arch Linux GUI",
+          "patterns": [
+            "^How to install a GUI on Arch Linux$"
+          ]
+        },
+        {
+          "name": "Linux on a Windows PC",
+          "patterns": [
+            "^How to Install Linux on a Windows PC$"
+          ]
+        },
+        {
+          "name": "Legacy Linux installation",
+          "patterns": [
+            "^Install GNU/Linux on a Legacy System$"
+          ]
+        },
+        {
+          "name": "macOS safe mode",
+          "patterns": [
+            "^How to Boot a Mac Into Safe Mode$"
+          ]
+        },
+        {
+          "name": "macOS printer drivers",
+          "patterns": [
+            "^Install macOS Printer Drivers$"
+          ]
+        },
+        {
+          "name": "macOS installation",
+          "patterns": [
+            "^How to Install macOS High Sierra$"
+          ]
+        },
+        {
+          "name": "macOS backup recovery",
+          "patterns": [
+            "^How to Use Time Machine on macOS$"
+          ]
+        },
+        {
+          "name": "Bootable USB",
+          "patterns": [
+            "^How to create a bootable USB drive$"
+          ]
+        },
+        {
+          "name": "Chrome OS software",
+          "patterns": [
+            "^Chrome OS Software Guide$"
+          ]
+        },
+        {
+          "name": "Android recovery",
+          "patterns": [
+            "^Android Recovery Menu - Galaxy S20$"
+          ]
+        },
+        {
+          "name": "iPhone factory reset",
+          "patterns": [
+            "^How to Factory Reset an iPhone$"
+          ]
+        },
+        {
+          "name": "Console firmware reinstall",
+          "patterns": [
+            "^Install firmware on Xbox One S$"
+          ]
+        },
+        {
+          "name": "Firmware recovery",
+          "patterns": [
+            "^Jadoo7 Firmware Recovery$"
+          ]
+        },
+        {
+          "name": "Bootable SD card",
+          "patterns": [
+            "^Creating a Bootable SD Card$"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "everyday-handyman",
+      "quota": 25,
+      "categories": [
+        "household",
+        "handyman"
+      ],
+      "include": "pipe|toilet|flapper|hinge|drywall|door|faucet|plumb|sink|shower|cabinet|table|chair|lamp|leak|zipper|sew|hem|button|window|caulk|drawer|cord|plug|handle|wall|paint",
+      "exclude": "refrigerator|fridge|freezer|dishwasher|washing machine|microwave|vacuum|dryer|oven|coffee|espresso|drill|saw|lawn|mower|vehicle|car ",
+      "topics": [
+        {
+          "name": "Leaking pipe",
+          "patterns": [
+            "leak.*pipe|pipe.*leak"
+          ]
+        },
+        {
+          "name": "Toilet flapper",
+          "patterns": [
+            "toilet.*flapper|flapper"
+          ]
+        },
+        {
+          "name": "Squeaky door hinge",
+          "patterns": [
+            "squeak.*(?:door|hinge)|(?:door|hinge).*squeak"
+          ]
+        },
+        {
+          "name": "Drywall repair",
+          "patterns": [
+            "drywall.*(?:repair|patch)|(?:repair|patch).*drywall"
+          ]
+        },
+        {
+          "name": "Leaking faucet",
+          "patterns": [
+            "(?:leak|drip).*faucet|faucet.*(?:leak|drip)"
+          ]
+        },
+        {
+          "name": "Toilet repair",
+          "patterns": [
+            "toilet.*(?:repair|replacement|flush)|(?:repair|replace).*toilet"
+          ]
+        },
+        {
+          "name": "Shower head",
+          "patterns": [
+            "shower head.*(?:replacement|repair)|(?:replace|fix).*shower head"
+          ]
+        },
+        {
+          "name": "Sink drain",
+          "patterns": [
+            "sink.*drain|drain.*sink"
+          ]
+        },
+        {
+          "name": "Door handle",
+          "patterns": [
+            "door handle.*(?:replacement|repair)|(?:replace|fix).*door handle"
+          ]
+        },
+        {
+          "name": "Door hinge",
+          "patterns": [
+            "door hinge.*(?:replacement|repair)|(?:replace|fix).*door hinge"
+          ]
+        },
+        {
+          "name": "Door closer",
+          "patterns": [
+            "door closer.*(?:replacement|repair)|(?:replace|fix).*door closer"
+          ]
+        },
+        {
+          "name": "Screen door",
+          "patterns": [
+            "screen door.*(?:replacement|repair)|(?:replace|fix).*screen door"
+          ]
+        },
+        {
+          "name": "Cabinet hinge",
+          "patterns": [
+            "cabinet.*hinge|hinge.*cabinet"
+          ]
+        },
+        {
+          "name": "Drawer repair",
+          "patterns": [
+            "drawer.*(?:repair|replacement)|(?:repair|replace).*drawer"
+          ]
+        },
+        {
+          "name": "Chair repair",
+          "patterns": [
+            "chair.*(?:repair|replacement)|(?:repair|replace).*chair"
+          ]
+        },
+        {
+          "name": "Table repair",
+          "patterns": [
+            "^How to Reattach a Broken Table Leg$",
+            "^How to Fix a Wobbling Living Room Table$"
+          ]
+        },
+        {
+          "name": "Lamp switch",
+          "patterns": [
+            "lamp.*switch|switch.*lamp"
+          ]
+        },
+        {
+          "name": "Lamp cord",
+          "patterns": [
+            "lamp.*cord|cord.*lamp"
+          ]
+        },
+        {
+          "name": "Electrical plug",
+          "patterns": [
+            "(?:electrical|power).*plug.*(?:replacement|repair)|(?:replace|repair).*plug"
+          ]
+        },
+        {
+          "name": "Window repair",
+          "patterns": [
+            "window.*(?:repair|replacement)|(?:repair|replace).*window"
+          ]
+        },
+        {
+          "name": "Wall hole repair",
+          "patterns": [
+            "(?:wall|drywall).*hole|hole.*(?:wall|drywall)"
+          ]
+        },
+        {
+          "name": "Caulking",
+          "patterns": [
+            "caulk"
+          ]
+        },
+        {
+          "name": "Zipper repair",
+          "patterns": [
+            "zipper.*(?:repair|replacement)|(?:repair|replace).*zipper"
+          ]
+        },
+        {
+          "name": "Button sewing",
+          "patterns": [
+            "sew.*button|button.*sew"
+          ]
+        },
+        {
+          "name": "Clothing hem",
+          "patterns": [
+            "\\bhem(?:ming)?\\b"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "consumer-hardware",
+      "quota": 25,
+      "categories": [
+        "technology"
+      ],
+      "include": "battery replacement|joy-con|thermal paste|drift|screen replacement|keyboard replacement|ssd replacement|fan replacement|charging port|headphone jack|stick replacement|trackpad|hard drive replacement|ram replacement",
+      "exclude": "drift (?:hd|ghost)|joy-con (?:teardown|strap)|why!|Remplacement|Batterie|Austausch",
+      "topics": [
+        {
+          "name": "Laptop battery",
+          "patterns": [
+            "^ThinkPad T420 Battery Replacement$",
+            "(?:MacBook|ThinkPad|Dell Latitude|Dell Inspiron|HP Pavilion).*Battery Replacement"
+          ]
+        },
+        {
+          "name": "Joy-Con drift",
+          "patterns": [
+            "Joy-Con.*(?:Joystick|Control Stick) Replacement|Joy-Con.*Drift"
+          ]
+        },
+        {
+          "name": "Laptop thermal paste",
+          "patterns": [
+            "(?:MacBook|ThinkPad|Laptop).*Thermal Paste|Thermal Paste.*(?:MacBook|ThinkPad|Laptop)"
+          ]
+        },
+        {
+          "name": "Laptop SSD",
+          "patterns": [
+            "(?:MacBook|ThinkPad|HP|Dell).*SSD Replacement"
+          ]
+        },
+        {
+          "name": "Laptop RAM",
+          "patterns": [
+            "(?:MacBook|ThinkPad|Pavilion).*RAM Replacement"
+          ]
+        },
+        {
+          "name": "Laptop keyboard",
+          "patterns": [
+            "(?:MacBook|ThinkPad|HP|Dell).*Keyboard Replacement"
+          ]
+        },
+        {
+          "name": "Laptop fan",
+          "patterns": [
+            "(?:MacBook|ThinkPad|HP|Dell).*Fan Replacement"
+          ]
+        },
+        {
+          "name": "Laptop trackpad",
+          "patterns": [
+            "(?:MacBook|ThinkPad|HP|Dell).*Trackpad Replacement"
+          ]
+        },
+        {
+          "name": "iPhone battery",
+          "patterns": [
+            "^iPhone 13 Battery Replacement$",
+            "^iPhone.*Battery Replacement$"
+          ]
+        },
+        {
+          "name": "Galaxy battery",
+          "patterns": [
+            "^Samsung Galaxy S21 Battery Replacement$",
+            "^Samsung Galaxy.*Battery Replacement$"
+          ]
+        },
+        {
+          "name": "Pixel battery",
+          "patterns": [
+            "^Google Pixel 6 Battery Replacement$",
+            "^Google Pixel.*Battery Replacement$"
+          ]
+        },
+        {
+          "name": "iPhone screen",
+          "patterns": [
+            "^iPhone 13 Screen Replacement$",
+            "^iPhone.*Screen Replacement$"
+          ]
+        },
+        {
+          "name": "Galaxy screen",
+          "patterns": [
+            "^Samsung Galaxy S21 Screen Replacement$",
+            "^Samsung Galaxy.*Screen Replacement$"
+          ]
+        },
+        {
+          "name": "Pixel screen",
+          "patterns": [
+            "^Google Pixel 6 Screen Replacement$",
+            "^Google Pixel.*Screen Replacement$"
+          ]
+        },
+        {
+          "name": "Phone charging port",
+          "patterns": [
+            "(?:iPhone|Galaxy|Pixel).*Charging Port.*Replacement"
+          ]
+        },
+        {
+          "name": "Headphone battery",
+          "patterns": [
+            "(?:Sony WH-|Bose QuietComfort).*Battery Replacement"
+          ]
+        },
+        {
+          "name": "Headphone jack",
+          "patterns": [
+            "Headphone Jack Replacement"
+          ]
+        },
+        {
+          "name": "Switch battery",
+          "patterns": [
+            "^Nintendo Switch Battery Replacement$"
+          ]
+        },
+        {
+          "name": "Steam Deck battery",
+          "patterns": [
+            "^Steam Deck Battery Replacement$"
+          ]
+        },
+        {
+          "name": "Steam Deck thumbstick",
+          "patterns": [
+            "Steam Deck.*(?:Thumbstick|Stick) Replacement"
+          ]
+        },
+        {
+          "name": "Xbox joystick",
+          "patterns": [
+            "Xbox.*(?:Joystick|Analog Stick).*Replacement"
+          ]
+        },
+        {
+          "name": "PlayStation stick",
+          "patterns": [
+            "(?:DualShock|DualSense).*Stick.*Replacement"
+          ]
+        },
+        {
+          "name": "Tablet battery",
+          "patterns": [
+            "^iPad.*Battery Replacement$"
+          ]
+        },
+        {
+          "name": "Console thermal paste",
+          "patterns": [
+            "(?:PlayStation|Xbox).*Thermal Paste"
+          ]
+        },
+        {
+          "name": "Desktop SSD",
+          "patterns": [
+            "iMac.*SSD Replacement"
+          ]
+        }
+      ]
+    }
+  ],
+  "requestedExamples": [
+    {
+      "bucket": "software-os",
+      "name": "PipeWire troubleshooting",
+      "pattern": "pipewire"
+    }
+  ]
+}
