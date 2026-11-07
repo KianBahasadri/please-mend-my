@@ -12,7 +12,7 @@
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
 - Performance + response latency are CLASS-1: measure before/after deploy; slow => optimize/remove; sustained speed > cost; no decorative bottlenecks.
 - Commit AND push regular work milestones.
-- Deploy current build + full catalog to production; authorized by user.
+- Prod verified: 8e35097; 103473 items/575002 media deployed.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
 - Local: http://127.0.0.1:8080; catalog-data/runtime has 103473 items/575002 media; catalog.sqlite holds inventory.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
