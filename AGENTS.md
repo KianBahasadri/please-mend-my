@@ -12,4 +12,5 @@
 - Speed is class-1 everywhere: slow => remove/replace; no decorative bottlenecks.
 - Commit AND push regular work milestones.
 - Live: http://32.193.25.68 (us-east-1/c8g.xlarge); redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
-- Connect pleasemendmy.com via user's Cloudflare DNS/proxy/HTTPS.
+- Cloudflare pleasemendmy.com proxy/Full(strict)HTTPS pending: token absent at `~/.config/please-mend-my/cloudflare-token`; needs ZoneRead/DNSEdit/SSL&CertEdit/ZoneSettingsEdit. Wrangler OAuth expired/refresh failed/no DNS scope; don't retry.
+- Ready: deploy/cloudflare.py inspect/origin-cert/sync, Go TLS/ec2 cert install; SG443 open, TLS listener awaits cert.
