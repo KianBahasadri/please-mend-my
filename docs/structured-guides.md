@@ -128,3 +128,48 @@ Fixtures exercise schema/provenance, cache freshness, failed responses, hardlink
 safety, immutable publication, both rendering formats, copy/checklist controls,
 and cached/pending navigation. Node DOM tests do not measure browser layout,
 painting, or input-to-paint latency.
+
+## Local pilot result
+
+The completed pilot contains 100 validated v2 guides, 25 in each group. Exact
+requested examples missing from current sourced titles are PipeWire
+troubleshooting, Wi-Fi disconnections, Windows boot repair, and leaking pipes;
+the manifest records those gaps and uses available in-domain entries. Generated
+prose remains pilot material, with original source dates and attribution.
+
+The local server uses this immutable overlay:
+
+```text
+catalog-data/releases/9104e9fe31ef28bba495b721b5cda0b7e534977d8f7ce49764681d5bce296874
+```
+
+It serves 100 structured guides and 207,591 legacy entries. The original
+`f55559d2…` release remains the raw input; do not feed the processed snapshot back
+into Stage 2. All 100 served JSON/gzip pairs were checked against the snapshot,
+one unprocessed guide retained its original response, and embedded assets match
+the checkout. An unchanged processor run reused all 100 entries with zero API
+calls in 2.79 seconds. The first pass made 100 calls including its initial smoke
+entry. Ten rejected responses were not retained by the original runner and
+required ten further calls. The runner now saves complete schema-valid responses
+before postprocessing. No production deployment was performed.
+
+Measured sizes and local HTTP timings:
+
+| Probe | Original | Structured |
+| --- | ---: | ---: |
+| All 100 guide JSON payloads | 8,690,840 bytes | 1,105,979 bytes |
+| All 100 pre-gzipped guide payloads | 1,934,726 bytes | 424,703 bytes |
+| 12-guide HTTP sample, total gzip | 300,472 bytes | 52,820 bytes |
+| Sample median of per-guide warm medians | 0.248 ms | 0.256 ms |
+| Sample median of per-guide warm p95 | 0.310 ms | 0.320 ms |
+
+Each sampled guide had one first request and ten warm requests. Timings include
+local HTTP through receipt of the complete compressed body; they exclude browser
+parse, layout, and paint. They show similar warm response time, not a demonstrated
+runtime speedup. The full 207,691-entry search index stays at 9,965,255 gzip bytes,
+SHA-256 `806b19edc9f55c34750f63bcca949fcf3457b614a58286e8ad5aaccfa6f0048d`.
+Search behavior and its memory/startup work are unchanged.
+
+Validation passed: 107 Python tests, 61 Node hero/search/renderer tests, and
+`go test ./...`. Detailed receipts and benchmark JSON are local under
+`catalog-data/build/` and `catalog-data/benchmarks/structured/`.
