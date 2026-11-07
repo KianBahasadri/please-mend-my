@@ -483,7 +483,7 @@
       }
 
       function floaterLimit() {
-        return window.innerWidth < 720 ? 2 : 3;
+        return window.innerWidth < 720 ? 1 : 2;
       }
 
       function floaterIdle() {
@@ -537,7 +537,7 @@
             { transform: "translate(0, 0) rotate(0deg) scale(1)", opacity: 1 },
             { transform: `translate(${Math.cos(angle) * distance * 0.28}px, ${Math.sin(angle) * distance * 0.22}px) scale(1.12)`, opacity: 1, offset: 0.24 },
             { transform: `translate(${Math.cos(angle) * distance}px, ${Math.sin(angle) * distance + 8}px) rotate(${spin}deg) scale(0.35)`, opacity: 0 },
-          ], { duration: 520, easing: "cubic-bezier(0.16, 0.72, 0.28, 1)", fill: "forwards" });
+          ], { duration: 1100, easing: "cubic-bezier(0.16, 0.72, 0.28, 1)", fill: "forwards" });
         });
 
         const poof = document.createElement("span");
@@ -546,7 +546,7 @@
         pieces.push(poof.animate([
           { transform: "translate(-50%, -50%) scale(0.25)", opacity: 0.75 },
           { transform: "translate(-50%, -50%) scale(2.5)", opacity: 0 },
-        ], { duration: 460, easing: "cubic-bezier(0.16, 0.7, 0.3, 1)", fill: "forwards" }));
+        ], { duration: 980, easing: "cubic-bezier(0.16, 0.7, 0.3, 1)", fill: "forwards" }));
 
         for (let spark = 0; spark < 6; spark += 1) {
           const bit = document.createElement("span");
@@ -560,7 +560,7 @@
           pieces.push(bit.animate([
             { transform: "translate(-50%, -50%) scale(1)", opacity: 0.9 },
             { transform: `translate(calc(-50% + ${Math.cos(angle) * distance}px), calc(-50% + ${Math.sin(angle) * distance - 6}px)) scale(0.2)`, opacity: 0 },
-          ], { duration: 400 + Math.random() * 140, easing: "ease-out", fill: "forwards" }));
+          ], { duration: 860 + Math.random() * 280, easing: "ease-out", fill: "forwards" }));
         }
 
         return Promise.all(pieces.map((animation) => played(animation)));
@@ -580,7 +580,7 @@
         floater.style.setProperty("--x", `${spot.x}%`);
         floater.style.setProperty("--y", `${spot.y}%`);
         floater.style.setProperty("--tilt", `${(Math.random() * 2 - 1) * tiltRange}deg`);
-        floater.style.setProperty("--drift", `${(2.5 + Math.random() * 1.5).toFixed(2)}s`);
+        floater.style.setProperty("--drift", `${(5.2 + Math.random() * 2.6).toFixed(2)}s`);
         floater.style.setProperty("--sway", `${(5 + Math.random() * 6).toFixed(1)}px`);
 
         const drift = document.createElement("span");
@@ -608,22 +608,22 @@
             { transform: "translateY(-3px) scale(1.14)", opacity: 1, offset: 0.62 },
             { transform: "translateY(1px) scale(0.96)", opacity: 1, offset: 0.82 },
             { transform: "translateY(0) scale(1)", opacity: 1 },
-          ], { duration: 520, easing: "linear", fill: "forwards" }));
+          ], { duration: 1100, easing: "linear", fill: "forwards" }));
           if (!popped || !alive()) return;
 
           for (const character of word) {
             answer.textContent += character;
-            await wait(46 + Math.random() * 58);
+            await wait(110 + Math.random() * 90);
             if (!alive()) return;
           }
 
-          await wait(420 + Math.random() * 260);
+          await wait(900 + Math.random() * 500);
           if (!alive()) return;
           const wound = await played(pop.animate([
             { transform: "translateY(0) scale(1)" },
             { transform: "translateY(1px) scale(0.84)", offset: 0.45 },
             { transform: "translateY(-3px) scale(1.28)" },
-          ], { duration: 200, easing: "ease-out", fill: "forwards" }));
+          ], { duration: 460, easing: "ease-out", fill: "forwards" }));
           if (!wound || !alive()) return;
           await burstFloater(drift, pop);
         } finally {
@@ -633,10 +633,10 @@
       }
 
       async function floaterLoop(generation) {
-        await wait(480);
+        await wait(900);
         while (floatersRunning && generation === floaterGeneration) {
           if (activeFloaters.size < floaterLimit()) spawnFloater(generation);
-          await wait(860 + Math.random() * 540);
+          await wait(3200 + Math.random() * 1800);
         }
       }
 
