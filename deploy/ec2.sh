@@ -43,7 +43,13 @@ fi
 
 # Build the web server locally; the VM builds its catalog directly from public sources.
 cd -- "$repo_dir"
-CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$deploy_tmp/server" .
+deploy_commit=$(git rev-parse "${PMM_DEPLOY_COMMIT:-HEAD}")
+mkdir "$deploy_tmp/source"
+git archive "$deploy_commit" | tar -x -C "$deploy_tmp/source"
+(
+  cd -- "$deploy_tmp/source"
+  CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags='-s -w' -o "$deploy_tmp/server" .
+)
 availability_zone=$("${aws_cmd[@]}" ec2 describe-instance-type-offerings --location-type availability-zone \
   --filters Name=instance-type,Values=c8g.xlarge --query 'sort(InstanceTypeOfferings[].Location)[0]' --output text)
 [[ "$availability_zone" != None && -n "$availability_zone" ]] || { printf 'c8g.xlarge is not offered in this region.\n' >&2; exit 1; }
@@ -122,8 +128,7 @@ done
 if [[ "$ssh_ready" != true ]]; then cat "$deploy_tmp/ssh.err" >&2; exit 1; fi
 ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'sudo timeout 180 cloud-init status --wait && test -f /etc/systemd/system/please-mend-my.service'
 catalog_snapshot=''
-catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" bash "$deploy_dir/catalog.sh")
-deploy_commit=$(git rev-parse HEAD)
+catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" PMM_DEPLOY_COMMIT="$deploy_commit" bash "$deploy_tmp/source/deploy/catalog.sh")
 remote_upload=$(ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'mktemp /home/ec2-user/please-mend-my.XXXXXX')
 scp "${ssh_options[@]}" "$deploy_tmp/server" "ec2-user@$server_ip:$remote_upload"
 if [[ "$deploy_tls" == true ]]; then

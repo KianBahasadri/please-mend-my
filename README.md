@@ -20,6 +20,9 @@ serves content-addressed local images. Catalog data stays outside the binary and
 `python3 scripts/build_catalog.py` runs the pinned ingestion pipeline locally or
 on EC2. Production downloads its own archive and builds its own catalog;
 deployment never uploads the local corpus. See [deployment](deploy/README.md).
+External lookups run during ingestion only. User searches use the prepared
+browser index and same-origin catalog endpoints; page and worker connection
+policies block requests to outside services.
 
 Build a self-contained Linux ARM64 binary for a Graviton EC2 instance:
 

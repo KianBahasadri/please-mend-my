@@ -115,6 +115,7 @@ func newRepresentation(body []byte) representation {
 
 func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "connect-src 'self'")
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

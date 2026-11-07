@@ -12,7 +12,7 @@ catalog_hosts=$HOME/.ssh/please-mend-my_known_hosts
 for catalog_tool in python3 git ssh; do
   command -v "$catalog_tool" >/dev/null || { printf 'Missing command: %s\n' "$catalog_tool" >&2; exit 1; }
 done
-catalog_commit=$(git -C "$catalog_repo_dir" rev-parse HEAD)
+catalog_commit=${PMM_DEPLOY_COMMIT:-$(git -C "$catalog_repo_dir" rev-parse HEAD)}
 catalog_digest=$(python3 "$catalog_repo_dir/scripts/build_catalog.py" --print-key)
 read -r catalog_ingest_hash catalog_builder_hash < <(python3 - "$catalog_repo_dir" <<'PY'
 import hashlib, sys
@@ -101,7 +101,9 @@ NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=$base/work $base/cache $base/python $base/config $release_root
+# One writable mount permits atomic renames from work/runtime to catalogs.
+# Root-owned code/binaries remain protected by normal file permissions.
+ReadWritePaths=/opt/please-mend-my
 UMask=0022
 UNIT
   printf '%s\n' "$digest" > "$base/current-key"

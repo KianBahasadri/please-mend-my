@@ -111,6 +111,16 @@ func TestCompressionHEADAndConditionalCache(t *testing.T) {
 	}
 }
 
+func TestPageAndSearchWorkerRestrictConnectionsToOurServer(t *testing.T) {
+	handler := testHandler(t)
+	for _, target := range []string{"/", "/assets/search-worker.js"} {
+		response := requestSite(handler, http.MethodGet, target, "", "")
+		if response.Code != http.StatusOK || response.Header().Get("Content-Security-Policy") != "connect-src 'self'" {
+			t.Errorf("%s must restrict browser connections to our own server", target)
+		}
+	}
+}
+
 func TestFontRangesAndHealth(t *testing.T) {
 	handler := testHandler(t)
 	request := httptest.NewRequest(http.MethodGet, "/assets/fonts/pixelify-sans.woff2", nil)
