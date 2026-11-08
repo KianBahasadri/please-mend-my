@@ -18,13 +18,13 @@ serially through the memory limiter:
 python3 scripts/run_bounded.py -- python3 scripts/build_catalog.py
 ```
 
-This caps the complete job at 2 GiB and two CPU cores, and reserves 8 GiB available
+This defaults to 2 GiB (up to `--memory-mib 8192`, matching prod RAM) and two CPU cores, and reserves 8 GiB available
 RAM. Run JavaScript checks with `--test-concurrency=1`; never run full suites in
 parallel. The wrapper requires a Linux systemd user service manager and refuses
 to fall back to an uncapped command.
 
-`build_catalog.py` downloads and combines iFixit, English WikiMed, and the U.S.
-military First Aid manual. It pins uv 0.13.5 and Python 3.12.12; the source scripts
+`build_catalog.py` downloads and combines iFixit, English WikiMed, the U.S.
+military First Aid manual, Appropedia and wikiHow Large. It pins uv 0.13.5 and Python 3.12.12; the source scripts
 pin libzim 4.1.0, lxml 6.1.3, and PyMuPDF 1.28.2. Its default work cache is
 `catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
 The fingerprint covers the toolchain pins, active structured-guide cache, and
@@ -43,6 +43,8 @@ Pinned inputs:
 | iFixit | [ifixit_en_all_2025-12.zim](https://download.kiwix.org/zim/ifixit/ifixit_en_all_2025-12.zim) | 3,570,695,757 | `9bb5f3408707fd0300c6ef47a425c3217187f144cd9154a928183816aa72eead` |
 | WikiMed | [wikipedia_en_medicine_maxi_2026-10.zim](https://download.kiwix.org/zim/wikipedia/wikipedia_en_medicine_maxi_2026-10.zim) | 1,864,210,320 | `9a1570f2f346aa18694ee520e0483f19b7447f69e0970e2f727c53ccf0dcc7d6` |
 | First Aid | [UsArmyFirstAidManual.pdf](https://archive.org/download/UsArmyFirstAidManualFm4-25.11/UsArmyFirstAidManual.pdf) | 2,621,944 | `95fb01c941cdb385c152d045081ae011b59805931524e03192e953dc4e57af2f` |
+| Appropedia | [appropedia_en_all_maxi_2026-02.zim](https://download.kiwix.org/zim/other/appropedia_en_all_maxi_2026-02.zim) | 581,641,351 | `dcf200ba723c27397e1c9a2e4891ff91fa13993df1fa285315190d8525a53469` |
+| wikiHow Large | [wikihowAll.csv](https://huggingface.co/datasets/Lajvi/wikihowAll/resolve/5e44fed0e204c27ad985e6292e55e311504d4fe5/wikihowAll.csv) | 619,172,672 | `8ebf5bd485275af895aa83ea3e55c416fe76aa4fefc58e0b9e6d344852bde5aa` |
 
 The Kiwix inputs require the pinned official Metalink size/SHA-256 and libzim's
 internal checksum. The PDF requires its pinned hashes/size, Archive.org source
@@ -61,6 +63,10 @@ The builder keeps source caches separate:
 - `<data-dir>/first-aid/runtime/`: rough First Aid chapter entries and page
   images. `first-aid/source/` preserves the original PDF, every page's extracted
   text, full outline, and document/provenance metadata.
+- `<data-dir>/appropedia/runtime/`: full English sustainability/DIY articles,
+  redirect aliases and local images; original ZIM retained in `raw/`.
+- `<data-dir>/wikihow/runtime/`: streamed full CSV articles, mapped to original
+  rows in `raw/wikihowAll.csv`. No images or per-row author metadata exist in this source.
 
 `merge_catalogs.py` builds a fresh stage, hardlinks article/media files, retains
 distinct source licenses, and remaps shared alias groups after deterministic
@@ -162,7 +168,7 @@ uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==
 node --test scripts/test_search_worker.cjs
 ```
 
-For isolated source work, the three `ingest_*.py` scripts accept `--data-dir` and
+For isolated source work, all five `ingest_*.py` scripts accept `--data-dir` and
 `--download-only` / `--build-only`; the canonical builder handles all required
 download, extraction, alias, merge, and posting stages automatically.
 `bench_search.cjs` compares actual worker computation against a saved

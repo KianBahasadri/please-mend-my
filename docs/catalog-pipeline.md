@@ -9,7 +9,7 @@ The build stages are:
 
 1. Seed a disposable noun database from pinned Open English WordNet and wordfreq.
    Keep common-noun senses, synonyms, hypernyms, part relations, and frequency.
-2. Link the merged compact index, including iFixit, WikiMed, and First Aid, to
+2. Link the merged compact index, including iFixit, WikiMed, First Aid, Appropedia, and wikiHow, to
    generic nouns and literal device models. Source categories constrain domains
    so medical abbreviations do not become vehicle matches. Keep unlinked rows
    and uncovered nouns in a build-only `gaps.json` report.
@@ -56,12 +56,50 @@ python3 scripts/run_bounded.py -- node --test --test-concurrency=1 scripts/test_
 python3 scripts/run_bounded.py -- node --expose-gc scripts/bench_search.cjs
 ```
 
-Run these serially. The Linux/systemd user-service wrapper enforces a 2 GiB
-memory cap for the complete process tree, two CPU cores, a single shared job
+Run these serially. The Linux/systemd user-service wrapper defaults to a 2 GiB
+memory cap; `--memory-mib 8192` permits the production instance's 8 GiB RAM ceiling
+for larger builds. It caps the complete process tree, with two CPU cores, a single shared job
 lock, and an 8 GiB available-RAM reserve. It refuses to start if the reserve is
 unavailable, and stops its own service if available RAM falls below that floor.
 Go builds use one package at a time; Node test files use one worker. Never run
 an uncapped corpus build or multiple full test suites on the workstation.
+
+## Additional corpora
+
+The canonical build includes `ingest_wikihow.py` and `ingest_appropedia.py`, with
+exact source revisions, byte lengths and SHA-256 pins in their `*-source.json`
+files. The original CSV/ZIM remains under each source's `raw/` directory. Imports
+stream one record/page at a time, use disposable SQLite inventories, preserve
+source categories and attribution, and publish completed runtimes atomically.
+The merger accepts distinct CSV and ZIM integrity proofs; image-free CSV sources
+need no fabricated media or ZIM checksum. All source category graphs participate
+in noun linking independently, preventing cross-source category-path collisions.
+
+The requested Appropedia 2024-05 URL returns 404. The pinned replacement is the
+official Kiwix English 2026-02 archive, 581,641,351 bytes, verified against its
+Metalink SHA-256 and internal ZIM checksum. Explicit page licenses override the
+default text license; original media attribution stays separate. Executable SVG
+media remains in the raw archive rather than entering the image serving path.
+
+wikiHow uses the immutable Hugging Face commit `5e44fed0…`, 619,172,672 bytes.
+The CSV contains original title, headline and text; each guide records its source
+row. The mirror supplies no per-row author/license metadata. Its general CC
+BY-NC-SA 3.0 statement applies only to eligible pre-March-24-2025 non-staff text;
+the import preserves this limitation. Generated wikiHow URL candidates are not
+published as verified source links: attribution links to the actual dataset.
+No live scraping or Qwen calls are part of either ingester.
+
+## Planned multi-view artwork
+
+The next art schema distinguishes physical parts from symptoms and permits up to
+three spatial views. Nonphysical nouns stay list-only. A second discovery pass
+is eligible below 75% physical-part coverage when a missing view has at least two
+parts; retain a view only if it adds two valid mapped parts. Shape counts are
+quality signals, not rigid rejection thresholds. Every view retains source/SHA/
+license pins, geometry checks and visual review. Lazy local art and confident
+physical-part matching support view switching; symptoms do not trigger jumps.
+This is a roadmap, not an implemented multi-view renderer. Large Qwen runs remain
+paused; worker concurrency must be bounded by memory and provider limits.
 
 The benchmark's default input is the locally selected release (or `CATALOG_DIR`).
 It reports resident bytes, preparation time, memory, synchronous registry lookup,

@@ -195,6 +195,17 @@ class SourceContext:
         return sorted(set(values), key=lambda row: (row[0], row[1]))
 
 
+class SourceContexts:
+    """Keep each source category graph isolated; guide IDs select its context."""
+    def __init__(self, paths):
+        self.contexts = [SourceContext(path) for path in paths if path is not None and Path(path).is_file()]
+        self.by_guide = {identifier: context for context in self.contexts for identifier in context.guide_paths}
+
+    def for_item(self, identifier):
+        context = self.by_guide.get(identifier)
+        return context.for_item(identifier) if context else []
+
+
 def _index_rows(document: dict):
     fields = document.get('fields', ['id', 'title', 'category', 'kind', 'device'])
     needed = ('id', 'title', 'category', 'kind', 'device')
@@ -205,15 +216,16 @@ def _index_rows(document: dict):
         yield tuple(str(row[position] or '') for position in positions)
 
 
-def _fingerprint(index_path, seed_database, ifixit_database):
+def _fingerprint(index_path, seed_database, ifixit_database, source_databases=()):
     digest = hashlib.sha256()
     for path in (Path(__file__), CONFIG, index_path, seed_database):
         digest.update(str(path.name).encode() + b'\0' + file_digest(path).encode() + b'\0')
     # Source graph databases are immutable ingestion products. Include their
     # stat identity without hashing gigabytes of raw/source columns.
-    if ifixit_database is not None and Path(ifixit_database).is_file():
-        stat = Path(ifixit_database).stat()
-        digest.update(f'{Path(ifixit_database).resolve()}:{stat.st_size}:{stat.st_mtime_ns}'.encode())
+    for path in (ifixit_database, *source_databases):
+        if path is not None and Path(path).is_file():
+            stat = Path(path).stat()
+            digest.update(f'{Path(path).resolve()}:{stat.st_size}:{stat.st_mtime_ns}'.encode())
     return digest.hexdigest()
 
 
@@ -235,9 +247,9 @@ def write_gaps(connection, destination, revision):
 
 
 def link_catalog(index_path: Path, database: Path, seed_database: Path,
-                 ifixit_database: Path | None = None) -> dict:
+                 ifixit_database: Path | None = None, source_databases=()) -> dict:
     index_path, database, seed_database = map(Path, (index_path, database, seed_database))
-    fingerprint = _fingerprint(index_path, seed_database, ifixit_database)
+    fingerprint = _fingerprint(index_path, seed_database, ifixit_database, source_databases)
     receipt_path = database.with_suffix('.json')
     gaps_path = database.parent / 'gaps.json'
     try:
@@ -254,7 +266,7 @@ def link_catalog(index_path: Path, database: Path, seed_database: Path,
     temporary = database.with_name(database.name + '.building')
     temporary.unlink(missing_ok=True)
     shutil.copyfile(seed_database, temporary)
-    contexts = SourceContext(ifixit_database)
+    contexts = SourceContexts((ifixit_database, *source_databases))
     with closing(sqlite3.connect(temporary)) as connection:
         connection.executescript('''
             PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF; PRAGMA cache_size=-16384;
@@ -265,9 +277,11 @@ def link_catalog(index_path: Path, database: Path, seed_database: Path,
             CREATE TABLE source_category_links(path TEXT PRIMARY KEY,title TEXT NOT NULL,category TEXT NOT NULL,noun_id TEXT);
         ''')
         matcher = NounMatcher(connection)
-        for path, (title, category) in sorted(contexts.categories.items()):
-            subject, _, _ = subject_for_item(matcher, contexts, path, title, category)
-            connection.execute('INSERT INTO source_category_links VALUES(?,?,?,?)', (path, title, category, subject))
+        for number, context in enumerate(contexts.contexts):
+            for path, (title, category) in sorted(context.categories.items()):
+                subject, _, _ = subject_for_item(matcher, context, path, title, category)
+                qualified = path if number == 0 else str(number) + ':' + path
+                connection.execute('INSERT INTO source_category_links VALUES(?,?,?,?)', (qualified, title, category, subject))
         source_counts, linked_counts = Counter(), Counter()
         for identifier, title, category, kind, device in _index_rows(document):
             connection.execute('INSERT INTO items VALUES(?,?,?,?,?)', (identifier, title, category, kind, device))
@@ -321,8 +335,9 @@ def main():
     parser.add_argument('--database', type=Path, default=ROOT / 'catalog-data/build/nouns/catalog.sqlite')
     parser.add_argument('--seed-database', type=Path, default=ROOT / 'catalog-data/build/nouns/seed.sqlite')
     parser.add_argument('--ifixit-database', type=Path)
+    parser.add_argument('--source-database', type=Path, action='append', default=[])
     args = parser.parse_args()
-    print(json.dumps(link_catalog(args.index, args.database, args.seed_database, args.ifixit_database)), flush=True)
+    print(json.dumps(link_catalog(args.index, args.database, args.seed_database, args.ifixit_database, args.source_database)), flush=True)
 
 
 if __name__ == '__main__':

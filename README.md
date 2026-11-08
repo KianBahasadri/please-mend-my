@@ -98,6 +98,9 @@ serves content-addressed local images. Catalog data stays outside the binary and
 `python3 scripts/build_catalog.py` runs the pinned ingestion pipeline locally or
 on EC2. Production downloads its own archive and builds its own catalog;
 deployment never uploads the local corpus. See [deployment](deploy/README.md).
+The build includes iFixit, English WikiMed, Army First Aid, Appropedia and the
+wikiHow Large CSV. Their checksum-pinned ingesters stream records and retain raw
+sources, attribution and license limitations. See [source pins](scripts/README.md).
 External lookups run during ingestion only. User searches use the prepared
 browser index and same-origin catalog endpoints; page and worker connection
 policies block requests to outside services.

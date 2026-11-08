@@ -78,7 +78,8 @@ def _load_source(path):
     checksum = manifest.get("archiveSha256")
     source_format = manifest.get("sourceFormat", "zim")
     content_verified = ((source_format == "zim" and manifest.get("zimChecksumVerified") is True)
-                        or (source_format == "pdf" and manifest.get("documentVerified") is True))
+                        or (source_format == "pdf" and manifest.get("documentVerified") is True)
+                        or (source_format == "csv" and manifest.get("datasetVerified") is True))
     enrichment = manifest.get("searchEnrichment")
     if (manifest.get("version") != 1 or manifest.get("runtimeComplete") is not True
             or manifest.get("revision") != index["revision"]

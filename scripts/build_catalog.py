@@ -27,6 +27,11 @@ VOCABULARY = ROOT / "scripts/search-vocabulary.json"
 SEARCH_INDEX = ROOT / "scripts/prepare_search.py"
 WIKIMED = ROOT / "scripts/ingest_wikimed.py"
 FIRST_AID = ROOT / "scripts/ingest_first_aid.py"
+APPROPEDIA = ROOT / "scripts/ingest_appropedia.py"
+WIKIHOW = ROOT / "scripts/ingest_wikihow.py"
+INGEST_COMMON = ROOT / "scripts/ingest_common.py"
+APPROPEDIA_SOURCE = ROOT / "scripts/appropedia-source.json"
+WIKIHOW_SOURCE = ROOT / "scripts/wikihow-source.json"
 MERGE = ROOT / "scripts/merge_catalogs.py"
 OVERLAY = ROOT / "scripts/overlay_guides.py"
 STRUCTURED_GUIDES = ROOT / "scripts/structured_guides.py"
@@ -44,7 +49,8 @@ BICYCLE_SOURCES = (ROOT / "docs/references/bicycle/commons-bicycle-diagram.origi
                    ROOT / "docs/references/bicycle/openclipart-bicycle.original.svg")
 SOURCE_NOTICES = (ROOT / "docs/references/wordnet/OEWN-LICENSE.md",
                   ROOT / "docs/references/wordnet/wordfreq-NOTICE.md")
-PIPELINE_INPUT_NAMES = ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE",
+PIPELINE_INPUT_NAMES = ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "APPROPEDIA", "WIKIHOW",
+                        "INGEST_COMMON", "APPROPEDIA_SOURCE", "WIKIHOW_SOURCE", "MERGE",
                         "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES", "SEED_NOUNS", "LINK_NOUNS",
                         "NOUN_SOURCE", "ARCHETYPES", "ART_CONFIG", "PHONE_ART", "BICYCLE",
                         "DIAGRAM_CREDITS", "DIAGRAM_COMPILER", "DIAGRAM_SOURCES")
@@ -95,6 +101,8 @@ def verified_source(manifest):
                     all(verified_source(source) for source in sources))
     if kind == "pdf":
         return manifest.get("documentVerified") is True
+    if kind == "csv":
+        return manifest.get("datasetVerified") is True
     return kind == "zim" and manifest.get("zimChecksumVerified") is True
 
 
@@ -102,7 +110,7 @@ def completed_manifest(runtime):
     manifest = json.loads((runtime / "manifest.json").read_bytes())
     index_path, packed_path = runtime / "index.json", runtime / "index.json.gz"
     if not (manifest.get("runtimeComplete") and verified_source(manifest) and
-            manifest.get("indexedItems", 0) > 0 and manifest.get("uniqueMediaFiles", 0) > 0):
+            manifest.get("indexedItems", 0) > 0 and manifest.get("uniqueMediaFiles", -1) >= 0):
         raise RuntimeError("Ingestion has not produced a complete checksum-verified catalog.")
     if (index_path.stat().st_size != manifest["indexBytes"] or
             packed_path.stat().st_size != manifest["indexGzipBytes"] or
@@ -218,6 +226,12 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
             first_aid_data = data_dir / "first-aid"
             run_script(FIRST_AID, "--data-dir", first_aid_data)
             completed_manifest(first_aid_data / "runtime")
+            appropedia_data = data_dir / "appropedia"
+            run_script(APPROPEDIA, "--data-dir", appropedia_data)
+            completed_manifest(appropedia_data / "runtime")
+            wikihow_data = data_dir / "wikihow"
+            run_script(WIKIHOW, "--data-dir", wikihow_data)
+            completed_manifest(wikihow_data / "runtime")
         else:
             completed_manifest(source_runtime)
         runtime = Path(tempfile.mkdtemp(prefix=".merge-", dir=data_dir))
@@ -225,7 +239,9 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
             if source_runtime is None:
                 run_script(MERGE, "--source-runtime", data_dir / "runtime",
                            "--source-runtime", wikimed_data / "runtime",
-                           "--source-runtime", first_aid_data / "runtime", "--runtime-dir", runtime)
+                           "--source-runtime", first_aid_data / "runtime",
+                           "--source-runtime", appropedia_data / "runtime",
+                           "--source-runtime", wikihow_data / "runtime", "--runtime-dir", runtime)
             else:
                 print("Repacking completed source snapshot without reingestion", file=sys.stderr, flush=True)
                 clone_snapshot(source_runtime, runtime)
@@ -243,6 +259,10 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
                          "--seed-database", data_dir / "nouns/seed.sqlite"]
             if (data_dir / "catalog.sqlite").is_file():
                 arguments.extend(["--ifixit-database", data_dir / "catalog.sqlite"])
+            for name in ("wikimed", "first-aid", "appropedia", "wikihow"):
+                source_database = data_dir / name / "catalog.sqlite"
+                if source_database.is_file():
+                    arguments.extend(["--source-database", source_database])
             run_script(LINK_NOUNS, *arguments)
             run_script(ARCHETYPES, "--runtime-dir", runtime, "--database", noun_database)
             run_script(SEARCH_INDEX, "--runtime-dir", runtime, "--data-dir", data_dir,

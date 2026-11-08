@@ -69,6 +69,8 @@ class ReleaseTests(unittest.TestCase):
         for pin in pins:
             if pin["id"] == "first-aid":
                 pin.update(sourceFormat="pdf", documentVerified=True, zimChecksumVerified=None)
+            elif pin["id"] == "wikihow":
+                pin.update(sourceFormat="csv", datasetVerified=True, zimChecksumVerified=None)
         manifest = {"runtimeComplete": True, "archiveChecksumVerified": True, "zimChecksumVerified": True,
                     "archiveSha256": pins[0]["archiveSha256"], "expectedSha256": pins[0]["expectedSha256"],
                     "revision": "fixture", "indexedItems": len(sources), "uniqueMediaFiles": len(sources),
@@ -79,6 +81,8 @@ class ReleaseTests(unittest.TestCase):
             manifest["searchEnrichment"] = {"version": 1}
         elif sources == ["first-aid"]:
             manifest.update(sourceFormat="pdf", documentVerified=True, zimChecksumVerified=None)
+        elif sources == ["wikihow"]:
+            manifest.update(sourceFormat="csv", datasetVerified=True, zimChecksumVerified=None)
         (runtime / "manifest.json").write_text(json.dumps(manifest))
 
     @staticmethod
@@ -121,15 +125,19 @@ class ReleaseTests(unittest.TestCase):
         elif script == builder.FIRST_AID:
             self.assertEqual(self.argument(args, "--data-dir"), self.data / "first-aid")
             self.write_runtime(self.data / "first-aid/runtime", ["first-aid"])
+        elif script in (builder.APPROPEDIA, builder.WIKIHOW):
+            name = "appropedia" if script == builder.APPROPEDIA else "wikihow"
+            self.assertEqual(self.argument(args, "--data-dir"), self.data / name)
+            self.write_runtime(self.data / name / "runtime", [name])
         elif script == builder.MERGE:
             source_paths = [Path(args[i + 1]) for i, arg in enumerate(args) if arg == "--source-runtime"]
             self.assertEqual(source_paths, [self.data / "runtime", self.data / "wikimed/runtime",
-                                            self.data / "first-aid/runtime"])
+                                            self.data / "first-aid/runtime", self.data / "appropedia/runtime", self.data / "wikihow/runtime"])
             runtime = self.argument(args, "--runtime-dir")
             self.assertEqual(runtime.parent, self.data)
             self.assertTrue(runtime.name.startswith(".merge-"))
             self.assertEqual(list(runtime.iterdir()), [], "Each merge needs a fresh empty staging directory")
-            self.write_runtime(runtime, ["ifixit", "wikimed", "first-aid"])
+            self.write_runtime(runtime, ["ifixit", "wikimed", "first-aid", "appropedia", "wikihow"])
         elif script == builder.SEARCH_INDEX:
             self.assertEqual(self.argument(args, "--data-dir"), self.data)
             runtime = self.argument(args, "--runtime-dir")
@@ -154,9 +162,9 @@ class ReleaseTests(unittest.TestCase):
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 10)
+            self.assertEqual(run.call_count, 12)
         self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.INGEST, builder.ENRICH, builder.WIKIMED,
-                                         builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS,
+                                         builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS,
                                          builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual(release.name, builder.pipeline_key(self.data / "stage3_cache"))
         self.assertTrue((self.data / "runtime/source-build.json").is_file())
@@ -168,7 +176,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(receipt["pythonVersion"], builder.PYTHON_VERSION)
         self.assertEqual(receipt["uvVersion"], builder.UV_VERSION)
         self.assertEqual(receipt["searchIndex"], {"version": 1})
-        self.assertEqual([source["id"] for source in receipt["sources"]], ["ifixit", "wikimed", "first-aid"])
+        self.assertEqual([source["id"] for source in receipt["sources"]], ["ifixit", "wikimed", "first-aid", "appropedia", "wikihow"])
         self.assertTrue(receipt["sources"][2]["documentVerified"])
         self.assertIsNone(receipt["sources"][2]["zimChecksumVerified"])
         with patch.object(builder.subprocess, "run") as run:
@@ -220,7 +228,7 @@ class ReleaseTests(unittest.TestCase):
             self.wikimed.write_text("# changed WikiMed archive pin\n")
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual((self.data / "runtime/manifest.json").read_bytes(), ifixit_manifest)
         self.assertEqual((first / "index.json").read_bytes(), first_index)
         self.assertTrue((second / "ingest.json").is_file())
@@ -237,7 +245,7 @@ class ReleaseTests(unittest.TestCase):
             self.commands.clear()
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         receipt = json.loads((second / "ingest.json").read_bytes())
         self.assertEqual(receipt["structuredGuides"]["processedItems"], 0)
         self.assertEqual(receipt["structuredGuides"]["rejectedItems"], 1)
@@ -312,7 +320,7 @@ class ReleaseTests(unittest.TestCase):
         self.commands.clear()
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
             builder.build_release(self.data, self.releases)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
 
     def test_incomplete_wikimed_cannot_reach_merge(self):
         previous = self.previous_release()
@@ -361,6 +369,31 @@ class ReleaseTests(unittest.TestCase):
                 builder.build_release(self.data, self.releases)
         self.assertNotIn(builder.SEARCH_INDEX, self.commands)
         self.assert_not_published()
+
+    def test_csv_verification_and_new_source_failure_gate_publication(self):
+        def unverified_csv(args, **kwargs):
+            result = self.fake_command(args, **kwargs)
+            if self.script(args) == builder.WIKIHOW:
+                self.update_manifest(self.data / 'wikihow/runtime', datasetVerified=False)
+            return result
+        with patch.object(builder.subprocess, 'run', side_effect=unverified_csv):
+            with self.assertRaisesRegex(RuntimeError, 'checksum-verified'):
+                builder.build_release(self.data, self.releases)
+        self.assertNotIn(builder.MERGE, self.commands)
+        self.assert_not_published()
+
+    def test_new_sources_participate_in_noun_linking(self):
+        for name in ('wikimed', 'appropedia', 'wikihow'):
+            path = self.data / name
+            path.mkdir(parents=True)
+            (path / 'catalog.sqlite').write_bytes(b'source graph fixture')
+        def check_graphs(args, **kwargs):
+            if self.script(args) == builder.LINK_NOUNS:
+                graphs = [Path(args[i + 1]) for i, flag in enumerate(args) if flag == '--source-database']
+                self.assertEqual(graphs, [self.data / name / 'catalog.sqlite' for name in ('wikimed', 'appropedia', 'wikihow')])
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, 'run', side_effect=check_graphs):
+            builder.build_release(self.data, self.releases)
 
     def test_search_index_failure_cannot_publish_enriched_data(self):
         previous = self.previous_release()

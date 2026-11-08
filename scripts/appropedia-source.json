@@ -1,0 +1,21 @@
+{
+  "id": "appropedia",
+  "name": "Appropedia via Kiwix",
+  "url": "https://www.appropedia.org/",
+  "format": "zim",
+  "revision": "appropedia_en_all_maxi_2026-02",
+  "filename": "appropedia_en_all_maxi_2026-02.zim",
+  "bytes": 581641351,
+  "sha256": "dcf200ba723c27397e1c9a2e4891ff91fa13993df1fa285315190d8525a53469",
+  "urls": [
+    "https://download.kiwix.org/zim/other/appropedia_en_all_maxi_2026-02.zim",
+    "https://ftp.nluug.nl/pub/kiwix/zim/other/appropedia_en_all_maxi_2026-02.zim"
+  ],
+  "metalink": "https://download.kiwix.org/zim/other/appropedia_en_all_maxi_2026-02.zim.meta4",
+  "catalogUrl": "https://library.kiwix.org/catalog/v2/entries?lang=eng&q=appropedia&count=10",
+  "requestedUnavailableUrl": "https://download.kiwix.org/zim/appropedia/appropedia_en_all_maxi_2024-05.zim",
+  "license": {"name": "CC BY-SA 4.0 (default; explicit page/media licenses retained)", "url": "https://creativecommons.org/licenses/by-sa/4.0/"},
+  "licenseSource": "https://www.appropedia.org/Appropedia:Terms_of_use",
+  "licenseNotice": "Appropedia default text CC BY-SA 4.0; explicit page exceptions and media licenses remain authoritative. Hardware designs may use CERN-OHL-S. Original ZIM, encountered copyright notices and file-description links are retained.",
+  "attribution": "Appropedia contributors via Kiwix / openZIM."
+}

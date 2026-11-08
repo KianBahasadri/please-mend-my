@@ -1,0 +1,17 @@
+{
+  "id": "wikihow",
+  "name": "wikiHow Large (Koupaee and Wang dataset)",
+  "url": "https://huggingface.co/datasets/Lajvi/wikihowAll",
+  "format": "csv",
+  "revision": "wikihowAll_5e44fed0e204c27ad985e6292e55e311504d4fe5",
+  "filename": "wikihowAll.csv",
+  "bytes": 619172672,
+  "sha256": "8ebf5bd485275af895aa83ea3e55c416fe76aa4fefc58e0b9e6d344852bde5aa",
+  "urls": ["https://huggingface.co/datasets/Lajvi/wikihowAll/resolve/5e44fed0e204c27ad985e6292e55e311504d4fe5/wikihowAll.csv"],
+  "researchMirror": "https://ucsb.box.com/s/ap23l8gafpezf4tq3wapr6u8241zz358",
+  "license": {"name": "CC BY-NC-SA 3.0 (wikiHow text; source exceptions retained)", "url": "https://creativecommons.org/licenses/by-nc-sa/3.0/"},
+  "licenseSource": "https://www.wikihow.com/wikiHow:Creative-Commons",
+  "licenseNotice": "The dataset mirror supplies no per-row license or author metadata. wikiHow's text license excludes some content. Preserve this limitation; no claim that all mirrored content has independently cleared rights. No images are included.",
+  "attribution": "wikiHow contributors; dataset collected by Mahnaz Koupaee and William Yang Wang, mirrored by Lajvi.",
+  "citation": "Koupaee and Wang (2018), WikiHow: A Large Scale Text Summarization Dataset, https://arxiv.org/abs/1810.09305"
+}

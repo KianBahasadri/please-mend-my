@@ -166,6 +166,33 @@ class NounPipelineTests(unittest.TestCase):
         self.assertEqual(linked.execute("SELECT noun_id FROM source_category_links WHERE path='Device/MacBook_Air'").fetchone(), ('laptop',))
         self.assertIsNone(linked.execute("SELECT guide_id FROM guide_nouns WHERE noun_id='tune'").fetchone())
 
+    def test_category_graphs_from_new_sources_stay_isolated(self):
+        paths = []
+        for name, identifier, label, category in [('ifixit', 'one', 'Phone', 'technology'),
+                                                   ('appropedia', 'two', 'Arm', 'health')]:
+            path = self.root / (name + '.sqlite')
+            db = self.connection(path)
+            db.executescript('''
+                CREATE TABLE items(id TEXT,source_path TEXT);
+                CREATE TABLE source_categories(path TEXT,title TEXT,category TEXT);
+                CREATE TABLE category_edges(parent TEXT,child TEXT);
+                CREATE TABLE guide_categories(guide TEXT,category TEXT);
+            ''')
+            db.execute('INSERT INTO items VALUES(?,?)', (identifier, 'Shared_path'))
+            db.execute('INSERT INTO source_categories VALUES(?,?,?)', ('Category:Shared', label, category))
+            db.execute('INSERT INTO guide_categories VALUES(?,?)', ('Shared_path', 'Category:Shared'))
+            db.commit()
+            paths.append(path)
+        index = self.write_index([['one', 'Unfamiliar procedure', 'technology', 'guide', ''],
+                                  ['two', 'Unfamiliar procedure', 'health', 'article', '']])
+        database = self.root / 'catalog.sqlite'
+        link_catalog(index, database, self.seed, paths[0], [paths[1]])
+        db = self.connection(database)
+        links = dict(db.execute('SELECT guide_id,noun_id FROM guide_nouns'))
+        self.assertEqual(links, {'one': 'phone', 'two': 'arm'})
+        self.assertEqual(db.execute('SELECT count(*) FROM source_category_links').fetchone()[0], 2)
+
+
 
 if __name__ == '__main__':
     unittest.main()
