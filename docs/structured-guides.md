@@ -95,6 +95,9 @@ working set is required before starting new paid requests. Source oversize is
 reported without truncation. Per-entry receipts and an append-only usage journal
 live beside the result in `result.progress/`, preserving completion/failure costs
 across interruption. Response and activation caches remain reusable on rerun.
+HTTP 401/402/403 stops new paid requests across the batch; queued entries are
+recorded as deferred while cache hits still complete. Rerun after account access
+or its spending allowance is restored; the runner never changes either.
 Regenerate selection paths on EC2 using its own source runtimes; the corpus stays
 on the machine that ingested it. Publish only a completed validated overlay, then
 rebuild symptom/material postings before selecting the new immutable release.

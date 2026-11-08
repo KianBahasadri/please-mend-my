@@ -442,13 +442,14 @@ def api_payload(prepared, model, config):
 
 
 class APIError(RuntimeError):
-    def __init__(self, message, *, retryable=False, retry_after=0, finish_reason=None, refusal=None, usage=None):
+    def __init__(self, message, *, retryable=False, retry_after=0, finish_reason=None, refusal=None, usage=None, status_code=None):
         super().__init__(message)
         self.retryable = retryable
         self.retry_after = retry_after
         self.finish_reason = finish_reason
         self.refusal = refusal
         self.usage = numerical_usage(usage)
+        self.status_code = status_code
 
 
 def retry_delay(header):
@@ -482,7 +483,7 @@ def http_completion(payload, key, timeout=120):
         error.close()
         raise APIError("OpenRouter HTTP " + str(code),
                        retryable=code == 429 or code in (500, 502, 503, 504),
-                       retry_after=delay) from None
+                       retry_after=delay, status_code=code) from None
     except (ValueError, UnicodeError):
         # urllib's header validation/encoding errors can embed the secret value.
         raise APIError("OpenRouter request has invalid credentials or headers") from None
@@ -623,10 +624,11 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
     run_started = time.time()
     progress_dir = Path(progress_dir) if progress_dir is not None else None
     active_requests, peak_requests = 0, 0
+    stopped_http_code = None
     completed_counts = Counter()
 
     async def process_one(entry):
-        nonlocal active_requests, peak_requests
+        nonlocal active_requests, peak_requests, stopped_http_code
         identifier = entry["id"]
         calls = 0
         priced_calls = 0
@@ -667,6 +669,10 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                 validate_api_key(api_key)
                 payload = api_payload(prepared, model, config)
                 for attempt in range(retries):
+                    if stopped_http_code is not None:
+                        return {"id": identifier, "status": "deferred", "cacheKey": key,
+                                "error": "New API requests stopped after OpenRouter HTTP " + str(stopped_http_code),
+                                "apiCalls": calls, "usage": dict(paid_usage), "unpricedApiCalls": calls - priced_calls}
                     # Keep the reserve plus the maximum concurrent response /
                     # activation working set free, before incurring model cost.
                     if min_free_bytes and shutil.disk_usage(cache_dir).free < min_free_bytes + concurrency * MAX_RESPONSE_BYTES * 3:
@@ -694,6 +700,11 @@ async def process_batch(runtime, entries, cache_dir, *, model=DEFAULT_MODEL, api
                                 "apiCalls": calls, "usage": dict(paid_usage), "assetsRemoved": removed,
                                 "unpricedApiCalls": calls - priced_calls}
                     except APIError as error:
+                        # A credential or spending-limit rejection applies to
+                        # the whole batch. Finish already in-flight requests,
+                        # but never send thousands of doomed queued requests.
+                        if error.status_code in (401, 402, 403):
+                            stopped_http_code = error.status_code
                         paid_usage.update(error.usage)
                         priced_calls += int("cost" in error.usage)
                         if not error.retryable or attempt + 1 == retries:
@@ -865,7 +876,7 @@ def main():
     atomic_json(args.output, result)
     summary = {key: result[key] for key in ("count", "cachedSelected", "strata", "buckets", "counts", "apiCalls", "usage", "peakRequests", "elapsedSeconds") if key in result}
     print(json.dumps(summary, sort_keys=True))
-    if result.get("counts", {}).get("failed"):
+    if result.get("counts", {}).get("failed") or result.get("counts", {}).get("deferred"):
         return 1
     return 0
 
