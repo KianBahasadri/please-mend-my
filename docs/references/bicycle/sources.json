@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "generatedBy": "scripts/prepare_bicycle_art.py",
+  "viewBox": "250 65 565 355",
+  "sources": [
+    {
+      "title": "Bicycle diagram",
+      "author": "Al2 and Wikimedia Commons contributors",
+      "source": "https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg",
+      "download": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Bicycle_diagram.svg",
+      "fileRevision": "2023-09-17T05:48:00Z",
+      "file": "commons-bicycle-diagram.original.svg",
+      "sha256": "fb46ca1c99668629b8111776031bc5b09db9e17735f95642ab933461ada52605",
+      "bytes": 119609,
+      "license": "CC BY 3.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+      "use": "Bicycle silhouette, frame, wheels, tyres, drivetrain, fork, controls and saddle; original path geometry and ancestor transforms retained. Labels/callouts/markers/ground shadows/repeated tyre tread omitted; crop, monochrome paints, thicker outlines and interactive grouping added."
+    },
+    {
+      "title": "Bicycle",
+      "author": "WRomey",
+      "source": "https://openclipart.org/detail/3891/bicycle",
+      "download": "https://openclipart.org/download/3891",
+      "published": "2006-12-26",
+      "file": "openclipart-bicycle.original.svg",
+      "sha256": "5e0d8b79821d231246e3b0616e0e12f52e903c9c4910bfd3023d6b83b3dc52e4",
+      "bytes": 35156,
+      "license": "CC0 1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "licenseConfirmation": "https://openclipart.org/share",
+      "use": "Original headlight path10148 extracted, reflected, scaled, positioned and recolored; main Commons diagram has no headlight."
+    }
+  ]
+}

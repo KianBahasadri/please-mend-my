@@ -86,21 +86,11 @@
   }
   const resolve = subject => aliases.get(clean(subject)) || null;
 
-  // Each assembly owns both its drawing and an ample transparent hit target.
-  // The frame remains a noninteractive context behind all eleven assemblies.
-  const bicycleGeometry = [
-    ["wheels", "M134 157a49 49 0 1 1-98 0 49 49 0 1 1 98 0 M327 157a49 49 0 1 1-98 0 49 49 0 1 1 98 0 M85 108v98 M36 157h98 M50 122l70 70 M50 192l70-70 M278 108v98 M229 157h98 M243 122l70 70 M243 192l70-70"],
-    ["tires", "M138 157a53 53 0 1 1-106 0 53 53 0 1 1 106 0 M331 157a53 53 0 1 1-106 0 53 53 0 1 1 106 0"],
-    ["fork", "M237 69 246 98 278 157 M246 98l8-3 15 39-8 3 M245 101l14 35"],
-    ["chain", "M86 151 165 147a10 10 0 0 1 0 20L86 163a6 6 0 0 1 0-12Z"],
-    ["gears", "M93 157a8 8 0 1 1-16 0 8 8 0 1 1 16 0 M92 164l8 15 11-4-5-9 M100 179l-2 12 15-10 M231 48l6 12"],
-    ["seat", "M134 78l-5-16 M112 58h34l10 5-9 4h-35l-5-4Z M134 77l8 18"],
-    ["handlebars", "M236 70l-9-27h25l10 6-2 13 M227 43l-6-7 M248 43l4-7"],
-    ["brakes", "M109 115l-9 11 M105 112l9 8 M253 116l10-7 M258 105l9 8 M251 44l-5 11 M243 48l-14 22-90 12-29 33 M247 56l12 49"],
-    ["pedals", "M166 157l23 18 M181 175h18 M166 157l-21-18 M136 139h18"],
-    ["bottom-bracket", "M178 157a12 12 0 1 1-24 0 12 12 0 1 1 24 0 M170 157a4 4 0 1 1-8 0 4 4 0 1 1 8 0"],
-    ["lights", "M252 78h12v9h-12Z M265 77l7-3 M266 82h9 M265 87l7 3 M231 33a5 5 0 0 1 10 0 M230 34h12 M144 104l4 3 M149 108l3 2"],
-  ];
+  const shapeTags = new Set(["g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect"]);
+  const shapeAttributes = new Set(["d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height",
+    "x1", "x2", "y1", "y2", "points", "transform", "fill", "stroke", "stroke-width", "stroke-linecap",
+    "stroke-linejoin", "stroke-miterlimit", "stroke-dasharray", "fill-rule", "clip-rule", "opacity", "fill-opacity",
+    "stroke-opacity", "vector-effect", "data-source-id"]);
 
   function svgNode(tag, attributes) {
     const node = document.createElementNS(ns, tag);
@@ -108,18 +98,100 @@
     return node;
   }
 
-  function bikeSVG(definition, groups) {
-    const svg = svgNode("svg", { class: "specifier-svg", viewBox: "0 0 360 220", role: "group", "aria-label": "Bicycle parts" });
-    svg.append(svgNode("path", { class: "specifier-frame", d: "M85 157 134 77 166 157 85 157 M134 77 237 69 166 157 M237 69l9 29", "aria-hidden": "true" }));
-    for (const [id, d] of bicycleGeometry) {
-      const item = definition.parts.find(candidate => candidate.id === id);
-      const group = svgNode("g", { class: "specifier-part", "data-part": id, tabindex: "0", role: "button", "aria-label": item.label, "aria-pressed": "false" });
-      group.append(svgNode("path", { class: "specifier-geometry", d, stroke: "currentColor", fill: "none", "aria-hidden": "true" }));
-      group.append(svgNode("path", { class: "specifier-hit", d, stroke: "transparent", "stroke-width": "14", "stroke-linecap": "round", "stroke-linejoin": "round", fill: "none", "pointer-events": "stroke", "aria-hidden": "true" }));
-      groups.set(id, group);
-      svg.append(group);
+  function sourcedShape(descriptor, hit = false, inherited = { stroke: "none", width: 1.2 }) {
+    if (!Array.isArray(descriptor) || !shapeTags.has(descriptor[0])) throw new Error("Invalid bicycle shape");
+    const [tag, attributes = {}, children = []] = descriptor;
+    const stroke = attributes.stroke === undefined ? inherited.stroke : attributes.stroke;
+    const requestedWidth = attributes["stroke-width"] === undefined ? inherited.width : Number(attributes["stroke-width"]);
+    const width = Number.isFinite(requestedWidth) && requestedWidth > 0 ? requestedWidth : 1.2;
+    const node = svgNode(tag, {});
+    for (const [key, value] of Object.entries(attributes)) {
+      if (!shapeAttributes.has(key) || !["string", "number"].includes(typeof value) || /url\s*\(/i.test(String(value))) {
+        throw new Error("Invalid bicycle shape attribute");
+      }
+      if (hit && /^(?:fill|stroke|opacity|vector-effect)/.test(key)) continue;
+      node.setAttribute(key, value);
     }
-    return svg;
+    if (tag !== "g") {
+      node.setAttribute("class", hit ? "specifier-hit-shape" : "specifier-art-shape");
+      if (!hit && stroke !== "none") {
+        node.classList.add("specifier-outline");
+        node.style.setProperty("--specifier-source-stroke", String(width));
+      }
+      if (hit) {
+        node.setAttribute("fill", "none");
+        node.setAttribute("stroke", "transparent");
+        node.setAttribute("stroke-width", "14");
+        node.setAttribute("stroke-linecap", "round");
+        node.setAttribute("stroke-linejoin", "round");
+        node.setAttribute("vector-effect", "non-scaling-stroke");
+        node.setAttribute("pointer-events", "stroke");
+      }
+    }
+    if (!Array.isArray(children)) throw new Error("Invalid bicycle shape children");
+    for (const child of children) node.append(sourcedShape(child, hit, { stroke, width }));
+    return node;
+  }
+
+  function bikeSVG(definition, groups) {
+    const art = window.mendBicycleArt;
+    if (!art || typeof art.viewBox !== "string" || !Array.isArray(art.context) ||
+        !definition.parts.every(item => Array.isArray(art.parts?.[item.id]) && art.parts[item.id].length)) return null;
+    try {
+      const svg = svgNode("svg", { class: "specifier-svg", viewBox: art.viewBox, role: "group", "aria-label": "Bicycle parts" });
+      const context = svgNode("g", { class: "specifier-context", "aria-hidden": "true" });
+      for (const shape of art.context) context.append(sourcedShape(shape));
+      svg.append(context);
+      // Preserve the source's assembly order, placing small parts above wheels.
+      for (const [id, shapes] of Object.entries(art.parts)) {
+        const item = definition.parts.find(candidate => candidate.id === id);
+        if (!item) continue;
+        const group = svgNode("g", { class: "specifier-part", "data-part": id, tabindex: "0", role: "button", "aria-label": item.label, "aria-pressed": "false" });
+        const geometry = svgNode("g", { class: "specifier-geometry", "aria-hidden": "true" });
+        const hit = svgNode("g", { class: "specifier-hit", "aria-hidden": "true" });
+        for (const shape of shapes) {
+          geometry.append(sourcedShape(shape));
+          hit.append(sourcedShape(shape, true));
+        }
+        group.append(geometry, hit);
+        groups.set(id, group);
+        svg.append(group);
+      }
+      return svg;
+    } catch {
+      groups.clear();
+      return null;
+    }
+  }
+
+  function creditLink(text, href) {
+    const link = document.createElement("a");
+    link.textContent = text;
+    if (typeof href === "string" && /^https?:\/\//i.test(href)) {
+      link.href = href;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+    }
+    return link;
+  }
+
+  function creditText(text) {
+    const node = document.createElement("span");
+    node.textContent = text;
+    return node;
+  }
+
+  function artCredit() {
+    const source = window.mendBicycleArt.attribution;
+    const credit = document.createElement("span");
+    credit.className = "specifier-credit";
+    credit.append(creditText("Adapted from "), creditLink(source.title, source.source), creditText(" · "),
+      creditLink(source.author, source.authorUrl || source.source), creditText(" · "), creditLink(source.license, source.licenseUrl));
+    for (const supplement of source.supplementary || []) {
+      credit.append(creditText(" · Light: "), creditLink(supplement.author, supplement.source), creditText(" · "),
+        creditLink(supplement.license, supplement.licenseUrl));
+    }
+    return credit;
   }
 
   function matchPart(definition, answer) {
@@ -141,11 +213,11 @@
     if (!container) return null;
     container.replaceChildren();
     container.hidden = !definition;
-    container.classList.toggle("is-list-only", Boolean(definition && !definition.svg));
     if (!definition) return null;
     container.setAttribute("aria-label", `${definition.label} parts and symptoms`);
     const groups = new Map(), options = new Map();
     const svg = definition.svg ? bikeSVG(definition, groups) : null;
+    container.classList.toggle("is-list-only", !svg);
     const list = document.createElement("span");
     list.className = "specifier-list";
     list.setAttribute("role", "group");
@@ -212,8 +284,12 @@
       if (groups.has(item.id)) bind(groups.get(item.id), item, true);
       list.append(option);
     }
-    if (svg) container.append(svg);
-    container.append(list);
+    const controls = document.createElement("span");
+    controls.className = "specifier-controls";
+    if (svg) controls.append(svg);
+    controls.append(list);
+    container.append(controls);
+    if (svg && window.mendBicycleArt.attribution) container.append(artCredit());
     return {
       sync,
       destroy() {

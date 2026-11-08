@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 // This fixture checks DOM/events and the real registry without opening a
 // browser. It does not model CSS layout, SVG paint, or font measurements.
-function registry() {
+function registry({ art = true } = {}) {
   const document = { activeElement: null };
   const scrolls = [];
   class Node {
@@ -19,6 +19,7 @@ function registry() {
       this.listeners = new Map();
       this.hidden = false;
       this.textContent = '';
+      this.style = { setProperty(name, value) { this[name] = value; } };
       const names = new Set();
       this.classList = {
         add: (...values) => values.forEach(value => names.add(value)),
@@ -69,15 +70,18 @@ function registry() {
     return new Node(tag);
   };
   const window = {};
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'),
-    vm.createContext({ document, window }));
+  const context = vm.createContext({ document, window });
+  if (art) vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/bicycle-art.js'), 'utf8'), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), context);
   const container = new Node('span');
   container.className = 'topic-specifier';
   const selected = [];
   const mount = subject => window.mendSpecifiers.mount(container, subject, value => selected.push(value));
   const walk = node => [node, ...node.children.flatMap(walk)];
   const part = (id, tag) => walk(container).find(node => node.dataset.part === id && (!tag || node.tagName === tag));
-  return { api: window.mendSpecifiers, document, container, selected, scrolls, mount, walk, part };
+  return { api: window.mendSpecifiers, art: window.mendBicycleArt, document, container, selected, scrolls, mount, walk, part,
+    svg: () => walk(container).find(node => node.tagName === 'svg'),
+    replaceArt(value) { window.mendBicycleArt = value; } };
 }
 
 test('bicycle synonyms resolve to one archetype and supported nouns expose concise list fallbacks', () => {
@@ -105,10 +109,10 @@ test('bicycle synonyms resolve to one archetype and supported nouns expose conci
 test('the bicycle contains eleven independent accessible assemblies with generous hit targets', () => {
   const ui = registry();
   ui.mount('bike');
-  const svg = ui.container.children[0];
+  const svg = ui.svg();
   assert.equal(svg.tagName, 'svg');
-  assert.equal(svg.getAttribute('viewBox'), '0 0 360 220');
-  const groups = svg.children.filter(node => node.tagName === 'g');
+  assert.equal(svg.getAttribute('viewBox'), ui.art.viewBox);
+  const groups = svg.children.filter(node => node.dataset.part);
   assert.equal(groups.length, 11);
   assert.equal(new Set(groups.map(node => node.dataset.part)).size, 11);
   for (const group of groups) {
@@ -116,13 +120,26 @@ test('the bicycle contains eleven independent accessible assemblies with generou
     assert.equal(group.getAttribute('tabindex'), '0');
     assert.ok(group.getAttribute('aria-label'));
     const [geometry, hit] = group.children;
-    assert.equal(geometry.getAttribute('stroke'), 'currentColor');
-    assert.equal(geometry.getAttribute('fill'), 'none');
-    assert.equal(hit.getAttribute('stroke'), 'transparent');
-    assert.equal(hit.getAttribute('stroke-width'), '14');
-    assert.equal(hit.getAttribute('pointer-events'), 'stroke');
-    assert.equal(hit.getAttribute('d'), geometry.getAttribute('d'));
-    assert.ok(hit.getAttribute('d').length > 10);
+    const leaves = node => ui.walk(node).filter(child => child.tagName !== 'g');
+    const visible = leaves(geometry), targets = leaves(hit);
+    assert.ok(visible.length > 0, group.dataset.part);
+    assert.ok(visible.every(node => node.getAttribute('data-source-id')), 'every visible shape retains its upstream provenance');
+    assert.equal(targets.length, visible.length);
+    for (const outline of visible.filter(node => node.classList.contains('specifier-outline'))) {
+      assert.ok(Number(outline.style['--specifier-source-stroke']) > 0, 'active outline widths derive from the upstream shape');
+    }
+    for (let at = 0; at < targets.length; at++) {
+      assert.equal(targets[at].getAttribute('stroke'), 'transparent');
+      assert.equal(targets[at].getAttribute('stroke-width'), '14');
+      assert.equal(targets[at].getAttribute('vector-effect'), 'non-scaling-stroke');
+      assert.equal(targets[at].getAttribute('pointer-events'), 'stroke');
+      assert.equal(targets[at].tagName, visible[at].tagName);
+      for (const attribute of ['d', 'cx', 'cy', 'r', 'transform', 'data-source-id']) {
+        assert.equal(targets[at].getAttribute(attribute), visible[at].getAttribute(attribute));
+      }
+    }
+    const transforms = node => ui.walk(node).map(child => child.getAttribute('transform'));
+    assert.deepEqual(transforms(geometry), transforms(hit), 'source transforms match the hit geometry exactly');
     const option = ui.part(group.dataset.part, 'button');
     assert.equal(option.type, 'button');
     assert.equal(option.getAttribute('aria-pressed'), 'false');
@@ -174,7 +191,7 @@ test('both surfaces select the canonical query, preserve edits, and toggle only 
   assert.equal(chain.classList.contains('is-selected'), false);
   mounted.sync('');
   assert.ok(ui.walk(ui.container).every(node => !node.classList.contains('is-selected')));
-  assert.equal(ui.container.children[0].classList.contains('has-highlight'), false);
+  assert.equal(ui.svg().classList.contains('has-highlight'), false);
 });
 
 test('SVG keyboard controls select once and destroyed controls cannot change a subsequent answer', () => {
@@ -195,4 +212,58 @@ test('SVG keyboard controls select once and destroyed controls cannot change a s
   ui.mount('arm');
   ui.part('swelling', 'button').dispatch('click');
   assert.equal(ui.selected.at(-1), 'swelling');
+});
+
+
+test('the visible source credit follows the paired controls without becoming a third column', () => {
+  const ui = registry(); ui.mount('bike');
+  const [controls, credit] = ui.container.children;
+  assert.equal(controls.className, 'specifier-controls');
+  assert.equal(controls.children[0], ui.svg());
+  assert.equal(controls.children[1].className, 'specifier-list');
+  assert.equal(credit.className, 'specifier-credit');
+  const text = ui.walk(credit).map(node => node.textContent).join('');
+  assert.match(text, /^Adapted from /);
+  assert.ok(text.includes(ui.art.attribution.author));
+  assert.ok(text.includes(ui.art.attribution.license));
+  const links = ui.walk(credit).filter(node => node.tagName === 'a');
+  assert.ok(links.some(link => link.href === ui.art.attribution.source));
+  assert.ok(links.some(link => link.href === ui.art.attribution.licenseUrl));
+  for (const supplement of ui.art.attribution.supplementary || []) {
+    assert.ok(text.includes(supplement.author));
+    assert.ok(links.some(link => link.href === supplement.source));
+    assert.ok(links.some(link => link.href === supplement.licenseUrl));
+  }
+  assert.ok(links.every(link => link.target === '_blank' && link.rel === 'noopener noreferrer'));
+  ui.mount('laptop');
+  assert.equal(ui.container.children.length, 1, 'list-only nouns do not inherit bicycle credits');
+});
+
+test('a missing source module falls back to the parts list with no invented diagram or empty SVG', () => {
+  const ui = registry({ art: false });
+  const mounted = ui.mount('bike');
+  assert.ok(mounted);
+  assert.equal(ui.svg(), undefined);
+  assert.equal(ui.container.classList.contains('is-list-only'), true);
+  assert.equal(ui.walk(ui.container).filter(node => node.tagName === 'button').length, 11);
+  ui.part('chain', 'button').dispatch('click');
+  assert.deepEqual(ui.selected, ['chain']);
+  assert.equal(ui.container.children.length, 1);
+});
+
+
+test('unsafe source descriptors never create active SVG content and retain the usable parts list', () => {
+  for (const descriptor of [['script', {}, []], ['path', { d: 'M0 0L1 1', onclick: 'alert(1)' }],
+    ['path', { d: 'M0 0L1 1', fill: 'url(https://external.example/image)' }]]) {
+    const ui = registry();
+    const bad = structuredClone(ui.art);
+    bad.context.push(descriptor);
+    ui.replaceArt(bad);
+    ui.mount('bike');
+    assert.equal(ui.svg(), undefined);
+    assert.equal(ui.container.classList.contains('is-list-only'), true);
+    assert.equal(ui.walk(ui.container).filter(node => node.tagName === 'button').length, 11);
+    ui.part('chain', 'button').dispatch('click');
+    assert.deepEqual(ui.selected, ['chain']);
+  }
 });

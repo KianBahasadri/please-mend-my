@@ -50,9 +50,8 @@ body.reading main {
 
 .topic-specifier {
   --specifier-height: clamp(11.5rem, 23vh, 15rem);
-  display: flex;
-  align-items: start;
-  gap: clamp(0.65rem, 1.3vw, 1.25rem);
+  display: grid;
+  gap: 0.45rem;
   min-width: 0;
   max-width: 100%;
   padding-top: 0.15rem;
@@ -66,6 +65,34 @@ body.reading main {
   user-select: none;
 }
 
+.specifier-controls {
+  display: flex;
+  align-items: start;
+  gap: clamp(0.65rem, 1.3vw, 1.25rem);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.specifier-credit {
+  display: block;
+  width: 0;
+  min-width: 100%;
+  color: color-mix(in srgb, var(--ink) 55%, transparent);
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.specifier-credit a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.14em;
+}
+
+.specifier-credit a:hover,
+.specifier-credit a:focus-visible { color: var(--ink); }
+
 .specifier-svg {
   display: block;
   flex: 0 1 auto;
@@ -75,13 +102,8 @@ body.reading main {
   overflow: visible;
 }
 
-.specifier-frame {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2.4;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  opacity: 0.23;
+.specifier-context {
+  opacity: 0.3;
   pointer-events: none;
 }
 
@@ -91,13 +113,13 @@ body.reading main {
   outline: none;
 }
 
-.specifier-part .specifier-geometry {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 2;
+.specifier-geometry {
+  color: var(--ink);
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+
+.specifier-hit-shape { pointer-events: stroke; }
 
 .specifier-svg.has-highlight .specifier-part {
   opacity: 0.22;
@@ -107,13 +129,12 @@ body.reading main {
   opacity: 1;
 }
 
-.specifier-part:is(.is-highlighted, .is-selected) .specifier-geometry {
-  stroke-width: 2.8;
-  fill: color-mix(in srgb, var(--ink) 14%, transparent);
+.specifier-part:is(.is-highlighted, .is-selected) .specifier-outline {
+  stroke-width: calc(var(--specifier-source-stroke) * 1.3);
 }
 
-.specifier-part:focus-visible .specifier-geometry {
-  stroke-width: 3.4;
+.specifier-part:focus-visible .specifier-outline {
+  stroke-width: calc(var(--specifier-source-stroke) * 1.5);
   stroke-dasharray: 4 2;
 }
 

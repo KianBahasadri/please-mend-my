@@ -7,6 +7,25 @@ New diagrams belong in the registry as inline SVG, alongside their parts,
 canonical queries, and aliases. No Go asset-type changes or catalog rebuild is
 needed.
 
+The bicycle uses actual geometry from Al2 and contributors' [Bicycle diagram](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg),
+choosing its [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/),
+plus the headlight from WRomey's [Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)
+under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Source credits
+and adaptation notices appear below the paired diagram/list. The original files,
+source URLs, hashes, and license records are pinned in
+[`docs/references/bicycle/`](references/bicycle/).
+
+`scripts/prepare_bicycle_art.py` prepares safe monochrome geometry descriptors
+offline from those pinned originals. Its generated `assets/bicycle-art.js` loads
+before the registry and exposes `window.mendBicycleArt`. The registry builds
+interactive groups from that local data; no drawing is fetched or parsed from
+an external service during use. Regeneration and consistency checking run with:
+
+```sh
+python3 scripts/prepare_bicycle_art.py
+python3 scripts/prepare_bicycle_art.py --check
+```
+
 `window.mendHero` exposes `query()`, `focus()`, `isAwaitingSpecifics()`,
 `settleDelay()`, `setVocabulary(terms)`, and immediate `settle()`. Its one timer
 handles both inputs. The worker's startup `ready.terms` supplies the sorted
@@ -60,8 +79,27 @@ tire`. All 18 targeted queries returned zero topic cards. S23/S24 guide/article
 ordering stayed identical after removing four topic rows from each result set.
 The Bicycle topic endpoint still returns its original topic JSON.
 
-All 97 JavaScript checks and `go test ./...` pass for this change. Tests exercise
-the shipped hero, registry, search UI, and worker using deterministic DOM/event
-fixtures. SVG artwork was inspected in light/dark static previews; actual browser
-layout, font paint, and the browser's undo stack were not exercised. Local
-receipts live in `catalog-data/benchmarks/specifiers/`.
+The shared-settle rollout passed 97 JavaScript checks and `go test ./...`.
+Its local receipts live in `catalog-data/benchmarks/specifiers/`.
+
+The sourced drawing update passes 100 JavaScript checks, four Python source
+integrity/preparation checks, and `go test ./...`. Every retained shape's geometry
+matches its pinned original; hit regions retain the same transforms and use
+14 CSS-pixel non-scaling transparent strokes. The generated art is 105,141 bytes
+raw / 18,115 bytes with Python gzip; all changed public assets add 18,633 gzip
+bytes compared with the former drawing. The Go server's art response is 17,877
+gzip bytes. Originals and preparation metadata are outside the public embed.
+
+In the synthetic Node DOM fixture, bicycle construction p95 changed from
+0.54 ms / 48 nodes to 5.13 ms / 409 nodes. This runs when mounting the bicycle,
+not during ordinary typing; these measurements exclude real DOM layout/paint.
+Warm loopback full-body requests for the registry changed from 0.31 ms to
+0.20 ms at p95, and the art response measured 0.16 ms. These small samples are
+local checks, not evidence of a causal serving speedup or browser latency.
+The catalog and search worker were unchanged. Receipts live in
+`catalog-data/benchmarks/sourced-bicycle/`.
+
+Tests exercise the shipped hero, registry, search UI, and worker using
+deterministic DOM/event fixtures. All eleven sourced part highlights were
+inspected in light/dark static previews; actual browser layout, font paint,
+and the browser's undo stack were not exercised.

@@ -35,6 +35,7 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   });
   const context = vm.createContext(dom.context);
   const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/' + file), 'utf8'), context);
+  run('bicycle-art.js');
   run('specifiers.js');
   if (heroAvailable) run('hero.js');
   else { dom.response.value = 'please, mend my '; dom.response.dataset.promptLength = '15'; }
