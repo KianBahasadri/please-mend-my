@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
+const { createHash } = require('node:crypto');
 
 // This fixture checks DOM/events and the real registry without opening a
 // browser. It does not model CSS layout, SVG paint, or font measurements.
@@ -40,7 +41,14 @@ function registry({ art = true, pilot = null, fetchArt } = {}) {
     getAttribute(name) { return this.attributes.get(name) ?? null; }
     removeAttribute(name) { this.attributes.delete(name); }
     append(...nodes) { for (const node of nodes) { this.children.push(node); node.parentNode = this; } }
+    insertBefore(node, reference) {
+      const index = this.children.indexOf(reference);
+      assert.ok(index >= 0, 'insertion reference must remain connected');
+      this.children.splice(index, 0, node); node.parentNode = this;
+    }
     replaceChildren(...nodes) {
+      const containsFocus = node => node === document.activeElement || node.children.some(containsFocus);
+      if (this.children.some(containsFocus)) document.activeElement = null;
       this.children.forEach(node => { node.parentNode = null; });
       this.children = [];
       this.append(...nodes);
@@ -265,9 +273,10 @@ test('unsafe source descriptors never create active SVG content and retain the u
 });
 
 const pilotFixture = () => ({ version: 1, archetypes: [{
-  id: 'phone', aliases: ['cellphone'], artUrl: `/assets/art/phone-${'1'.repeat(64)}.json`,
+  id: 'phone', label: 'Phone', aliases: ['cellphone'], artUrl: `/assets/art/phone-${'1'.repeat(64)}.json`,
   parts: [{ id: 'screen', label: 'Screen', query: 'screen', aliases: ['display'] },
-    { id: 'battery', label: 'Battery', query: 'battery', aliases: ['charging'] }],
+    { id: 'battery', label: 'Battery', query: 'battery', aliases: ['charging'] },
+    { id: 'water', label: 'Water damage', query: 'water damage', aliases: ['wet'] }],
 }] });
 const phoneArt = () => ({ version: 1, id: 'phone', viewBox: '0 0 100 100',
   context: [['rect', { x: 5, y: 5, width: 90, height: 90, fill: 'none', stroke: 'currentColor' }]],
@@ -278,6 +287,19 @@ const phoneArt = () => ({ version: 1, id: 'phone', viewBox: '0 0 100 100',
 });
 const artResponse = data => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(data) });
 async function settleArt() { for (let pass = 0; pass < 24; pass++) await Promise.resolve(); }
+
+test('a generated archetype can be added through data without hardcoding another runtime branch', () => {
+  const pilot = pilotFixture();
+  pilot.archetypes.push({ id: 'washing-machine', label: 'Washing machine', aliases: ['washing machine'],
+    artUrl: null, parts: [{ id: 'drain', label: 'Drain', query: 'drain', aliases: ['draining'] }] });
+  const ui = registry({ pilot });
+  assert.equal(ui.api.resolve('washing machine').id, 'washing-machine');
+  ui.mount('washing machine');
+  assert.equal(ui.container.hidden, false);
+  assert.equal(ui.container.getAttribute('aria-label'), 'Washing machine parts and symptoms');
+  ui.part('drain', 'button').dispatch('click');
+  assert.deepEqual(ui.selected, ['drain']);
+});
 
 test('a lazy local diagram preserves the instant list, selected answer, scroll and focused option', async () => {
   let resolve;
@@ -306,6 +328,10 @@ test('a lazy local diagram preserves the instant list, selected answer, scroll a
   assert.equal(ui.part('screen', 'g').getAttribute('aria-pressed'), 'true');
   assert.equal(ui.part('screen', 'g').classList.contains('is-highlighted'), true);
   assert.deepEqual(ui.selected, [], 'hydration never writes the native answer');
+  option.dispatch('blur'); instance.sync('wet');
+  assert.equal(ui.part('water', 'button').getAttribute('aria-pressed'), 'true');
+  assert.equal(ui.svg().classList.contains('has-highlight'), false,
+    'a list-only symptom must not dim all geometry as though it had a mapped region');
 });
 
 test('late diagram responses cannot replace a newer noun and cached artwork mounts without another request', async () => {
@@ -353,4 +379,44 @@ test('missing, rejected and unsafe lazy artwork retain usable list controls with
   ui.mount('phone'); await settleArt();
   assert.equal(requests, 0);
   assert.equal(ui.svg(), undefined);
+});
+
+test('the shipped pilot registry and approved diagram payloads work through the real renderer', async () => {
+  const window = {};
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../assets/specifier-pilot.js'), 'utf8'), { window });
+  const pilot = window.mendSpecifierPilot;
+  assert.equal(pilot.version, 1);
+  assert.deepEqual(Array.from(pilot.archetypes, row => row.id).sort(),
+    ['arm', 'car', 'jeans', 'laptop', 'phone', 'refrigerator', 'stove', 'toilet']);
+  for (const definition of pilot.archetypes) {
+    let requests = 0;
+    const ui = registry({ pilot, fetchArt: async (url, options) => {
+      requests++;
+      assert.equal(url, definition.artUrl);
+      assert.equal(options.mode, 'same-origin');
+      assert.match(url, /^\/assets\/art\/[a-z-]+-[a-f0-9]{64}\.json$/);
+      const body = fs.readFileSync(path.join(__dirname, '..', url));
+      assert.ok(url.endsWith(createHash('sha256').update(body).digest('hex') + '.json'));
+      return artResponse(JSON.parse(body));
+    } });
+    ui.mount(definition.aliases[0]);
+    assert.equal(ui.container.hidden, false);
+    assert.equal(ui.walk(ui.container).filter(node => node.tagName === 'button').length, definition.parts.length);
+    await settleArt();
+    if (definition.artUrl) {
+      assert.equal(requests, 1);
+      assert.ok(ui.svg(), definition.id + ' must render its actual published geometry');
+      const groups = ui.svg().children.filter(node => node.dataset.part);
+      assert.ok(groups.length >= 3);
+      for (const group of groups) {
+        const part = definition.parts.find(row => row.id === group.dataset.part);
+        assert.ok(part);
+        group.dispatch('click');
+        assert.equal(ui.selected.at(-1), part.query);
+      }
+    } else {
+      assert.equal(requests, 0);
+      assert.equal(ui.svg(), undefined, 'rejected candidates stay list-only');
+    }
+  }
 });

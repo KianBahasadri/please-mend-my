@@ -31,8 +31,9 @@ retain the full container width; a workspace below pairs the answer with a
 bicycle diagram and a scrollable parts list. Diagram and list highlights follow
 hover, focus, selection, and matching typed answers. Selecting a part fills the
 answer and searches immediately; selecting that unchanged part again clears it.
-Arm, laptop, phone, car, stove,
-toilet, refrigerator, and jeans have list-only specifiers. On smaller screens,
+The eight-subject [diagram pilot](docs/diagram-pilot.md) adds a reviewed phone
+diagram; arm, laptop, car, stove, toilet, refrigerator, and jeans retain their
+list-only specifiers. On smaller screens,
 the specifier moves beneath the answer, with its diagram and list still paired.
 The bicycle reuses [Al2's Wikimedia drawing](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg)
 under CC BY 3.0 and a headlight from [WRomey's Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)

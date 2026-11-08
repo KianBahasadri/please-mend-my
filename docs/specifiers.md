@@ -3,9 +3,14 @@ controller. `resolve(subject)` maps local aliases to one definition; `nouns`
 exposes the supported subject vocabulary. `mount(container, subject, onSelect)`
 returns `sync(answer)` and `destroy()`. The registry previews and selects parts;
 only the hero writes the native answer. Unknown subjects hide the container.
-New diagrams belong in the registry as inline SVG, alongside their parts,
-canonical queries, and aliases. No Go asset-type changes or catalog rebuild is
-needed.
+New diagrams use prepared geometry descriptors alongside their parts, canonical
+queries, and aliases. The renderer builds inline SVG from local data; published
+JSON artifacts need no catalog rebuild.
+
+The [eight-subject pilot](diagram-pilot.md) adds a generated resident registry and
+lazy local JSON artwork. Its phone diagram maps screen, buttons, and speaker;
+the other seven experimental subjects retain lists. Source and final-byte review
+pins gate publication. The original synchronous bicycle path remains available.
 
 The bicycle uses actual geometry from Al2 and contributors' [Bicycle diagram](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg),
 choosing its [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/),

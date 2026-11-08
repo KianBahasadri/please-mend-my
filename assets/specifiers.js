@@ -82,20 +82,23 @@
     new RegExp(`^/assets/art/${id}-[a-f0-9]{64}\\.json$`).test(value) ? value : "";
   if (pilot?.version === 1 && Array.isArray(pilot.archetypes)) {
     for (const item of pilot.archetypes) {
-      const index = definitions.findIndex(definition => definition.id === item?.id && definition.id !== "bicycle");
-      if (index < 0 || !Array.isArray(item.parts) || !item.parts.length || item.parts.length > 24 ||
+      if (!item || typeof item.id !== "string" || !/^[a-z][a-z0-9-]{0,48}$/.test(item.id) || item.id === "bicycle") continue;
+      const index = definitions.findIndex(definition => definition.id === item.id);
+      if (typeof item.label !== "string" || !item.label.trim() || item.label.length > 100 ||
+          !Array.isArray(item.parts) || !item.parts.length || item.parts.length > 24 ||
           !item.parts.every(value => value && /^[a-z][a-z0-9-]*$/.test(value.id) &&
             typeof value.label === "string" && value.label.length <= 100 &&
             typeof value.query === "string" && value.query.trim() && value.query.length <= 120 &&
             Array.isArray(value.aliases) && value.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) ||
           new Set(item.parts.map(value => value.id)).size !== item.parts.length ||
           !Array.isArray(item.aliases) || !item.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) continue;
-      const base = definitions[index];
-      definitions[index] = { ...base,
+      const base = definitions[index] || { id: item.id, label: item.label, aliases: [] };
+      const definition = { ...base,
         aliases: [...new Set([...base.aliases, ...item.aliases])],
         parts: item.parts.map(value => part(value.id, value.label, value.query, value.aliases)),
         artUrl: artURL(base.id, item.artUrl),
       };
+      if (index < 0) definitions.push(definition); else definitions[index] = definition;
     }
   }
   const aliases = new Map();
@@ -297,7 +300,7 @@
     let answer = "", selected = "", preview = "", disposed = false;
 
     function paint() {
-      svg?.classList.toggle("has-highlight", Boolean(selected || preview));
+      svg?.classList.toggle("has-highlight", groups.has(selected) || groups.has(preview));
       for (const item of definition.parts) {
         for (const node of [groups.get(item.id), options.get(item.id)]) {
           if (!node) continue;
@@ -368,7 +371,7 @@
       svg = diagram;
       for (const item of definition.parts) if (groups.has(item.id)) bind(groups.get(item.id), item, true);
       // Keep the existing list, its scroll position and native input untouched.
-      controls.replaceChildren(svg, list);
+      controls.insertBefore(svg, list);
       container.classList.remove("is-list-only");
       paint();
       window.dispatchEvent?.(new Event("mend:layout"));
