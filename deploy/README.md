@@ -24,6 +24,13 @@ reingesting older source runtimes merely because shared helper code changed.
 Disposable `work.sqlite` files were unlinked while ingestion was inactive;
 archives, source metadata, published catalogs and rollback binary were retained.
 
+Preparation completed successfully as `a49d8bc3…502c4234`: 435,213 items,
+713,438 media files, 17,814 filled nouns, 12,311 models and 61 diagrams.
+It contains no structured-guide overlay. The refresh service is stopped, and
+the live catalog remains the previous 207,691-item release while work focuses
+on the local demo. Qwen batches are stopped at the user's request; cached
+responses remain available, with no new calls authorized.
+
 Initial measurements in this environment, before catalog integration:
 
 - Loopback `GET /`, 5 warmups then 200 gzip/keep-alive transactions: p50 **0.076 ms**, p95 **0.092 ms**.
