@@ -95,3 +95,5 @@
 - Both startup+per-edit lag confirmed. Per-edit: immediate post, reuse unchanged article DOM, early alternatives, tiny generation marker+nonblocking LRU;204JS pass. Prefix100 exact-rank parity;numeric-prefix scan narrowed. Startup split prototype2.68→1.94s/280→240MiB;pending safe background enrichment wiring.
 - Priority: loaded keypress→visible result, not network/startup. Startup split deferred. Fixes must be generic; repro words are tests only.
 - Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.
+- Demo hardcoding only on demo branch; shared workdir now demo, main deploys from isolated worktree. Prodmain+allphysicalSVGs+≤10karticles Qwen authorized; reuse caches first.
+- HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.

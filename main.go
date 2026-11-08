@@ -63,6 +63,8 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 		switch path.Ext(name) {
 		case ".html":
 			contentType = "text/html; charset=utf-8"
+			// Keep CDN injections from invalidating the offline shell's byte hashes.
+			cacheControl = "no-cache, no-transform"
 		case ".css":
 			contentType = "text/css; charset=utf-8"
 		case ".js":

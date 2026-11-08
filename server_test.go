@@ -39,6 +39,8 @@ func TestPublicAssetsAndPrivatePaths(t *testing.T) {
 	for _, asset := range []struct{ target, contentType, contains string }{
 		{"/", "text/html", "please, mend my"},
 		{"/index.html", "text/html", "please, mend my"},
+		{"/credits", "text/html", "GitHub"},
+		{"/credits.html", "text/html", "GitHub"},
 		{"/assets/backgrounds.css", "text/css", ".atmosphere"},
 		{"/assets/backgrounds.js", "text/javascript", "pickMendVariant"},
 		{"/assets/fonts/pixelify-sans.woff2", "font/woff2", "wOF2"},
@@ -48,6 +50,9 @@ func TestPublicAssetsAndPrivatePaths(t *testing.T) {
 			response := requestSite(handler, http.MethodGet, asset.target, "", "")
 			if response.Code != http.StatusOK || !strings.HasPrefix(response.Header().Get("Content-Type"), asset.contentType) || !strings.Contains(response.Body.String(), asset.contains) {
 				t.Fatalf("unexpected public response: status=%d type=%q", response.Code, response.Header().Get("Content-Type"))
+			}
+			if asset.contentType == "text/html" && response.Header().Get("Cache-Control") != "no-cache, no-transform" {
+				t.Fatal("HTML must revalidate without CDN content transformations")
 			}
 		})
 	}
@@ -92,7 +97,7 @@ func TestCompressionHEADAndConditionalCache(t *testing.T) {
 			t.Fatalf("HEAD for %q must expose GET length without a body", encoding)
 		}
 		conditional := requestSite(handler, http.MethodGet, "/", encoding, get.Header().Get("ETag"))
-		if conditional.Code != http.StatusNotModified || conditional.Body.Len() != 0 || conditional.Header().Get("Cache-Control") != "no-cache" {
+		if conditional.Code != http.StatusNotModified || conditional.Body.Len() != 0 || conditional.Header().Get("Cache-Control") != "no-cache, no-transform" {
 			t.Fatalf("unchanged %q representation must return an empty 304", encoding)
 		}
 	}
