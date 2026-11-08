@@ -102,3 +102,4 @@
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
 - Stale first-letter article fixed: guide generation publishes only when the replacement worker swaps; a rejected persistent guide falls back to the network so the article follows the current alternatives. JS 216 pass.
 - Prod 6a2dced binary deployed; live catalog remains f55559d2 (207691 items, 9965255B gzip). Full pipeline rebuild did not start: 15GiB free, cold iFixit needs 20GiB. Apex/www asset SHA match. Home TTFB median ~0.13s after, ~0.11s before.
+- Two-tier search wired: hero second line strictly scopes candidate results to active subject category (zero cross-category leakage, guides beat articles); bare nouns render as diagnostic triage overviews with badges. 139 JS + Go pass.
