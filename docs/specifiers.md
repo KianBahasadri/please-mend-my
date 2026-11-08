@@ -29,8 +29,13 @@ python3 scripts/prepare_bicycle_art.py --check
 
 `window.mendHero` exposes `query()`, `focus()`, `isAwaitingSpecifics()`,
 `settleDelay()`, `setVocabulary(terms)`, and immediate `settle()`. Its timer
-controls automatic clarification independently of live search. The worker's
-startup `ready.terms` supplies the sorted resident dictionary, checked with
+controls answer focus and non-specifier clarification independently of live
+search. A bare subject recognized by `mendSpecifiers.resolve` mounts its question
+and diagram/list on the input event, preserving first-field focus until the
+idle deadline or an explicit action. This applies to every registry alias,
+including list-only specifiers. A first-field value that is no longer a registered
+bare subject closes this workspace immediately. The worker's startup
+`ready.terms` supplies the sorted resident dictionary, checked with
 binary search. A vocabulary arriving during a pause recalculates its deadline
 from the last edit, without restarting the beat.
 Composition, hidden documents, and open guides cancel pending settlement.
@@ -40,8 +45,9 @@ edits within one animation frame and rejecting stale worker replies. There is
 no search debounce or dictionary-dependent wait. Empty queries and unanswered
 clarifications hide cards immediately; committed answers search immediately.
 IME preedit waits for commitment. `mend:settle` handles clarification transitions
-and explicit shortcuts; live results never wait for that event. Bare subjects
-can show results while typing, then hide them when the blank clarification opens.
+and explicit shortcuts; live results never wait for that event. Subjects without
+a specifier can show results during the clarification pause. Registered subjects
+hide cards immediately when their blank clarification opens.
 
 Part selection focuses the answer and tries a native `insertText` edit to retain
 undo history where supported, falling back to `setRangeText` if the edit was not

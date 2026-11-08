@@ -263,7 +263,13 @@
     const value = suffix(first);
     if (suppressed !== null && value !== suppressed) suppressed = null;
     const name = value === suppressed ? "" : bareNoun(value);
-    if (open && name && name.toLocaleLowerCase("en") === subject.toLocaleLowerCase("en")) updateLine(name);
+    const sameSubject = open && name && name.toLocaleLowerCase("en") === subject.toLocaleLowerCase("en");
+    // Show prepared narrowing controls as soon as the whole subject matches.
+    // Keep native focus on the first field until a pause or explicit action,
+    // so continuing from "car" to "carpet" never types into the answer.
+    const preview = name && specifiers?.resolve?.(name) && document.visibilityState !== "hidden" &&
+      !document.body.classList.contains("reading");
+    if (sameSubject || preview) updateLine(name);
     else updateLine("");
   }
 

@@ -4,14 +4,14 @@
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
-- Underline editable areas+idle floaters. Clarification pause: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank focused answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
+- Underline editable areas+idle floaters. Non-specifier question + idle answer-focus: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
 - Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/spareparts/blueprint/cutpaper; inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
-- Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.
+- Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.
 - Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.

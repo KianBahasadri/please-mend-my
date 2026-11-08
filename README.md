@@ -14,20 +14,24 @@ typing.
 
 Both typing areas are underlined, matching the little idle typing animations.
 Search updates on every edit with no typing delay or debounce, including unknown
-words and model numbers. IME input searches on commitment. Clarification alone
-waits 380 ms after a recognized trailing word of at least two letters, or 1000 ms
-for an unfamiliar token. The worker supplies its resident dictionary once at
-startup; word checks then run synchronously in the page. Enter, Tab, or a
-noun-ending `?`, `.`, or `!` confirms an eligible subject immediately; typed punctuation
-remains intact. Clearing an input hides the corresponding UI immediately.
+words and model numbers. IME input searches on commitment. Subjects with a
+specifier reveal the question and diagram or list immediately, while typing
+focus stays in the first field. After 380 ms for a recognized word, or 1000 ms
+for an unfamiliar token, focus moves to the blank answer. Other eligible
+subjects use that pause before showing their question. The worker supplies its
+resident dictionary once at startup; word checks run synchronously in the page.
+Enter, Tab, or a noun-ending `?`, `.`, or `!` confirms an eligible subject
+immediately; typed punctuation remains intact. Clearing an input hides the
+corresponding UI immediately.
 
-Settled bare subjects such as `bike` reveal `What's wrong with your bike?` and
-focus the blank native answer beneath it. Once clarification opens, cards stay
-hidden until that answer has content. The first line and question retain the full
-container width; a workspace below pairs the answer with a bicycle diagram and a
-scrollable parts list. Diagram and list highlights follow hover, focus, selection, and matching
-typed answers. Selecting a part fills the answer and searches immediately;
-selecting that unchanged part again clears it. Arm, laptop, phone, car, stove,
+Registered bare subjects such as `bike` reveal `What's wrong with your bike?`
+and a blank native answer beneath it immediately. Once clarification opens,
+cards stay hidden until that answer has content. The first line and question
+retain the full container width; a workspace below pairs the answer with a
+bicycle diagram and a scrollable parts list. Diagram and list highlights follow
+hover, focus, selection, and matching typed answers. Selecting a part fills the
+answer and searches immediately; selecting that unchanged part again clears it.
+Arm, laptop, phone, car, stove,
 toilet, refrigerator, and jeans have list-only specifiers. On smaller screens,
 the specifier moves beneath the answer, with its diagram and list still paired.
 The bicycle reuses [Al2's Wikimedia drawing](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg)

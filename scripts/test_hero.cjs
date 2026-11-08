@@ -15,7 +15,13 @@ async function heroFor(options = {}) {
   options.setup?.(dom);
   dom.queries = [];
   dom.window.addEventListener('mend:querychange', () => dom.queries.push(dom.window.mendHero.query()));
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8'), vm.createContext(dom.context));
+  const context = vm.createContext(dom.context);
+  if (options.specifiers) {
+    for (const file of ['bicycle-art.js', 'specifiers.js']) {
+      vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/' + file), 'utf8'), context);
+    }
+  }
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8'), context);
   await Promise.resolve();
   dom.flushFrames();
   dom.prefix = input => input.value.slice(0, Number(input.dataset.promptLength));
@@ -66,6 +72,117 @@ test('a bare noun waits 380ms then asks a separate question and focuses a blank 
   assert.equal(dom.answerMirror.textContent, 'hurts');
   assert.equal(dom.window.mendHero.query(), 'arm hurts');
   assert.equal(dom.queries.at(-1), 'arm hurts');
+});
+
+test('every prepared specifier alias appears at zero clock without moving the first caret', async () => {
+  const dom = await heroFor({ specifiers: true });
+  for (const noun of [...dom.window.mendSpecifiers.nouns, 'e-bike']) {
+    const definition = dom.window.mendSpecifiers.resolve(noun);
+    dom.type(dom.response, noun);
+    assert.equal(dom.visible(), true, noun);
+    assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`, noun);
+    assert.equal(dom.specifierContainer.hidden, false, noun);
+    assert.equal(dom.specifierContainer.querySelectorAll('.specifier-option').length, definition.parts.length, noun);
+    assert.equal(Boolean(dom.specifierContainer.querySelector('svg')), Boolean(definition.svg), noun);
+    assert.equal(dom.document.activeElement, dom.response, 'instant narrowing never redirects ongoing typing');
+    assert.equal(dom.response.selectionStart, dom.response.value.length, noun);
+    assert.equal(dom.response.selectionEnd, dom.response.value.length, noun);
+    assert.equal(dom.clarification.value, '');
+    assert.equal(dom.window.mendHero.query(), noun);
+  }
+  dom.type(dom.response, 'bike');
+  dom.advance(379); assert.equal(dom.document.activeElement, dom.response);
+  dom.advance(1); assert.equal(dom.document.activeElement, dom.clarification);
+});
+
+test('instant specifiers preserve native first-field selection and explicit focus controls', async () => {
+  const dom = await heroFor({ specifiers: true });
+  const prefix = dom.prefix(dom.response);
+  dom.response.value = prefix + 'bike';
+  dom.response.setSelectionRange(prefix.length + 1, prefix.length + 3);
+  dom.event(dom.response, 'input', { bubbles: true, inputType: 'insertFromPaste' });
+  assert.equal(dom.visible(), true);
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.response.selectionStart, prefix.length + 1);
+  assert.equal(dom.response.selectionEnd, prefix.length + 3);
+  dom.key(dom.response, 'a', { ctrlKey: true });
+  assert.equal(dom.response.selectionStart, prefix.length);
+  assert.equal(dom.response.selectionEnd, dom.response.value.length);
+  for (const shortcut of ['Enter', 'Tab', '?', '.', '!']) {
+    dom.response.focus(); dom.type(dom.response, 'bike');
+    assert.equal(dom.document.activeElement, dom.response);
+    if (shortcut.length === 1) dom.insert(dom.response, shortcut);
+    else dom.key(dom.response, shortcut);
+    assert.equal(dom.document.activeElement, dom.clarification, shortcut);
+    assert.equal(dom.clarification.value, '');
+    assert.equal(dom.question.textContent, "What's wrong with your bike?");
+    assert.equal(dom.suffix(dom.response), 'bike' + (shortcut.length === 1 ? shortcut : ''));
+  }
+});
+
+test('continuing a recognized prefix or full phrase replaces instant controls without hijacking typing', async () => {
+  const dom = await heroFor({ specifiers: true });
+  for (const sequence of [
+    ['c', 'ca', 'car', 'carp', 'carpet'], ['b', 'bi', 'bik', 'bike', 'bikes'],
+    ['p', 'ph', 'pho', 'phon', 'phone', 'phones'], ['phone', 'headphones'],
+  ]) {
+    dom.response.focus();
+    for (const text of sequence) {
+      dom.type(dom.response, text);
+      const prepared = Boolean(dom.window.mendSpecifiers.resolve(text));
+      assert.equal(!dom.specifierContainer.hidden, prepared, text);
+      assert.equal(dom.visible(), prepared, text);
+      assert.equal(dom.document.activeElement, dom.response, text);
+      assert.equal(dom.suffix(dom.response), text);
+    }
+  }
+  for (const text of ['broken bike', 'bike chain', 'my arm hurts', 'laptop not charging',
+    'phone screen cracked', 'car not starting', 'jeans torn', 'notebook battery', '']) {
+    dom.type(dom.response, text, { inputType: 'insertFromPaste' });
+    assert.equal(dom.visible(), false, text);
+    assert.equal(dom.specifierContainer.hidden, true, text);
+    assert.equal(dom.specifierContainer.children.length, 0, 'leaving a subject destroys stale controls');
+    dom.advance(2000);
+    assert.equal(dom.visible(), false, text);
+    assert.equal(dom.document.activeElement, dom.response);
+  }
+});
+
+test('prepared controls wait for IME commit and never open while hidden, reading or suppressed', async () => {
+  const dom = await heroFor({ specifiers: true });
+  dom.event(dom.response, 'compositionstart');
+  dom.type(dom.response, 'bike', { inputType: 'insertCompositionText', isComposing: true });
+  dom.advance(2000);
+  assert.equal(dom.visible(), false);
+  dom.event(dom.response, 'compositionend');
+  assert.equal(dom.visible(), true, 'committed text mounts prepared controls without a timer');
+  assert.equal(dom.document.activeElement, dom.response);
+  dom.key(dom.response, 'Enter');
+  dom.key(dom.clarification, 'Backspace');
+  dom.type(dom.response, 'bike'); dom.advance(2000);
+  assert.equal(dom.visible(), false, 'Backspace suppression includes the instant path');
+  dom.key(dom.response, 'Tab');
+  assert.equal(dom.visible(), true, 'explicit completion can reopen a suppressed subject');
+  assert.equal(dom.document.activeElement, dom.clarification);
+  for (const mode of ['hidden', 'reading']) {
+    const blocked = await heroFor({ specifiers: true });
+    if (mode === 'hidden') blocked.document.visibilityState = 'hidden';
+    else blocked.document.body.classList.add('reading');
+    blocked.type(blocked.response, 'laptop'); blocked.advance(2000);
+    assert.equal(blocked.visible(), false, mode);
+    assert.equal(blocked.specifierContainer.hidden, true, mode);
+  }
+});
+
+test('subjects without prepared controls retain their conservative automatic question pause', async () => {
+  const dom = await heroFor({ specifiers: true });
+  dom.type(dom.response, 'relationship');
+  assert.equal(dom.visible(), false);
+  dom.advance(379); assert.equal(dom.visible(), false);
+  dom.advance(1);
+  assert.equal(dom.question.textContent, "What's wrong with your relationship?");
+  assert.equal(dom.specifierContainer.hidden, true, 'there is no empty SVG placeholder');
+  assert.equal(dom.document.activeElement, dom.clarification);
 });
 
 test('the idle deadline resets and continuing a full phrase cancels clarification', async () => {

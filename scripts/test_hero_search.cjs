@@ -75,24 +75,23 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   return ui;
 }
 
-test('bike results start immediately while its question keeps the 380ms pause and full-width prompt', async () => {
+test('bike controls appear immediately, hide unspecific results and preserve first focus until the pause', async () => {
   const ui = await searchUI(); ui.ready();
   const width = ui.response.clientWidth;
-  ui.change('bike'); ui.flushFrames();
-  assert.equal(ui.searches().at(-1).query, 'bike');
+  ui.change('bik'); ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'bik');
   assert.equal(ui.question.textContent, '');
   assert.equal(ui.elements['search-results'].hidden, false);
   const stale = ui.searches().at(-1).requestId;
-  ui.advance(379);
-  assert.equal(ui.question.textContent, '');
-  assert.equal(ui.elements['search-results'].hidden, false);
-  assert.equal(ui.searches().length, 1);
-  ui.advance(1);
+  ui.change('bike');
   assert.equal(ui.question.textContent, "What's wrong with your bike?");
   assert.equal(ui.specifierContainer.hidden, false);
+  assert.ok(ui.specifierContainer.querySelector('svg'));
   assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
-  assert.equal(ui.document.activeElement, ui.clarification);
+  assert.equal(ui.document.activeElement, ui.response, 'instant display never interrupts the first field');
+  assert.equal(ui.response.selectionStart, ui.response.value.length);
   assert.equal(ui.elements['search-results'].hidden, true);
+  ui.flushFrames();
   assert.equal(ui.searches().length, 1, 'opening an unanswered question cancels results without another query');
   ui.results(stale, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
   assert.equal(ui.elements['search-results'].hidden, true, 'a pre-question response cannot reopen blank specifics');
@@ -100,10 +99,12 @@ test('bike results start immediately while its question keeps the 380ms pause an
   assert.equal(ui.response.clientWidth, width, 'underneath specifier does not change first-line width');
   assert.equal(ui.workspace.parentNode.contains(ui.question), true);
   assert.equal(ui.workspace.contains(ui.question), false, 'question stays outside the split workspace');
+  ui.advance(379); assert.equal(ui.document.activeElement, ui.response);
+  ui.advance(1); assert.equal(ui.document.activeElement, ui.clarification);
 });
 
 test('SVG and list selections write the native answer and reveal cards immediately; clear hides again', async () => {
-  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
+  const ui = await searchUI(); ui.ready(); ui.change('bike');
   ui.clickPart('chain', true);
   assert.equal(ui.clarification.value, 'chain');
   assert.equal(ui.clarification.selectionStart, 5);
@@ -181,14 +182,23 @@ test('each successive edit searches in its next frame and rapid edits coalesce t
   assert.equal(ui.requests.length, 0);
 });
 
-test('car to carpet and bike to bikes continue typing without a premature clarification', async () => {
+test('car to carpet and bike to bikes continue in the first field while specifiers update immediately', async () => {
   const ui = await searchUI(); ui.ready();
-  ui.change('car'); ui.advance(200); ui.change('carpet'); ui.advance(379);
+  ui.change('car');
+  assert.equal(ui.question.textContent, "What's wrong with your car?");
+  assert.equal(ui.document.activeElement, ui.response);
+  ui.advance(200); ui.change('carpet');
+  assert.equal(ui.specifierContainer.hidden, true);
+  assert.equal(ui.question.textContent, '');
+  ui.advance(379);
   assert.equal(ui.question.textContent, '');
   ui.advance(1); assert.equal(ui.question.textContent, '');
   assert.equal(ui.searches().at(-1).query, 'carpet');
-  ui.change('bike'); ui.advance(200); ui.change('bikes'); ui.advance(379);
-  assert.equal(ui.question.textContent, '');
+  ui.change('bike'); ui.advance(200); ui.change('bikes');
+  assert.equal(ui.question.textContent, "What's wrong with your bikes?");
+  assert.equal(ui.document.activeElement, ui.response);
+  ui.advance(379);
+  assert.equal(ui.document.activeElement, ui.response);
   ui.advance(1);
   assert.equal(ui.question.textContent, "What's wrong with your bikes?");
   assert.equal(ui.elements['search-results'].hidden, true);
@@ -205,9 +215,10 @@ test('startup searches the latest edit immediately without waiting for clarifica
   pending.ready();
   assert.equal(pending.searches().at(-1).query, 'broken phone', 'index readiness immediately searches the current text');
   const noun = await searchUI(); noun.change('bike'); noun.advance(100); noun.ready();
-  assert.equal(noun.searches().at(-1).query, 'bike');
-  noun.advance(279); assert.equal(noun.question.textContent, '');
-  noun.advance(1); assert.equal(noun.question.textContent, "What's wrong with your bike?");
+  assert.equal(noun.searches().length, 0, 'known controls do not wait for the worker or leak unspecific cards');
+  assert.equal(noun.question.textContent, "What's wrong with your bike?");
+  noun.advance(279); assert.equal(noun.document.activeElement, noun.response);
+  noun.advance(1); assert.equal(noun.document.activeElement, noun.clarification);
   assert.equal(noun.elements['search-results'].hidden, true);
 });
 
@@ -281,9 +292,12 @@ test('pending edits retain displayed results but reject old replies and never st
   ui.advance(380);
   assert.equal(ui.document.activeElement, card);
   assert.equal(ui.searches().at(-1).query, 'broken screen');
+  const beforeBike = ui.searches().length;
   ui.change('bike'); card.focus(); ui.advance(380);
-  assert.equal(ui.question.textContent, '', 'a focused card must not be hijacked by a delayed noun prompt');
-  assert.equal(ui.searches().at(-1).query, 'bike');
+  assert.equal(ui.question.textContent, "What's wrong with your bike?");
+  assert.equal(ui.document.activeElement, card, 'showing controls never hijacks a focused card');
+  assert.equal(ui.searches().length, beforeBike);
+  assert.equal(ui.elements['search-results'].hidden, true);
 });
 
 test('composition searches only committed text immediately and hidden/reading views cancel pending work', async () => {
@@ -293,7 +307,7 @@ test('composition searches only committed text immediately and hidden/reading vi
   ui.event(ui.response, 'compositionend'); ui.flushFrames();
   assert.equal(ui.searches().at(-1).query, 'broken laptop');
   ui.advance(1000); assert.equal(ui.searches().length, 1);
-  ui.change('bike'); ui.document.visibilityState = 'hidden'; ui.event(ui.document, 'visibilitychange');
+  ui.document.visibilityState = 'hidden'; ui.event(ui.document, 'visibilitychange'); ui.change('bike');
   ui.advance(1000); assert.equal(ui.searches().length, 1);
   ui.document.visibilityState = 'visible'; ui.event(ui.document, 'visibilitychange');
   ui.document.body.classList.add('reading'); await Promise.resolve(); ui.advance(1000);
