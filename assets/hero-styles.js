@@ -57,15 +57,42 @@
 
   function wrench() {
     return drawing("repair-tool repair-wrench", [
-      ["path", { d: "M42 7a23 23 0 0 0-12 39l-2 40a9 9 0 0 0 18 0l-2-40A23 23 0 0 0 51 7l-1 20-13 7-11-8 2-19a23 23 0 0 0 14 0Z", fill: "currentColor" }],
-      ["circle", { cx: "37", cy: "85", r: "3.4", class: "repair-tool-hole" }],
-    ], "0 0 70 100");
+      ["path", {
+        d: "M2 4c0-3 3-5 7-5h14c4 0 7 2 7 5v18l-7-4c-3-1.5-6-1.5-9 0l-7 4V4Z M10 6h12v8H10Z",
+        "fill-rule": "evenodd",
+        fill: "currentColor"
+      }],
+      ["path", {
+        d: "M4.5 19h23v56H4.5Z",
+        fill: "currentColor"
+      }],
+      ["path", {
+        class: "repair-tool-hole",
+        d: "M9.5 24h13v46h-13Z"
+      }],
+      ["path", {
+        d: "M2 74c0-4 3-7 7-7h14c4 0 7 3 7 7v22c0 4-3 6-7 6H9c-4 0-7-2-7-6V74Z M16 74l7 5v10l-7 5-7-5V79Z",
+        "fill-rule": "evenodd",
+        fill: "currentColor"
+      }],
+    ], "0 0 32 100");
   }
 
   function nail() {
     return drawing("repair-tool repair-nail", [
-      ["path", { d: "M18 17 55 27 M37 23 27 53 41 65 19 92", fill: "none", stroke: "currentColor", "stroke-width": "9", "stroke-linecap": "square", "stroke-linejoin": "round" }],
-    ], "0 0 70 100");
+      ["path", {
+        d: "M0 0h22v5H0Z",
+        fill: "currentColor"
+      }],
+      ["path", {
+        class: "repair-tool-hole",
+        d: "M7 1h8v1.5H7Z"
+      }],
+      ["path", {
+        d: "M4 5h14c0 7-1.5 14-4.5 21C11 32 7.5 39 3 44c2-7 5.5-14 8-21 1.5-6 2.5-12 2-18H4Z",
+        fill: "currentColor"
+      }],
+    ], "0 0 24 45");
   }
 
   function mechanicalPart() {
