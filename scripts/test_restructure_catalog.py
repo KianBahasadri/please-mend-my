@@ -141,6 +141,89 @@ class ProcessorTests(unittest.TestCase):
         self.assertEqual(result["counts"], {"pending": 1})
         self.assertFalse((self.cache / (entry["id"] + ".json")).exists())
 
+    def test_catalog_selection_uses_all_source_category_strata_and_reuses_cached_quota(self):
+        other = self.root / "other-source"
+        (other / "guides").mkdir(parents=True)
+        originals = [raw_guide(i) for i in range(1, 9)]
+        for number, runtime in enumerate((self.runtime, other)):
+            rows = []
+            for position, raw in enumerate(originals[number * 4:number * 4 + 4]):
+                raw["category"] = "category-" + str(position % 2)
+                (runtime / "guides" / (raw["id"] + ".json")).write_bytes(canonical_bytes(raw))
+                rows.append([raw[field] for field in ["id", "title", "category", "kind", "device"]])
+            # A topic has no body at all; selecting it would fail the test.
+            rows.append([f"{90 + number:020x}", "Topic only", "category-0", "topic", ""])
+            processor.atomic_json(runtime / "index.json", {"revision": str(number), "source": {"id": str(number)},
+                "fields": ["id", "title", "category", "kind", "device"], "items": rows})
+            processor.atomic_json(runtime / "manifest.json", {"runtimeComplete": True})
+        cached = originals[-1]
+        asyncio.run(processor.process_batch(other, [{"id": cached["id"], "rawSha256": raw_digest(cached)}],
+            self.cache, max_chars=200000, api_key="test-key", transport=lambda *_: (generated(), {})))
+        with patch.object(processor, "load_guide", wraps=processor.load_guide) as reads:
+            selected = processor.select_catalog([other, self.runtime], self.cache, limit=5)
+        self.assertEqual(selected["count"], 5)
+        self.assertEqual(selected["eligibleItems"], 8)
+        self.assertEqual(selected["cachedSelected"], 1)
+        self.assertEqual(selected["entries"][0]["id"], cached["id"])
+        self.assertEqual(len(selected["strata"]), 4)
+        self.assertEqual(reads.call_count, 5)
+        self.assertEqual(selected, processor.select_catalog([self.runtime, other], self.cache, limit=5))
+        # A manifest entry resolves directly to its source, without a duplicate
+        # merged runtime, and never restructures the cached v2 as raw HTML.
+        result = asyncio.run(processor.process_batch(self.root / "unused", selected["entries"], self.cache,
+                                                     max_chars=200000, dry_run=True))
+        self.assertEqual(result["counts"], {"cached": 1, "pending": 4})
+        for limit in (0, 10001, True):
+            with self.assertRaisesRegex(ValueError, "limit"):
+                processor.select_catalog([self.runtime], self.cache, limit=limit)
+
+    def test_selection_rejects_processed_runtime_and_records_oversized_sources_without_truncation(self):
+        raw = raw_guide()
+        self.store(raw)
+        processor.atomic_json(self.runtime / "index.json", {"revision": "test", "source": {"id": "test"},
+            "fields": ["id", "title", "category", "kind", "device"],
+            "items": [[raw[field] for field in ["id", "title", "category", "kind", "device"]]]})
+        processor.atomic_json(self.runtime / "manifest.json", {"runtimeComplete": True, "structuredGuides": {"processedItems": 1}})
+        with self.assertRaisesRegex(ValueError, "original"):
+            processor.select_catalog([self.runtime], self.cache)
+        processor.atomic_json(self.runtime / "manifest.json", {"runtimeComplete": True})
+        selected = processor.select_catalog([self.runtime], self.cache, max_chars=10)
+        self.assertEqual(selected["count"], 0)
+        self.assertIn("no truncation", selected["rejected"][0]["error"])
+
+    def test_per_entry_progress_and_usage_survive_reruns_and_rejected_completions(self):
+        entries = [self.store(raw_guide(i)) for i in (1, 2)]
+        progress = self.root / "progress"
+        def transport(payload, *_):
+            if "Test repair 1" in payload["messages"][1]["content"]:
+                raise processor.APIError("Invalid completion", usage={"cost": .02, "private": "omit"})
+            return generated(), {"cost": .01}
+        first = self.batch(entries, api_key="test-key", transport=transport, progress_dir=progress)
+        self.assertEqual(first["usage"], {"cost": .03})
+        self.assertEqual(first["unpricedApiCalls"], 0)
+        self.assertEqual(len(list(progress.glob("????????????????????.json"))), 2)
+        self.assertEqual(len((progress / "events.jsonl").read_text().splitlines()), 2)
+        second = self.batch(entries[1:], progress_dir=progress)
+        self.assertEqual(second["apiCalls"], 0)
+        events = [json.loads(line) for line in (progress / "events.jsonl").read_text().splitlines()]
+        self.assertEqual(len(events), 3)
+        self.assertEqual(sum(event.get("usage", {}).get("cost", 0) for event in events), .03)
+        self.assertNotIn("private", json.dumps(events))
+        self.assertEqual(events[-1]["status"], "cached")
+
+    def test_disk_reserve_rejects_new_calls_but_does_not_block_cache_reuse(self):
+        entry = self.store(raw_guide())
+        low = type("Disk", (), {"free": 1})()
+        with patch.object(processor.shutil, "disk_usage", return_value=low):
+            failed = self.batch([entry], min_free_bytes=1024, api_key="test-key",
+                                transport=lambda *_: self.fail("Low disk started paid request"))
+        self.assertEqual(failed["apiCalls"], 0)
+        self.assertIn("Disk reserve", failed["entries"][0]["error"])
+        self.batch([entry], api_key="test-key", transport=lambda *_: (generated(), {}))
+        with patch.object(processor.shutil, "disk_usage", return_value=low):
+            reused = self.batch([entry], min_free_bytes=1024)
+        self.assertEqual(reused["counts"], {"cached": 1})
+
     def test_retry_backoff_only_for_transient_errors_and_counts_all_calls(self):
         entry = self.store(raw_guide())
         calls, waits = [], []

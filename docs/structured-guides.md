@@ -61,9 +61,43 @@ changes invalidate the key. Malformed or stale active entries fall back to v1
 during the build. A cache change during publication aborts the new snapshot.
 Failed reprocessing leaves the previous valid activation available; changed raw
 source still fails publication validation. Bump `PROMPT_VERSION` when changing
-the semantic contract. Request counts include failed/retried calls; numerical
-usage receipts describe accepted responses and may omit charges for rejected
-responses.
+the semantic contract. Request counts include failed/retried calls. Usage
+receipts include rejected responses when the provider returns numeric accounting;
+`unpricedApiCalls` explicitly counts calls without a reported charge.
+
+## Systematic catalog batch
+
+`select` reads the source indexes, keeps guides/articles, and first validates
+available cached results against their original sources. It then fills the
+remaining quota by deterministic round-robin across observed source/category
+strata. No subject allowlist or guide-body corpus scan is used. The current
+authorization caps this batch at 10,000 unique articles, including reused results.
+Pass each original source runtime separately; selected entries resolve directly
+to those originals without copying another merged corpus:
+
+```sh
+DATA=catalog-data/build
+python3 scripts/restructure_catalog.py select \
+  --runtime-dir "$DATA/runtime" --runtime-dir "$DATA/wikimed/runtime" \
+  --runtime-dir "$DATA/first-aid/runtime" --runtime-dir "$DATA/appropedia/runtime" \
+  --runtime-dir "$DATA/wikihow/runtime" --cache-dir "$DATA/stage3_cache" \
+  --limit 10000 --max-input-chars 200000 --output "$DATA/articles-10000/selection.json"
+python3 scripts/restructure_catalog.py run --runtime-dir "$DATA" \
+  --manifest "$DATA/articles-10000/selection.json" --cache-dir "$DATA/stage3_cache" \
+  --max-input-chars 200000 --concurrency 128 --min-free-gib 2 \
+  --output "$DATA/articles-10000/result.json"
+```
+
+Run these under the shared bounded-job wrapper; concurrent remote workers still
+share one capped local process tree. `--dry-run` validates cache reuse and input
+sizes without model calls. A two-GiB disk reserve plus the concurrent response
+working set is required before starting new paid requests. Source oversize is
+reported without truncation. Per-entry receipts and an append-only usage journal
+live beside the result in `result.progress/`, preserving completion/failure costs
+across interruption. Response and activation caches remain reusable on rerun.
+Regenerate selection paths on EC2 using its own source runtimes; the corpus stays
+on the machine that ingested it. Publish only a completed validated overlay, then
+rebuild symptom/material postings before selecting the new immutable release.
 
 ## Repeatable pilot
 
