@@ -23,6 +23,15 @@ async function heroFor(options = {}) {
     dom.event(input, 'input', { bubbles: true, inputType: 'insertText', ...options });
   };
   dom.key = (input, key, options = {}) => dom.event(input, 'keydown', { key, bubbles: true, ...options });
+  dom.insert = (input, text, options = {}) => {
+    const before = dom.event(input, 'beforeinput', { inputType: 'insertText', data: text, bubbles: true, ...options });
+    if (!before.defaultPrevented) {
+      assert.equal(dom.document.activeElement, input, 'native insertion must finish before focus moves');
+      input.setRangeText(text, input.selectionStart, input.selectionEnd, 'end');
+      dom.event(input, 'input', { inputType: 'insertText', data: text, bubbles: true, ...options });
+    }
+    return before;
+  };
   dom.visible = () => dom.line.getAttribute('aria-hidden') !== 'true' && !dom.line.inert;
   dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(2500); assert.equal(dom.visible(), true); };
   return dom;
@@ -104,40 +113,109 @@ test('Enter and Tab immediately ask the question, focus its blank answer, and pr
   }
 });
 
-test('completion punctuation immediately clarifies bare nouns without entering query punctuation', async () => {
+test('desktop completion punctuation remains in the native first field before clarification receives focus', async () => {
   for (const noun of ['arm', 'harpsichord']) {
     for (const punctuation of ['?', '.', '!']) {
       const dom = await heroFor();
       dom.type(dom.response, noun);
       const event = dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' });
-      assert.equal(event.defaultPrevented, true);
+      assert.equal(event.defaultPrevented, false);
+      assert.equal(dom.visible(), false);
+      assert.equal(dom.document.activeElement, dom.response);
+      assert.equal(dom.insert(dom.response, punctuation).defaultPrevented, false);
       assert.equal(dom.visible(), true);
       assert.equal(dom.document.activeElement, dom.clarification);
       assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`);
-      assert.equal(dom.suffix(dom.response), noun);
+      assert.equal(dom.suffix(dom.response), noun + punctuation);
+      assert.equal(dom.suffixMirror.textContent, noun + punctuation);
+      assert.equal(dom.document.title, dom.prefix(dom.response) + noun + punctuation);
       assert.equal(dom.clarification.value, '');
       assert.equal(dom.clarification.selectionStart, 0);
-      assert.equal(dom.window.mendHero.query(), noun);
+      assert.equal(dom.window.mendHero.query(), noun + punctuation);
       dom.advance(10000);
       assert.equal(dom.document.activeElement, dom.clarification);
-      assert.deepEqual(dom.queries, [noun]);
+      assert.deepEqual(dom.queries, [noun, noun + punctuation]);
     }
   }
 });
 
-test('mobile completion punctuation clarifies once without inserting literal punctuation', async () => {
+test('mobile completion punctuation remains in the first field and clarifies once', async () => {
   for (const punctuation of ['?', '.', '!']) {
     const dom = await heroFor();
     dom.type(dom.response, 'car');
-    const mobile = dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true });
-    assert.equal(mobile.defaultPrevented, true);
+    const mobile = dom.insert(dom.response, punctuation);
+    assert.equal(mobile.defaultPrevented, false);
     assert.equal(dom.visible(), true);
     assert.equal(dom.document.activeElement, dom.clarification);
     assert.equal(dom.question.textContent, "What's wrong with your car?");
-    assert.equal(dom.window.mendHero.query(), 'car');
-    assert.equal(dom.suffix(dom.response), 'car');
-    assert.deepEqual(dom.queries, ['car']);
+    assert.equal(dom.window.mendHero.query(), 'car' + punctuation);
+    assert.equal(dom.suffix(dom.response), 'car' + punctuation);
+    assert.equal(dom.suffixMirror.textContent, 'car' + punctuation);
+    assert.equal(dom.document.title, dom.prefix(dom.response) + 'car' + punctuation);
+    assert.equal(dom.clarification.value, '');
+    assert.deepEqual(dom.queries, ['car', 'car' + punctuation]);
   }
+});
+
+test('retained punctuation remains editable and undo/redo never steals the first caret', async () => {
+  for (const punctuation of ['?', '.', '!']) {
+    const dom = await heroFor();
+    dom.type(dom.response, 'arm');
+    dom.insert(dom.response, punctuation);
+    dom.response.focus();
+    const beforeDelete = dom.event(dom.response, 'beforeinput', { inputType: 'deleteContentBackward', bubbles: true });
+    assert.equal(beforeDelete.defaultPrevented, false);
+    dom.type(dom.response, 'arm', { inputType: 'deleteContentBackward' });
+    assert.equal(dom.document.activeElement, dom.response);
+    assert.equal(dom.window.mendHero.query(), 'arm');
+    for (const [inputType, text] of [['historyUndo', 'arm' + punctuation], ['historyRedo', 'arm']]) {
+      const before = dom.event(dom.response, 'beforeinput', { inputType, bubbles: true });
+      assert.equal(before.defaultPrevented, false, 'native history owns punctuation edits');
+      dom.type(dom.response, text, { inputType });
+      assert.equal(dom.document.activeElement, dom.response);
+      assert.equal(dom.window.mendHero.query(), text);
+      assert.equal(dom.suffixMirror.textContent, text);
+      assert.equal(dom.document.title, dom.prefix(dom.response) + text);
+    }
+    dom.type(dom.response, 'arm' + punctuation);
+    dom.response.setSelectionRange(dom.response.value.length - 1, dom.response.value.length);
+    dom.insert(dom.response, ',');
+    assert.equal(dom.suffix(dom.response), 'arm,');
+    assert.equal(dom.document.activeElement, dom.response);
+  }
+});
+
+test('Enter and Tab still clarify a punctuated noun without rewriting it', async () => {
+  for (const shortcut of ['Enter', 'Tab']) {
+    const dom = await heroFor({ theme: 'toolbox' });
+    dom.type(dom.response, 'arm?!');
+    const event = dom.key(dom.response, shortcut);
+    assert.equal(event.defaultPrevented, true);
+    assert.equal(dom.question.textContent, "What's wrong with your arm?");
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.window.mendHero.query(), 'arm?!');
+    assert.equal(dom.suffixMirror.textContent, 'arm?!');
+    assert.equal(dom.document.title, dom.prefix(dom.response) + 'arm?!');
+  }
+});
+
+test('cancelled native punctuation cannot leave a completion intent for history or composition', async () => {
+  const dom = await heroFor();
+  dom.type(dom.response, 'arm');
+  const before = dom.event(dom.response, 'beforeinput', { inputType: 'insertText', data: '?', bubbles: true });
+  before.preventDefault(); // Another native editor listener may reject the edit.
+  assert.equal(dom.suffix(dom.response), 'arm');
+  assert.equal(dom.visible(), false);
+  dom.type(dom.response, 'arm?', { inputType: 'historyRedo' });
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.document.activeElement, dom.response);
+  dom.event(dom.response, 'compositionstart');
+  dom.insert(dom.response, '!', { isComposing: true });
+  assert.equal(dom.suffix(dom.response), 'arm?!');
+  assert.equal(dom.visible(), false);
+  dom.event(dom.response, 'compositionend');
+  assert.equal(dom.document.activeElement, dom.response);
+  assert.equal(dom.window.mendHero.query(), 'arm?!');
 });
 
 test('completion punctuation preserves full phrases, decimals, models, and non-subjects', async () => {
@@ -170,10 +248,11 @@ test('completion shortcuts respect modifiers, composition, and ordinary answer p
     assert.equal(dom.visible(), false);
     dom.event(dom.response, 'compositionend');
     dom.key(dom.response, punctuation, { shiftKey: punctuation !== '.' });
+    dom.insert(dom.response, punctuation);
     assert.equal(dom.key(dom.clarification, punctuation, { shiftKey: punctuation !== '.' }).defaultPrevented, false);
     assert.equal(dom.event(dom.clarification, 'beforeinput', { inputType: 'insertText', data: punctuation, bubbles: true }).defaultPrevented, false);
     dom.type(dom.clarification, 'hurts' + punctuation);
-    assert.equal(dom.window.mendHero.query(), 'arm hurts' + punctuation);
+    assert.equal(dom.window.mendHero.query(), 'arm' + punctuation + ' hurts' + punctuation);
   }
 });
 
@@ -255,20 +334,22 @@ test('qualified bare objects agree with the worker contract for immediate keyboa
     for (const shortcut of ['Enter', 'Tab', '?', '.', '!', 'mobile?', 'mobile.', 'mobile!']) {
       const dom = await heroFor();
       dom.type(dom.response, raw);
-      const event = shortcut.startsWith('mobile') ? dom.event(dom.response, 'beforeinput', {
-        inputType: 'insertText', data: shortcut.slice(6), bubbles: true,
-      }) : dom.key(dom.response, shortcut, { shiftKey: shortcut === '?' || shortcut === '!' });
-      assert.equal(event.defaultPrevented, true, `${raw}/${shortcut}`);
+      const punctuation = shortcut.startsWith('mobile') ? shortcut.slice(6) : ['?', '.', '!'].includes(shortcut) ? shortcut : '';
+      const event = shortcut.startsWith('mobile') ? dom.insert(dom.response, punctuation)
+        : dom.key(dom.response, shortcut, { shiftKey: shortcut === '?' || shortcut === '!' });
+      assert.equal(event.defaultPrevented, !punctuation, `${raw}/${shortcut}`);
+      if (punctuation && !shortcut.startsWith('mobile')) dom.insert(dom.response, punctuation);
+      const typed = raw + punctuation;
       assert.equal(dom.visible(), true);
       assert.equal(dom.question.textContent.toLowerCase(), `what's wrong with your ${normalized}?`);
       assert.equal(dom.document.activeElement, dom.clarification);
-      assert.equal(dom.window.mendHero.query(), raw, 'typed qualifiers remain in the raw query API');
-      assert.equal(dom.suffix(dom.response), raw, 'question cleanup never rewrites typed text');
+      assert.equal(dom.window.mendHero.query(), typed, 'typed qualifiers and punctuation remain in the raw query API');
+      assert.equal(dom.suffix(dom.response), typed, 'question cleanup never rewrites typed text');
       dom.type(dom.clarification, "it's broken");
-      assert.equal(dom.window.mendHero.query(), `${raw} it's broken`);
+      assert.equal(dom.window.mendHero.query(), `${typed} it's broken`);
       dom.response.focus();
       dom.key(dom.response, 'a', { ctrlKey: true });
-      assert.equal(dom.response.value.slice(dom.response.selectionStart, dom.response.selectionEnd), raw);
+      assert.equal(dom.response.value.slice(dom.response.selectionStart, dom.response.selectionEnd), typed);
       assert.equal(dom.response.selectionStart, Number(dom.response.dataset.promptLength));
     }
   }

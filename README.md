@@ -6,9 +6,9 @@ Both typing areas are underlined, matching the little idle typing animations.
 After 2.5 seconds without typing, bare subjects such as `arm` reveal the hero
 question `What's wrong with your arm?` and focus a blank answer field beneath it.
 Enter, Tab, or a noun-ending `?`, `.`, or `!` opens it immediately; punctuation
-stays normal in full phrases and the answer. Backspace on an empty answer returns
-to the end of the first line. The prompt and question stay protected, and only the
-focused native textbox has a caret. Full phrases such as `broken arm` use the
+remains in your typed text, including when it opens the question. Backspace on an
+empty answer returns to the end of the first line. The prompt and question stay
+protected, and only the focused native textbox has a caret. Full phrases such as `broken arm` use the
 first line alone. Search combines the two editable answers locally, excluding
 the fixed prompt and question.
 Each font keeps its size when the full question fits; otherwise the hero scales

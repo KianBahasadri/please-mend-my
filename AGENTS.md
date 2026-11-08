@@ -4,7 +4,7 @@
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
-- Underline editable areas+idle floaters. Broad noun idle 2.5s→hero "What's wrong with your <noun>?" + blank answer below; focus answer. No added comma/repeated noun/it's. Enter/Tab/?.! opens now (punctuation only at noun end, no selection; mobile too); phrases skip; empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; search typed text only.
+- Underline editable areas+idle floaters. Broad noun idle 2.5s→hero "What's wrong with your <noun>?" + blank answer below; focus answer. No added comma/repeated noun/it's. Enter/Tab/?.! opens now (keep typed punctuation; noun end, no selection; mobile too); phrases skip; empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; search typed text only.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".

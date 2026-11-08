@@ -217,8 +217,10 @@
     notify();
   }
 
-  function changed(input) {
+  function changed(input, event) {
     const item = state.get(input);
+    const completed = item.completion === input.value && event?.inputType === "insertText";
+    item.completion = null;
     if (!input.value.startsWith(item.prefix)) {
       input.value = item.previous;
       input.setSelectionRange(item.prefix.length, item.prefix.length);
@@ -227,7 +229,7 @@
     if (input === first) syncTitle();
     grow(input);
     if (!item.composing) {
-      if (input === first) syncFirst();
+      if (input === first) completed ? activate() : syncFirst();
       notify();
     }
   }
@@ -246,16 +248,16 @@
     input.addEventListener("select", () => clampSelection(input));
     input.addEventListener("pointerup", () => clampSelection(input));
     input.addEventListener("keyup", () => clampSelection(input));
-    input.addEventListener("compositionstart", () => { cancelAutomatic(); state.get(input).composing = true; });
+    input.addEventListener("compositionstart", () => { cancelAutomatic(); state.get(input).completion = null; state.get(input).composing = true; });
     input.addEventListener("compositionend", () => { state.get(input).composing = false; changed(input); });
-    input.addEventListener("input", () => changed(input));
+    input.addEventListener("input", (event) => changed(input, event));
     input.addEventListener("keydown", (event) => {
       if (event.isComposing || event.keyCode === 229 || state.get(input).composing) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
         input.setSelectionRange(state.get(input).prefix.length, input.value.length);
       } else if (input === first && !event.ctrlKey && !event.metaKey && !event.altKey &&
-          (completesSubject(input, event.key) || !event.shiftKey && (event.key === "Enter" || event.key === "Tab"))) {
+          !event.shiftKey && (event.key === "Enter" || event.key === "Tab")) {
         if (activate() || event.key === "Enter") event.preventDefault();
       } else if (input === second && event.key === "Backspace" && !suffix(second) && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
@@ -271,10 +273,15 @@
       const boundary = item.prefix.length;
       const start = input.selectionStart;
       const end = input.selectionEnd;
-      if (input === first && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph" ||
-          event.inputType === "insertText" && completesSubject(input, event.data)) &&
+      // Let the native edit insert punctuation (and retain its undo history)
+      // before moving focus. A shortcut must never swallow typed characters.
+      item.completion = input === first && event.inputType === "insertText" && completesSubject(input, event.data) &&
+        !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing && !item.composing &&
+        bareNoun(suffix(input), true) ? input.value + event.data : null;
+      if (input === first && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") &&
           !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing && !item.composing) {
-        if (activate() || event.inputType !== "insertText") event.preventDefault();
+        activate();
+        event.preventDefault();
       } else if (event.inputType.startsWith("delete") && event.inputType.endsWith("Backward") && end <= boundary) {
         event.preventDefault();
         if (input === second && !suffix(second) && !event.isComposing && !item.composing) dissolve();
