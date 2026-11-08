@@ -27,14 +27,14 @@ def configuration():
     return json.loads(CONFIG.read_bytes())
 
 
-def rows(path):
+def rows(path, allow_invalid=False):
     csv.field_size_limit(16 * 1024**2)
     with Path(path).open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream, strict=True)
         if reader.fieldnames != ["headline", "title", "text"]:
             raise ValueError("wikiHow CSV header differs from pinned headline,title,text schema")
         for number, row in enumerate(reader, 1):
-            if None in row or any(value is None for value in row.values()):
+            if not allow_invalid and (None in row or any(value is None for value in row.values())):
                 raise ValueError("Malformed wikiHow CSV row " + str(number))
             yield number, row
 
@@ -66,10 +66,15 @@ def build(data_dir, archive, config=None):
     config = configuration() if config is None else config
     verify(archive, config)
     key = ingestion_key(__file__, config)
-    excluded = total = 0
-    with CatalogWriter(data_dir, config, key) as writer:
-        for number, row in rows(archive):
+    excluded = malformed = total = 0
+    quarantine_path = Path(data_dir) / 'quarantine.jsonl.building'
+    with CatalogWriter(data_dir, config, key) as writer, quarantine_path.open('w') as quarantine:
+        for number, row in rows(archive, allow_invalid=True):
             total += 1
+            if None in row or any(value is None for value in row.values()):
+                malformed += 1
+                quarantine.write(json.dumps({'sourceRow': number, 'reason': 'CSV field count differs from header', 'fields': row}, ensure_ascii=False) + '\n')
+                continue
             record = record_for(number, row, config)
             if record is None:
                 excluded += 1
@@ -77,7 +82,10 @@ def build(data_dir, archive, config=None):
             writer.add(record, str(number))
             if total % 10000 == 0:
                 print(f"wikiHow: {total:,} CSV rows streamed", file=sys.stderr, flush=True)
+        quarantine.flush()
+        quarantine_path.replace(Path(data_dir) / 'quarantine.jsonl')
         return writer.finish({"sourceRows": total, "excludedEmptyRows": excluded,
+                              "excludedMalformedRows": malformed, "quarantine": "quarantine.jsonl (build-only)",
                               "rawTextPreservation": "Exact original CSV retained; sourceRow maps every guide to original title/text/headline.",
                               "licenseNotice": config["licenseNotice"]})
 
@@ -100,7 +108,7 @@ def main():
         archive = download(data, config, args.build_only)
         if not args.download_only:
             result = build(data, archive, config)
-            print(json.dumps({key: result[key] for key in ("sourceRows", "indexedItems", "excludedEmptyRows")}))
+            print(json.dumps({key: result[key] for key in ("sourceRows", "indexedItems", "excludedEmptyRows", "excludedMalformedRows")}))
 
 
 if __name__ == "__main__":

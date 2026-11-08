@@ -66,7 +66,8 @@ The builder keeps source caches separate:
 - `<data-dir>/appropedia/runtime/`: full English sustainability/DIY articles,
   redirect aliases and local images; original ZIM retained in `raw/`.
 - `<data-dir>/wikihow/runtime/`: streamed full CSV articles, mapped to original
-  rows in `raw/wikihowAll.csv`. No images or per-row author metadata exist in this source.
+  rows in `raw/wikihowAll.csv`; malformed-width rows go to build-only `quarantine.jsonl`
+  and are counted in the manifest. No images or per-row author metadata exist in this source.
 
 `merge_catalogs.py` builds a fresh stage, hardlinks article/media files, retains
 distinct source licenses, and remaps shared alias groups after deterministic

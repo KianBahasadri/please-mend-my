@@ -176,6 +176,11 @@ class CatalogWriter:
         self.data = Path(data_dir)
         self.data.mkdir(parents=True, exist_ok=True)
         self.config, self.key = config, key
+        # The caller's source lock excludes another active writer. A killed job
+        # may leave a private stage behind; it is not a completed source cache.
+        for path in self.data.iterdir():
+            if path.name.startswith('.runtime-') and path.is_dir() and not path.is_symlink():
+                shutil.rmtree(path)
         self.stage = Path(tempfile.mkdtemp(prefix=".runtime-", dir=self.data))
         for name in ("guides", "media"):
             (self.stage / name).mkdir(mode=0o755)

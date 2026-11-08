@@ -65,13 +65,37 @@ class WikiHowTests(unittest.TestCase):
     def test_invalid_rows_or_checksum_never_replace_previous(self):
         ingest.build(self.data, self.source, self.config)
         before = (self.data / 'runtime/index.json').read_bytes()
-        self.source.write_text('headline,title,text\na,b,c,extra\n')
+        self.source.write_text('unexpected,header\na,b\n')
         config = dict(self.config, bytes=self.source.stat().st_size, sha256=common.digest_file(self.source))
-        with self.assertRaisesRegex(ValueError, 'Malformed'):
+        with self.assertRaisesRegex(ValueError, 'header'):
             ingest.build(self.data, self.source, config)
         self.assertEqual((self.data / 'runtime/index.json').read_bytes(), before)
         with self.assertRaisesRegex(RuntimeError, 'absent/incomplete|SHA-256'):
             ingest.build(self.data, self.source, self.config)
+
+    def test_malformed_rows_are_quarantined_without_losing_good_rows(self):
+        with self.source.open('a') as stream:
+            stream.write('broken,row\n')
+        config = dict(self.config, bytes=self.source.stat().st_size, sha256=common.digest_file(self.source))
+        result = ingest.build(self.data, self.source, config)
+        self.assertEqual(result['sourceRows'], 4)
+        self.assertEqual(result['indexedItems'], 2)
+        self.assertEqual(result['excludedMalformedRows'], 1)
+        quarantine = json.loads((self.data / 'quarantine.jsonl').read_text())
+        self.assertEqual(quarantine['sourceRow'], 4)
+        self.assertEqual(quarantine['fields']['headline'], 'broken')
+        self.assertIsNone(quarantine['fields']['text'])
+        self.assertFalse((self.data / 'runtime/quarantine.jsonl').exists())
+
+    def test_abandoned_private_stage_is_replaced_without_touching_runtime(self):
+        ingest.build(self.data, self.source, self.config)
+        previous = (self.data / 'runtime/index.json').read_bytes()
+        abandoned = self.data / '.runtime-interrupted'
+        abandoned.mkdir()
+        (abandoned / 'partial-guide').write_text('incomplete')
+        with common.CatalogWriter(self.data, self.config, 'new-test-key'):
+            self.assertFalse(abandoned.exists())
+            self.assertEqual((self.data / 'runtime/index.json').read_bytes(), previous)
 
     def test_schema_and_missing_pins_fail_closed(self):
         self.source.write_text('title,text\nOther,words\n')

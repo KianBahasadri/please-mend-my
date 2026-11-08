@@ -88,6 +88,9 @@ BY-NC-SA 3.0 statement applies only to eligible pre-March-24-2025 non-staff text
 the import preserves this limitation. Generated wikiHow URL candidates are not
 published as verified source links: attribution links to the actual dataset.
 No live scraping or Qwen calls are part of either ingester.
+Malformed-width CSV rows are saved to build-only `quarantine.jsonl`, with source
+row numbers and original fields; the manifest reports exclusions. Original bytes
+remain in the CSV. Interrupted private stages are removed before a source rebuild.
 
 ## Planned multi-view artwork
 
