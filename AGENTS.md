@@ -97,9 +97,8 @@
 - Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.
 - Demo cache bypass removed; demo merged back to main. Shared workdir stays on demo; main deploys isolated. Manual local work; bulk Qwen stopped by user, "resume" must not restart it.
 - HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.
-- Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps. Cloud a49d8bc3:435213 prepared, unpromoted; live4084210 still207691.
-- Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloud refresh finished (5GiB/CPU2), no active jobs; prepared-release.path awaits validation/promotion. Keep live207k unchanged for local-demo work.
+- Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps.
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
 - Stale first-letter article fixed: guide generation publishes only when the replacement worker swaps; a rejected persistent guide falls back to the network so the article follows the current alternatives. JS 216 pass.
-- Prod 6a2dced binary deployed; live catalog remains f55559d2 (207691 items, 9965255B gzip). Full pipeline rebuild did not start: 15GiB free, cold iFixit needs 20GiB. Apex/www asset SHA match. Home TTFB median ~0.13s after, ~0.11s before.
+- Prod 0ceed55 binary live with catalog 090b21f9: 435213 items, 713438 media, 21101940B gzip. Apex/www gzip ETag 922c38b5…; origin identity ETag is index SHA 29507cd5…. Home TTFB median ~0.12s; catalog gzip ~1.6s. Ingest succeeded, 9.3GiB free. Demo a0c1e8e search/hero changes are not in the running binary.
 - Two-tier search wired: hero second line strictly scopes candidate results to active subject category (zero cross-category leakage, guides beat articles); bare nouns render as diagnostic triage overviews with badges. 139 JS + Go pass.
