@@ -31,8 +31,9 @@ toilet, refrigerator, and jeans have list-only specifiers. On smaller screens,
 the specifier moves beneath the answer, with its diagram and list still paired.
 The bicycle reuses [Al2's Wikimedia drawing](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg)
 under CC BY 3.0 and a headlight from [WRomey's Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)
-under CC0. The adapted artwork and credits are served locally; pinned originals
-and license records live in [the source directory](docs/references/bicycle/).
+under CC0. Full credits and the GitHub link live on the unlinked `/credits`
+page; source notices also remain in the SVG metadata. Artwork is served locally;
+pinned originals and license records live in [the source directory](docs/references/bicycle/).
 
 Backspace on an already-empty answer returns to the end of the first line and
 suppresses reopening. The protected prompt/question and single native caret are

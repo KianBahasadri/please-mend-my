@@ -10,9 +10,10 @@ needed.
 The bicycle uses actual geometry from Al2 and contributors' [Bicycle diagram](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg),
 choosing its [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/),
 plus the headlight from WRomey's [Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)
-under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Source credits
-and adaptation notices appear below the paired diagram/list. The original files,
-source URLs, hashes, and license records are pinned in
+under [CC0](https://creativecommons.org/publicdomain/zero/1.0/). Full source credits
+and adaptation notices live on the unlinked `/credits` page and remain in the
+SVG's JSON metadata. No credit row or credits link appears beside the diagram.
+The original files, source URLs, hashes, and license records are pinned in
 [`docs/references/bicycle/`](references/bicycle/).
 
 `scripts/prepare_bicycle_art.py` prepares safe monochrome geometry descriptors

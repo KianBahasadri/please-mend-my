@@ -139,6 +139,11 @@
         !definition.parts.every(item => Array.isArray(art.parts?.[item.id]) && art.parts[item.id].length)) return null;
     try {
       const svg = svgNode("svg", { class: "specifier-svg", viewBox: art.viewBox, role: "group", "aria-label": "Bicycle parts" });
+      if (art.attribution) {
+        const metadata = svgNode("metadata", {});
+        metadata.textContent = JSON.stringify(art.attribution);
+        svg.append(metadata);
+      }
       const context = svgNode("g", { class: "specifier-context", "aria-hidden": "true" });
       for (const shape of art.context) context.append(sourcedShape(shape));
       svg.append(context);
@@ -162,36 +167,6 @@
       groups.clear();
       return null;
     }
-  }
-
-  function creditLink(text, href) {
-    const link = document.createElement("a");
-    link.textContent = text;
-    if (typeof href === "string" && /^https?:\/\//i.test(href)) {
-      link.href = href;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-    }
-    return link;
-  }
-
-  function creditText(text) {
-    const node = document.createElement("span");
-    node.textContent = text;
-    return node;
-  }
-
-  function artCredit() {
-    const source = window.mendBicycleArt.attribution;
-    const credit = document.createElement("span");
-    credit.className = "specifier-credit";
-    credit.append(creditText("Adapted from "), creditLink(source.title, source.source), creditText(" · "),
-      creditLink(source.author, source.authorUrl || source.source), creditText(" · "), creditLink(source.license, source.licenseUrl));
-    for (const supplement of source.supplementary || []) {
-      credit.append(creditText(" · Light: "), creditLink(supplement.author, supplement.source), creditText(" · "),
-        creditLink(supplement.license, supplement.licenseUrl));
-    }
-    return credit;
   }
 
   function matchPart(definition, answer) {
@@ -289,7 +264,6 @@
     if (svg) controls.append(svg);
     controls.append(list);
     container.append(controls);
-    if (svg && window.mendBicycleArt.attribution) container.append(artCredit());
     return {
       sync,
       destroy() {

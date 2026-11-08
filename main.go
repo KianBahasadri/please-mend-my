@@ -24,7 +24,7 @@ import (
 
 // Embed only public site files; repository files cannot be requested.
 //
-//go:embed index.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
+//go:embed index.html credits.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
 var siteFiles embed.FS
 
 type representation struct {
@@ -93,6 +93,8 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 		handler.assets["/"+name] = asset
 		if name == "index.html" {
 			handler.assets["/"] = asset
+		} else if name == "credits.html" {
+			handler.assets["/credits"] = asset
 		}
 		return nil
 	})

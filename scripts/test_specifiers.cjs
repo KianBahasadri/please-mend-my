@@ -215,28 +215,24 @@ test('SVG keyboard controls select once and destroyed controls cannot change a s
 });
 
 
-test('the visible source credit follows the paired controls without becoming a third column', () => {
+test('the paired controls keep source notices in SVG metadata without a visible credit line or link', () => {
   const ui = registry(); ui.mount('bike');
-  const [controls, credit] = ui.container.children;
+  const [controls] = ui.container.children;
+  assert.equal(ui.container.children.length, 1, 'the hero has no separate credit row');
   assert.equal(controls.className, 'specifier-controls');
   assert.equal(controls.children[0], ui.svg());
   assert.equal(controls.children[1].className, 'specifier-list');
-  assert.equal(credit.className, 'specifier-credit');
-  const text = ui.walk(credit).map(node => node.textContent).join('');
-  assert.match(text, /^Adapted from /);
-  assert.ok(text.includes(ui.art.attribution.author));
-  assert.ok(text.includes(ui.art.attribution.license));
-  const links = ui.walk(credit).filter(node => node.tagName === 'a');
-  assert.ok(links.some(link => link.href === ui.art.attribution.source));
-  assert.ok(links.some(link => link.href === ui.art.attribution.licenseUrl));
-  for (const supplement of ui.art.attribution.supplementary || []) {
-    assert.ok(text.includes(supplement.author));
-    assert.ok(links.some(link => link.href === supplement.source));
-    assert.ok(links.some(link => link.href === supplement.licenseUrl));
-  }
-  assert.ok(links.every(link => link.target === '_blank' && link.rel === 'noopener noreferrer'));
+  const metadata = ui.svg().children.filter(node => node.tagName === 'metadata');
+  assert.equal(metadata.length, 1);
+  assert.deepEqual(JSON.parse(metadata[0].textContent), JSON.parse(JSON.stringify(ui.art.attribution)),
+    'both sources retain titles, authors, source/license URLs and adaptation notices with the artwork');
+  assert.equal(ui.svg().getAttribute('aria-label'), 'Bicycle parts', 'licensing does not replace the diagram purpose');
+  assert.equal(ui.svg().getAttribute('aria-describedby'), null, 'metadata is not an assistive licensing readout');
+  assert.equal(ui.walk(ui.container).some(node => node.tagName === 'a' || node.classList.contains('specifier-credit')), false,
+    'no inline source link or link to the unlinked credits page remains');
   ui.mount('laptop');
-  assert.equal(ui.container.children.length, 1, 'list-only nouns do not inherit bicycle credits');
+  assert.equal(ui.container.children.length, 1);
+  assert.equal(ui.walk(ui.container).some(node => node.tagName === 'metadata'), false, 'list-only nouns do not inherit bicycle metadata');
 });
 
 test('a missing source module falls back to the parts list with no invented diagram or empty SVG', () => {
