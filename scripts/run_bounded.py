@@ -32,8 +32,8 @@ def main() -> int:
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
     if not command:
         parser.error('provide a command after --')
-    if not 256 <= args.memory_mib <= 3072 or args.reserve_gib < 8:
-        parser.error('memory cap must be 256–3072 MiB, with at least 8 GiB reserved')
+    if not 256 <= args.memory_mib <= 8192 or args.reserve_gib < 8:
+        parser.error('memory cap must be 256–8192 MiB (prod RAM), with at least 8 GiB reserved')
     executable = shutil.which(command[0])
     if not executable:
         parser.error('command not found: ' + command[0])
