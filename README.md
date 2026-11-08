@@ -21,8 +21,10 @@ Search updates on every edit with no typing delay or debounce, including unknown
 words and model numbers. IME input searches on commitment. Subjects with a
 specifier reveal the question and diagram or list immediately, while typing
 focus stays in the first field. After 380 ms for a recognized word, or 1000 ms
-for an unfamiliar token, focus moves to the blank answer. Other eligible
-subjects use that pause before showing their question. The worker supplies its
+for an unfamiliar token, automatic focus waits another 650 ms before moving to
+the blank answer. Typing, selecting text, or moving the caret cancels that move.
+Other eligible subjects use the first pause before showing their question.
+Explicit shortcuts still move focus immediately. The worker supplies its
 resident dictionary once at startup; word checks run synchronously in the page.
 Enter, Tab, or a noun-ending `?`, `.`, or `!` confirms an eligible subject
 immediately; typed punctuation remains intact. Clearing an input hides the

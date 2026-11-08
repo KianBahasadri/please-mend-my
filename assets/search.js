@@ -15,7 +15,7 @@
   const prefetchedImages = new Set();
   const queue = [];
   const loading = new Set();
-  const stats = { indexLoadMs: null, searchMs: [], inputToWorkerReplyMs: [], inputToResultsMs: [],
+  const stats = { indexLoadMs: null, searchMs: [], inputToWorkerReplyMs: [], inputToTitlesMs: [], inputToResultsMs: [],
     guideQueueMs: [], detailTransportMs: [], detailParseMs: [], articleRenderMs: [], cachedOpenMs: [],
     detailRequests: 0, answerReuses: 0 };
   window.mendSearchStats = stats;
@@ -37,6 +37,7 @@
   let renderedDetail;
   let renderedGeneration;
   let renderedScope;
+  let previewKey;
   let explicitNavigation = false;
   let catalogETag = "";
   let replacement = null;
@@ -85,6 +86,7 @@
     choiceScopes = new Map();
     renderedDetail = renderedGeneration = renderedScope = undefined;
     possibilitiesKey = undefined;
+    previewKey = undefined;
     document.body.classList.remove("searching");
     results.hidden = true;
     panel.hidden = true;
@@ -111,7 +113,7 @@
   function executeSearch(text) {
     requestId += 1;
     pruneQueue(new Set());
-    document.body.classList.add("searching");
+    if (!document.body.classList.contains("searching")) document.body.classList.add("searching");
     inputAt = pendingInputAt ?? performance.now();
     if (!ready) return;
     // The worker still ranks the best 100. The inline UI needs only the first
@@ -252,7 +254,9 @@
       choices = []; choiceScopes = new Map();
       renderPossibilities();
       pruneQueue(new Set());
-      if (currentGuide === null) { results.hidden = true; panel.hidden = true; }
+      if (currentGuide === null) {
+        results.hidden = true; panel.hidden = true; previewKey = undefined; body.replaceChildren();
+      }
       return;
     }
     pruneQueue(new Set(rows.slice(0, 5).map(row => row[0])));
@@ -265,6 +269,20 @@
     choices = rows;
     choiceScopes = scopes;
     renderPossibilities();
+    if (currentGuide === null && !details.get(rows[0][0])?.data) {
+      const scope = scopes.get(rows[0][0]);
+      const key = JSON.stringify([rows[0][0], rows[0][1], scope?.label || ""]);
+      if (key !== previewKey) {
+        const heading = node("h1", "guide-title", rows[0][1]);
+        heading.tabIndex = -1;
+        body.replaceChildren(heading);
+        if (scope) body.append(node("p", "guide-scope", `General guidance for ${scope.label}`));
+        previewKey = key;
+      }
+      panel.hidden = false;
+      results.hidden = false;
+    }
+    timing("inputToTitlesMs", performance.now() - inputAt);
     showGuide(rows[0][0], false, { automatic: true, rows, scopes, searchRequest: message.requestId });
     for (const row of rows.slice(1, 5)) loadDetail(row[0]);
   }
@@ -467,12 +485,15 @@
     const sameAnswer = currentGuide === id && renderedDetail === detail &&
       renderedGeneration === catalogETag && renderedScope === (scope?.label || "");
     currentGuide = id;
+    previewKey = undefined;
     pendingGuide = null;
     navigationError.hidden = true;
-    document.body.classList.remove("reading");
-    document.body.classList.add("searching");
-    panel.hidden = false;
-    results.hidden = false;
+    if (!sameAnswer) {
+      if (document.body.classList.contains("reading")) document.body.classList.remove("reading");
+      if (!document.body.classList.contains("searching")) document.body.classList.add("searching");
+      panel.hidden = false;
+      results.hidden = false;
+    }
     if (options.rows) choices = options.rows;
     if (options.scopes) choiceScopes = options.scopes;
     if (addHistory) history.pushState({ guide: id }, "", guideHref(id));
@@ -561,6 +582,11 @@
     lastEditAt = performance.now();
     pendingInputAt = inputEventAt ?? lastEditAt;
     inputEventAt = undefined;
+    if (!explicitNavigation && pendingSearch?.query === query()) {
+      pendingInputAt = undefined;
+      scheduleSwap();
+      return;
+    }
     if (explicitNavigation) {
       explicitNavigation = false;
       history.replaceState?.({}, "", location.pathname);

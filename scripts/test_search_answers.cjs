@@ -88,7 +88,8 @@ test('ranked alternatives appear immediately while a first article is still pend
   ui.result(['slow', 'other', 'third']);
   assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['other', 'third']);
   assert.equal(ui.elements['result-count'].textContent, 'Other possibilities');
-  assert.equal(ui.title(), '', 'pending article content stays blank without loading text');
+  assert.equal(ui.title(), 'Guide slow', 'the actual indexed title is visible before article I/O completes');
+  assert.equal(ui.elements['guide-panel'].hidden, false);
   assert.equal(ui.document.activeElement, ui.response);
   ui.release('slow'); await settle();
   assert.equal(ui.title(), 'Answer slow');
@@ -128,6 +129,7 @@ test('phase timings distinguish worker wait from pending detail transport and re
   const ui = answerUI({ deferred: ['slow'] }); ui.ready(); ui.change('laptop screen');
   ui.advance(25); ui.result(['slow']);
   assert.equal(ui.window.mendSearchStats.inputToWorkerReplyMs.at(-1), 25);
+  assert.equal(ui.window.mendSearchStats.inputToTitlesMs.at(-1), 25);
   ui.advance(40); ui.release('slow'); await settle();
   const stats = ui.window.mendSearchStats;
   assert.equal(stats.detailTransportMs.at(-1), 40);
@@ -135,6 +137,16 @@ test('phase timings distinguish worker wait from pending detail transport and re
   assert.equal(stats.detailParseMs.at(-1), 0);
   assert.equal(stats.inputToResultsMs.at(-1), 65);
   assert.equal(stats.articleRenderMs.length, 1);
+});
+
+test('an awaiting-only clarification change keeps its existing dispatch and pending article', async () => {
+  const ui = answerUI({ deferred: ['slow'] }); ui.ready(); ui.change('laptop');
+  ui.result(['slow']);
+  const before = ui.searches().length;
+  ui.change('laptop', true);
+  assert.equal(ui.searches().length, before, 'unchanged combined text must not repeat worker work');
+  ui.release('slow'); await settle();
+  assert.equal(ui.title(), 'Answer slow', 'showing a blank answer must not invalidate its pending noun article');
 });
 
 test('retain the prior answer until the newest #1 payload resolves and reject older payloads', async () => {

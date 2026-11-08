@@ -117,8 +117,10 @@ test('bike controls and noun search appear immediately while first focus remains
   assert.equal(ui.response.clientWidth, width, 'underneath specifier does not change first-line width');
   assert.equal(ui.workspace.parentNode.contains(ui.question), true);
   assert.equal(ui.workspace.contains(ui.question), false, 'question stays outside the split workspace');
-  ui.advance(379); assert.equal(ui.document.activeElement, ui.response);
-  ui.advance(1); assert.equal(ui.document.activeElement, ui.clarification);
+  ui.advance(380); assert.equal(ui.document.activeElement?.id, ui.response.id);
+  ui.advance(649); assert.equal(ui.document.activeElement?.id, ui.response.id);
+  ui.advance(1); assert.equal(ui.document.activeElement?.id, ui.clarification.id);
+  assert.equal(ui.searches().length, 2, 'focus timing does not delay or repeat searches');
 });
 
 test('SVG and list selections search immediately and clearing specifics returns to the noun answer', async () => {
@@ -189,6 +191,18 @@ test('real words, unknown tokens, models and one-letter prefixes all search with
   }
 });
 
+test('a delayed list-less clarification does not redispatch the unchanged noun query', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('relationship');
+  const count = ui.searches().length;
+  assert.equal(count, 1);
+  ui.advance(380);
+  assert.equal(ui.question.textContent, "What's wrong with your relationship?");
+  assert.equal(ui.document.activeElement?.id, ui.response.id);
+  ui.advance(649); assert.equal(ui.document.activeElement?.id, ui.response.id);
+  ui.advance(1); assert.equal(ui.document.activeElement?.id, ui.clarification.id);
+  assert.equal(ui.searches().length, count);
+});
+
 test('each committed edit posts immediately without waiting for a rendering frame', async () => {
   const ui = await searchUI(); ui.ready();
   for (const text of ['b', 'br', 'broken', 'broken l', 'broken laptop', 'broken WH-1000XM4']) {
@@ -244,8 +258,9 @@ test('startup searches the latest edit immediately without waiting for clarifica
   assert.equal(noun.searches().length, 1, 'known controls and noun search both resume at readiness');
   assert.equal(noun.searches()[0].query, 'bike');
   assert.equal(noun.question.textContent, "What's wrong with your bike?");
-  noun.advance(279); assert.equal(noun.document.activeElement, noun.response);
-  noun.advance(1); assert.equal(noun.document.activeElement, noun.clarification);
+  noun.advance(280); assert.equal(noun.document.activeElement?.id, noun.response.id);
+  noun.advance(649); assert.equal(noun.document.activeElement?.id, noun.response.id);
+  noun.advance(1); assert.equal(noun.document.activeElement?.id, noun.clarification.id);
   assert.equal(noun.elements['search-results'].hidden, false);
 });
 
@@ -292,19 +307,27 @@ test('full-phrase Enter/Tab and noun punctuation settle immediately without rewr
   assert.equal(ui.searches().at(-1).query, 'bike? chain');
 });
 
-test('empty answer Backspace dissolves and immediately searches the suppressed noun without reopening', async () => {
-  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
+test('empty answer Backspace dissolves and reuses the current noun search without reopening', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380 + 650);
+  assert.equal(ui.document.activeElement?.id, ui.clarification.id);
+  const searches = ui.searches().length, nounRequest = ui.searches().at(-1).requestId;
   ui.key(ui.clarification, 'Backspace');
   assert.equal(ui.question.textContent, '');
   assert.equal(ui.specifierContainer.hidden, true);
-  assert.equal(ui.document.activeElement, ui.response);
+  assert.equal(ui.document.activeElement?.id, ui.response.id);
   ui.flushFrames(); assert.equal(ui.searches().at(-1).query, 'bike');
-  ui.advance(1000); assert.equal(ui.searches().length, 2);
+  assert.equal(ui.searches().at(-1).requestId, nounRequest, 'unchanged input preserves its in-flight noun answer');
+  ui.results(nounRequest, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
+  await settleArt();
+  assert.equal(ui.elements['guide-panel'].hidden, false, 'the existing noun response remains immediately usable');
+  ui.advance(1000); assert.equal(ui.searches().length, searches, 'dissolving an empty answer needs no duplicate query');
   assert.equal(ui.question.textContent, '');
   ui.change('');
   assert.equal(ui.elements['search-results'].hidden, true);
   assert.equal(ui.elements['result-cards'].children.length, 0);
-  ui.advance(2000); assert.equal(ui.searches().length, 2);
+  ui.results(nounRequest, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
+  assert.equal(ui.elements['guide-panel'].hidden, true, 'clearing the overall query still fences an old noun reply');
+  ui.advance(2000); assert.equal(ui.searches().length, searches);
 });
 
 test('pending edits retain displayed results but reject old replies and never steal focused cards', async () => {
@@ -471,7 +494,9 @@ test('late resident nouns mount without a synchronous caret move or unspecific s
   assert.equal(ui.searches().length, 1);
   assert.equal(ui.searches()[0].query, 'bike');
   ui.advance(0);
-  assert.equal(ui.document.activeElement, ui.clarification, 'the already elapsed idle deadline runs separately');
+  assert.equal(ui.document.activeElement?.id, ui.response.id, 'the elapsed first pause does not consume the extra focus pause');
+  ui.advance(649); assert.equal(ui.document.activeElement?.id, ui.response.id);
+  ui.advance(1); assert.equal(ui.document.activeElement?.id, ui.clarification.id);
 });
 
 test('legacy catalogs search without inventing a fixed noun registry', async () => {

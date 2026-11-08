@@ -5,7 +5,7 @@
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
-- Underline editable areas+idle floaters. Non-specifier question + idle answer-focus: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
+- Underline editable areas+idle floaters. Non-specifier question: known trailing word≥2→380ms, unknown/model→1000ms; auto answer-focus waits650ms more, cancel on typing/selection/caret/focus/hidden/IME. Enter/Tab/?.!/part/guide return→0; search always0. Bare noun→hero "What's wrong with your <noun>?"+blank answer; phrases skip. Keep typed punctuation; no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks retain textbox focus/caret/selection; links/controls usable. Inline guide prose selection native; exempt panel in pointer+blur refocus guards.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
@@ -93,3 +93,5 @@
 - Local5b gates246Py/199JS/Go;61art+24shellverified;HEAD304. Initialqueryp95~11ms,cached~.03ms;startup2.7s/280MiBheap. Inheritance scoped before residuals;avoid globalregex/JIT sweeps. OEWN human→homo stillunresolvedforpersonqueries.
 - Bug: visible typing→answer lag is unacceptable; measure input/worker/detail/render separately. No repeated article DOM rebuild for unchanged #1; foreground details must not wait behind cache/LRU bookkeeping.
 - Both startup+per-edit lag confirmed. Per-edit: immediate post, reuse unchanged article DOM, early alternatives, tiny generation marker+nonblocking LRU;204JS pass. Prefix100 exact-rank parity;numeric-prefix scan narrowed. Startup split prototype2.68→1.94s/280→240MiB;pending safe background enrichment wiring.
+- Priority: loaded keypress→visible result, not network/startup. Startup split deferred. Fixes must be generic; repro words are tests only.
+- Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.

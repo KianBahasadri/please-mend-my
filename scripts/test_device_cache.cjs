@@ -290,6 +290,50 @@ test('foreground guide hits bypass stalled prefetch and recency writes', async (
   }
 });
 
+test('aborting a foreground cache read releases its caller before native I/O or validation finishes', async () => {
+  for (const stalledAt of ['match', 'validation']) {
+    const ui = helper({ transport: async url => json({ id: url.slice('/api/guides/'.length), title: 'Guide', html: 'Body' },
+      '"guide"', { 'X-PMM-Catalog-ETag': '"one"' }) });
+    await activate(ui);
+    await ui.cache.fetchGuide('one', { etag: '"one"' }); await ui.cache.idle();
+    const guides = await ui.caches.open('pmm-guides-v1'), match = guides.match.bind(guides);
+    let release, entered, validationCalls = 0;
+    const held = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    guides.match = async key => {
+      const response = await match(key);
+      if (!String(key).startsWith('/api/guides/')) return response;
+      const clone = response.clone.bind(response);
+      response.clone = () => {
+        validationCalls++;
+        const copy = clone();
+        return { async json() { entered(); await held; return copy.json(); } };
+      };
+      if (stalledAt === 'match') { entered(); await held; }
+      return response;
+    };
+    const controller = new AbortController();
+    const pending = ui.cache.fetchGuide('one', { etag: '"one"', signal: controller.signal });
+    const rejected = assert.rejects(pending, { name: 'AbortError' });
+    await started;
+    controller.abort();
+    let timeout;
+    try {
+      await Promise.race([rejected,
+        new Promise((_, reject) => { timeout = setTimeout(() => reject(Error('Abort waited for ' + stalledAt)), 1000); }),
+      ]);
+      assert.equal(validationCalls, stalledAt === 'match' ? 0 : 1,
+        'an aborted native read cannot begin later JSON validation');
+    } finally {
+      clearTimeout(timeout); release();
+      for (let pass = 0; pass < 24; pass++) await Promise.resolve();
+      await ui.cache.idle();
+    }
+    assert.equal(ui.requests.length, 1, 'late aborted cache work cannot start a replacement network request');
+    assert.equal(ui.cache.stats.guideHits, 0, 'the obsolete payload never becomes a successful cache hit');
+  }
+});
+
 test('a cached-guide lookup spanning a catalog change never returns the old payload', async () => {
   const ui = helper({ transport: async () => json({ id: 'one', title: 'Old', html: 'Old' },
     '"guide"', { 'X-PMM-Catalog-ETag': '"one"' }) });

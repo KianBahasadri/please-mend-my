@@ -304,8 +304,12 @@
     list.setAttribute("role", "group");
     list.setAttribute("aria-label", `${definition.label} options`);
     let answer = "", selected = "", preview = "", disposed = false;
+    let paintedState;
 
-    function paint() {
+    function paint(force = false) {
+      const state = selected + "\n" + preview;
+      if (!force && state === paintedState) return;
+      paintedState = state;
       svg?.classList.toggle("has-highlight", groups.has(selected) || groups.has(preview));
       for (const item of definition.parts) {
         for (const node of [groups.get(item.id), options.get(item.id)]) {
@@ -381,7 +385,7 @@
       else controls.append(svg);
       container.hidden = false;
       container.classList.remove("is-list-only");
-      paint();
+      paint(true);
       window.dispatchEvent?.(new Event("mend:layout"));
     });
     return {

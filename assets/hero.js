@@ -37,6 +37,7 @@
   let active = first;
   let lastQuery = "";
   let settleTimer = null;
+  let answerFocusTimer = null;
   let edited = first;
   let editedAt = 0;
   let vocabulary = [];
@@ -45,6 +46,22 @@
   let lastAwaiting = false;
   let selectingAnswer = false;
   let fittedKey;
+  let fittedAnswerWidth;
+  let editing = false;
+  let pendingFit = false;
+  let pendingSpecifier = false;
+  let specifierValue;
+  const sizingMirrors = new Map([[first, firstUnderline.parentNode], [second, secondUnderline.parentNode]]);
+  for (const mirror of sizingMirrors.values()) {
+    // The existing inert underline already wraps the exact native text. Give
+    // it intrinsic height instead of stretching it to the textarea's old
+    // height, so shrinking never requires collapsing the live control.
+    mirror.style.bottom = "auto";
+    mirror.style.contain = "layout style";
+    const tail = document.createElement("span");
+    tail.textContent = "\u200b";
+    mirror.append(tail); // Preserve the native empty line after a final newline.
+  }
   const curatedWords = new Set([...symptomPredicates, ...conversational,
     ...pronouns, ...determiners, ...contractions,
     ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
@@ -58,6 +75,24 @@
   function cancelAutomatic() {
     if (settleTimer !== null) clearTimeout(settleTimer);
     settleTimer = null;
+    cancelAnswerFocus();
+  }
+
+  function cancelAnswerFocus() {
+    if (answerFocusTimer !== null) clearTimeout(answerFocusTimer);
+    answerFocusTimer = null;
+  }
+
+  function delayAnswerFocus(value) {
+    const name = subject;
+    if (first.selectionStart !== first.selectionEnd || first.selectionEnd !== first.value.length) return;
+    answerFocusTimer = setTimeout(() => {
+      answerFocusTimer = null;
+      if (document.visibilityState === "hidden" || document.activeElement !== first || !open ||
+          value !== suffix(first) || name !== subject || first.selectionStart !== first.selectionEnd ||
+          first.selectionEnd !== first.value.length || [...state.values()].some(item => item.composing)) return;
+      focus(second, true);
+    }, 650);
   }
 
   function isAwaitingSpecifics() {
@@ -95,7 +130,8 @@
       const name = bareNoun(value);
       if (name) {
         updateLine(name);
-        focus(second, true);
+        if (immediate) focus(second, true);
+        else delayAnswerFocus(value);
       }
     }
     notify();
@@ -161,17 +197,23 @@
     if (input === first && fixedUnderline.textContent !== state.get(first).prefix) {
       fixedUnderline.textContent = state.get(first).prefix;
     }
-    underline.textContent = suffix(input);
+    const value = suffix(input);
+    if (underline.textContent !== value) underline.textContent = value;
     underline.classList.toggle("is-empty", !underline.textContent);
-    input.style.height = "0px";
-    input.style.height = `${input.scrollHeight + 2}px`;
+    const height = `${Math.ceil(sizingMirrors.get(input).getBoundingClientRect().height) + 2}px`;
+    if (input.style.height !== height) input.style.height = height;
   }
 
   function fit(force = false) {
+    if (editing) { pendingFit = true; return; }
     const width = first.clientWidth;
     if (!width) return;
     const key = `${width}\n${open ? question.textContent : ""}\n${document.body.classList.contains("searching")}`;
-    if (force !== true && key === fittedKey) return;
+    if (force !== true && key === fittedKey) {
+      const answerWidth = second.clientWidth;
+      if (answerWidth !== fittedAnswerWidth) { fittedAnswerWidth = answerWidth; grow(second); }
+      return;
+    }
     fittedKey = key;
     heading.style.fontSize = "";
     const size = parseFloat(getComputedStyle(heading).fontSize);
@@ -184,6 +226,7 @@
     if (sampleWidth > 0) heading.style.fontSize = `${Math.min(size, size * (width - 6) / sampleWidth)}px`;
     grow(first);
     grow(second);
+    fittedAnswerWidth = second.clientWidth;
     promptArt?.sync?.();
   }
 
@@ -226,7 +269,10 @@
   }
 
   function updateLine(name, remount = false) {
+    if (name === subject && Boolean(name) === open && !remount) return;
+    cancelAnswerFocus();
     const wasOpen = open;
+    const changedLabel = name !== subject;
     const changedSubject = name.toLocaleLowerCase("en") !== subject.toLocaleLowerCase("en");
     subject = name;
     open = Boolean(name);
@@ -240,18 +286,28 @@
       if (active === second || document.activeElement === second) focus(first, true);
     }
     if (open !== wasOpen || changedSubject || remount) {
-      specifier?.destroy?.();
-      specifier = open && specifierContainer ? specifiers?.mount?.(specifierContainer, name, selectSpecific) : null;
-      if (specifierContainer && !specifier) specifierContainer.hidden = true;
+      pendingSpecifier = true;
     }
-    specifier?.sync?.(suffix(second));
+    if (!editing) syncSpecifier();
     second.disabled = !open;
     second.tabIndex = open ? 0 : -1;
     line.inert = !open;
     line.setAttribute("aria-hidden", String(!open));
     line.classList.toggle("is-visible", open);
     first.setAttribute("aria-expanded", String(open));
-    if (open !== wasOpen || changedSubject) window.dispatchEvent(new Event("mend:layout"));
+    if (open !== wasOpen || changedLabel) window.dispatchEvent(new Event("mend:layout"));
+  }
+
+  function syncSpecifier() {
+    if (pendingSpecifier) {
+      pendingSpecifier = false;
+      specifier?.destroy?.();
+      specifier = open && specifierContainer ? specifiers?.mount?.(specifierContainer, subject, selectSpecific) : null;
+      if (specifierContainer && !specifier) specifierContainer.hidden = true;
+      specifierValue = undefined;
+    }
+    const value = suffix(second);
+    if (specifierValue !== value) { specifierValue = value; specifier?.sync?.(value); }
   }
 
   function syncFirst(remount = false) {
@@ -293,10 +349,10 @@
     if (second.value !== value) second.setRangeText(value, 0, second.value.length, "end");
     state.get(second).previous = second.value;
     edited = second;
-    grow(second);
-    specifier?.sync?.(suffix(second));
     focus(second, true);
     notify();
+    grow(second);
+    syncSpecifier();
     finishSettle(true);
   }
 
@@ -320,18 +376,26 @@
     }
     item.previous = input.value;
     if (input === first) syncTitle();
-    grow(input);
-    if (input === second) specifier?.sync?.(suffix(second));
-    if (input === first && !suffix(first).trim()) updateLine("");
-    if (item.composing) { cancelAutomatic(); notify(); return; }
-    if (registryPending && ![...state.values()].some(value => value.composing)) {
-      registryPending = false;
-      syncFirst(true);
+    editing = true;
+    try {
+      if (input === first && !suffix(first).trim()) updateLine("");
+      if (item.composing) { cancelAutomatic(); notify(); return; }
+      if (registryPending && ![...state.values()].some(value => value.composing)) {
+        registryPending = false;
+        syncFirst(true);
+      }
+      if (input === first && completed) { edited = first; activate(); return; }
+      if (input === first) syncFirst();
+      // Query state is final now. Dispatch before optional SVG DOM work or
+      // measuring text, allowing the resident worker to run concurrently.
+      notify();
+      scheduleSettle(input);
+    } finally {
+      editing = false;
+      syncSpecifier();
+      if (pendingFit) { pendingFit = false; fit(); }
+      else grow(input);
     }
-    if (input === first && completed) { edited = first; activate(); return; }
-    if (input === first) syncFirst();
-    notify();
-    scheduleSettle(input);
   }
 
   function inputEvent(input, inputType) {
@@ -344,7 +408,7 @@
     state.set(input, { prefix, previous: prefix, composing: false });
     input.value = prefix;
     input.dataset.promptLength = String(prefix.length);
-    input.addEventListener("focus", () => { selectingAnswer = false; active = input; clampSelection(input); });
+    input.addEventListener("focus", () => { cancelAnswerFocus(); selectingAnswer = false; active = input; clampSelection(input); });
     input.addEventListener("select", () => clampSelection(input));
     input.addEventListener("pointerup", () => clampSelection(input));
     input.addEventListener("keyup", () => clampSelection(input));
@@ -352,6 +416,7 @@
     input.addEventListener("compositionend", () => { state.get(input).composing = false; changed(input); });
     input.addEventListener("input", (event) => changed(input, event));
     input.addEventListener("keydown", (event) => {
+      cancelAnswerFocus();
       if (event.isComposing || event.keyCode === 229 || state.get(input).composing) return;
       if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "a") {
         event.preventDefault();
@@ -422,8 +487,12 @@
 
   document.addEventListener("selectionchange", () => {
     if (state.has(document.activeElement)) clampSelection(document.activeElement);
+    if (document.activeElement !== first || first.selectionStart !== first.selectionEnd ||
+        first.selectionEnd !== first.value.length) cancelAnswerFocus();
   });
+  document.addEventListener("focus", event => { if (event.target !== first) cancelAnswerFocus(); }, { capture: true });
   document.addEventListener("pointerdown", (event) => {
+    cancelAnswerFocus();
     if (event.button !== 0) return;
     // A prose drag can blur the textarea onto <body>. Keep that interaction
     // native instead of moving focus back in its queued blur microtask.

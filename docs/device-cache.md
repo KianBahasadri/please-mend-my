@@ -40,6 +40,15 @@ posts searches immediately, renders resident alternative titles before details
 arrive, and retains an unchanged article DOM instead of rebuilding it per edit.
 `window.mendSearchStats` separates worker reply, detail queue/transport/parse,
 and article-render timings; these are not browser-paint measurements.
+Aborting an obsolete foreground cache read releases its caller immediately,
+even while native disk I/O is pending, so old prefetches cannot occupy every
+slot needed by the latest answer. Late reads stop before further work.
+
+The hero publishes the completed query before sizing text or mounting diagram
+controls. Its existing inert wrapping underline measures native input height
+without collapsing the live textarea. Unchanged part highlights avoid repeated
+SVG/list writes. The first actual indexed answer title is visible immediately;
+the prior full article stays visible while a different article is fetched.
 
 The shell manifest is derived from the embedded site assets. Service-worker
 installation prepares a complete shell version before activation, and offline

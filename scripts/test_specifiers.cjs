@@ -232,6 +232,25 @@ test('SVG keyboard controls select once and destroyed controls cannot change a s
   assert.equal(ui.selected.at(-1), 'swelling');
 });
 
+test('typing within the same selected part preserves SVG state without repeating DOM writes', async () => {
+  const ui = await registry(), mounted = ui.mount('bike');
+  mounted.sync('chain');
+  let writes = 0;
+  for (const node of ui.walk(ui.container)) {
+    const setAttribute = node.setAttribute.bind(node);
+    node.setAttribute = (name, value) => { if (name === 'aria-pressed') writes++; setAttribute(name, value); };
+  }
+  mounted.sync('chain is broken');
+  mounted.sync('chain is really broken');
+  assert.equal(writes, 0, 'unchanged part selection does not dirty SVG/list accessibility or paint state');
+  assert.equal(ui.part('chain', 'g').classList.contains('is-selected'), true);
+  ui.part('chain', 'button').dispatch('click');
+  assert.equal(ui.selected.at(-1), 'chain', 'the latest typed answer is still retained for toggle semantics');
+  ui.part('chain', 'button').dispatch('click');
+  assert.equal(ui.selected.at(-1), '');
+  assert.ok(writes > 0, 'a changed selection still updates both surfaces');
+});
+
 
 test('the paired controls keep source notices in SVG metadata without a visible credit line or link', async () => {
   const ui = await registry(); ui.mount('bike');

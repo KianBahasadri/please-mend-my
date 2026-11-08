@@ -259,14 +259,17 @@ test('top v2 and legacy answers render inline without moving the native input fo
   }
 });
 
-test('pending first answer stays blank and emits no loading status', async () => {
+test('pending first answer shows its indexed title immediately without loading UI or invented article content', async () => {
   const ui = guideUI(structured(), { deferred: true });
   ui.ready(); ui.prefetch(); ui.open(); await settle();
-  assert.equal(ui.elements['guide-panel'].hidden, true);
+  assert.equal(ui.elements['guide-panel'].hidden, false);
   assert.equal(ui.elements['search-results'].hidden, false);
   assert.equal(ui.elements['result-cards'].children.length, 0);
   assert.equal(ui.elements['catalog-status'].textContent, '');
-  assert.equal(ui.elements['guide-body'].textContent, '');
+  assert.equal(ui.find('.guide-title').textContent, 'Fix laptop audio');
+  assert.equal(ui.find('.guide-structured'), null);
+  assert.equal(ui.find('.guide-summary'), null);
+  assert.equal(ui.document.activeElement, ui.elements.response);
   ui.release(); await settle();
   assert.equal(ui.elements['guide-panel'].hidden, false);
   assert.ok(ui.find('.guide-structured'));

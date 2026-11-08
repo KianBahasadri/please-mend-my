@@ -45,11 +45,11 @@ async function heroFor(options = {}) {
     return before;
   };
   dom.visible = () => dom.line.getAttribute('aria-hidden') !== 'true' && !dom.line.inert;
-  dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(380); assert.equal(dom.visible(), true); };
+  dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(380); assert.equal(dom.visible(), true); dom.advance(650); };
   return dom;
 }
 
-test('a bare noun waits 380ms then asks a separate question and focuses a blank answer', async () => {
+test('a bare noun asks after 380ms and waits an additional 650ms before focusing its blank answer', async () => {
   const dom = await heroFor();
   assert.equal(dom.window.mendHero.query(), '');
   assert.equal(dom.visible(), false);
@@ -64,7 +64,11 @@ test('a bare noun waits 380ms then asks a separate question and focuses a blank 
   assert.equal(dom.prefixMirror.textContent, dom.prefix(dom.response));
   assert.equal(dom.clarification.value, '');
   assert.equal(dom.prefix(dom.clarification), '');
-  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.document.activeElement?.id, dom.response.id, 'the question appears before the caret moves');
+  dom.advance(649);
+  assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(1);
+  assert.equal(dom.document.activeElement?.id, dom.clarification.id);
   assert.equal(dom.clarification.selectionStart, 0);
   assert.equal(dom.clarification.selectionEnd, 0);
   assert.equal(dom.suffixMirror.textContent, 'arm');
@@ -75,6 +79,58 @@ test('a bare noun waits 380ms then asks a separate question and focuses a blank 
   assert.equal(dom.answerMirror.textContent, 'hurts');
   assert.equal(dom.window.mendHero.query(), 'arm hurts');
   assert.equal(dom.queries.at(-1), 'arm hurts');
+});
+
+test('input dispatches its final query before sizing and native height never collapses to measure wrapping', async () => {
+  const order = [], writes = [];
+  const dom = await heroFor({ specifiers: true, setup(dom) {
+    dom.window.addEventListener('mend:querychange', () => order.push('query'));
+    for (const [input, mirror, columns] of [[dom.response, dom.suffixMirror.parentNode, 40],
+      [dom.clarification, dom.answerMirror.parentNode, 20]]) {
+      Object.defineProperty(input, 'scrollHeight', { get() { throw new Error('Do not measure the live textarea'); } });
+      let height;
+      Object.defineProperty(input.style, 'height', { get: () => height, set(value) {
+        assert.notEqual(value, '0px', 'native field height must never collapse between keystrokes');
+        height = value; writes.push(value);
+      } });
+      mirror.getBoundingClientRect = () => {
+        order.push('measure');
+        return { height: Math.max(1, Math.ceil(input.value.length / columns)) * 80 };
+      };
+    }
+  } });
+  order.length = 0;
+  dom.type(dom.response, 'bike');
+  assert.equal(order[0], 'query', 'query dispatch precedes SVG mount and forced geometry reads');
+  assert.equal(dom.question.textContent, "What's wrong with your bike?");
+  dom.key(dom.response, 'Enter');
+  order.length = 0;
+  const long = 'chain '.repeat(80);
+  dom.type(dom.clarification, long);
+  assert.equal(order[0], 'query');
+  assert.equal(dom.window.mendHero.query(), `bike ${long.trim()}`);
+  assert.equal(dom.clarification.style.height, `${Math.ceil(long.length / 20) * 80 + 2}px`);
+  dom.type(dom.clarification, 'chain');
+  assert.equal(dom.clarification.style.height, '82px', 'shortening content shrinks from mirror metrics');
+  const count = writes.length;
+  dom.type(dom.clarification, 'chains');
+  assert.equal(writes.length, count, 'same-line edits need no native height style write');
+  assert.equal(dom.clarification.selectionStart, dom.clarification.value.length);
+});
+
+test('typing ordinary first-line phrases does not repeatedly reset the closed answer field', async () => {
+  let writes = 0;
+  const dom = await heroFor({ setup(dom) {
+    const property = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(dom.clarification), 'value');
+    Object.defineProperty(dom.clarification, 'value', {
+      get() { return property.get.call(this); },
+      set(value) { writes++; property.set.call(this, value); },
+    });
+  } });
+  const initial = writes;
+  for (const value of ['b', 'br', 'bro', 'broken', 'broken l', 'broken laptop']) dom.type(dom.response, value);
+  assert.equal(writes, initial);
+  assert.equal(dom.window.mendHero.query(), 'broken laptop');
 });
 
 test('every prepared specifier alias appears at zero clock without moving the first caret', async () => {
@@ -94,8 +150,9 @@ test('every prepared specifier alias appears at zero clock without moving the fi
     assert.equal(dom.window.mendHero.query(), noun);
   }
   dom.type(dom.response, 'bike');
-  dom.advance(379); assert.equal(dom.document.activeElement, dom.response);
-  dom.advance(1); assert.equal(dom.document.activeElement, dom.clarification);
+  dom.advance(380); assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(649); assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(1); assert.equal(dom.document.activeElement?.id, dom.clarification.id);
 });
 
 test('instant specifiers preserve native first-field selection and explicit focus controls', async () => {
@@ -185,7 +242,61 @@ test('subjects without prepared controls retain their conservative automatic que
   dom.advance(1);
   assert.equal(dom.question.textContent, "What's wrong with your relationship?");
   assert.equal(dom.specifierContainer.hidden, true, 'there is no empty SVG placeholder');
-  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(649); assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(1); assert.equal(dom.document.activeElement?.id, dom.clarification.id);
+});
+
+test('continued typing restarts the extra focus pause without delaying query updates', async () => {
+  const dom = await heroFor({ specifiers: true });
+  dom.type(dom.response, 'bike'); dom.advance(380 + 400);
+  assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.type(dom.response, 'bikes');
+  assert.equal(dom.window.mendHero.query(), 'bikes');
+  assert.equal(dom.queries.at(-1), 'bikes', 'typing publishes immediately during the focus pause');
+  dom.advance(380 + 649); assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(1); assert.equal(dom.document.activeElement?.id, dom.clarification.id);
+  dom.response.focus(); dom.type(dom.response, 'bike'); dom.advance(380 + 400);
+  dom.type(dom.response, 'bike chain'); dom.advance(2000);
+  assert.equal(dom.visible(), false);
+  assert.equal(dom.document.activeElement?.id, dom.response.id);
+  assert.equal(dom.window.mendHero.query(), 'bike chain');
+});
+
+test('the extra focus pause respects selection, caret navigation, other controls, hidden tabs and composition', async () => {
+  for (const action of ['selection', 'caret', 'keydown', 'control', 'hidden', 'composition']) {
+    const dom = await heroFor({ specifiers: true });
+    dom.type(dom.response, 'bike'); dom.advance(380 + 300);
+    const boundary = dom.prefix(dom.response).length;
+    if (action === 'selection') {
+      dom.response.setSelectionRange(boundary, boundary + 2);
+      dom.event(dom.document, 'selectionchange');
+    } else if (action === 'caret') {
+      dom.response.setSelectionRange(boundary + 1, boundary + 1);
+      dom.event(dom.document, 'selectionchange');
+    } else if (action === 'keydown') dom.key(dom.response, 'ArrowLeft');
+    else if (action === 'control') dom.add('button', 'another-control').focus();
+    else if (action === 'hidden') {
+      dom.document.visibilityState = 'hidden'; dom.event(dom.document, 'visibilitychange');
+    } else dom.event(dom.response, 'compositionstart');
+    dom.advance(2000);
+    assert.notEqual(dom.document.activeElement?.id, dom.clarification.id, action);
+    assert.equal(dom.window.mendHero.query(), 'bike', action);
+  }
+});
+
+test('explicit completion bypasses the extra automatic focus pause', async () => {
+  for (const shortcut of ['Enter', 'Tab', '?', '.', '!']) {
+    const dom = await heroFor({ specifiers: true });
+    dom.type(dom.response, 'bike'); dom.advance(380 + 200);
+    assert.equal(dom.document.activeElement?.id, dom.response.id);
+    if (shortcut.length === 1) dom.insert(dom.response, shortcut);
+    else dom.key(dom.response, shortcut);
+    assert.equal(dom.document.activeElement?.id, dom.clarification.id, shortcut);
+    assert.equal(dom.clarification.value, '');
+    dom.advance(2000);
+    assert.equal(dom.document.activeElement?.id, dom.clarification.id, 'no old automatic timer moves focus again');
+  }
 });
 
 test('the idle deadline resets and continuing a full phrase cancels clarification', async () => {
@@ -679,7 +790,9 @@ test('normal search-result visibility does not cancel a bare noun idle prompt', 
   await Promise.resolve();
   dom.advance(380);
   assert.equal(dom.visible(), true);
-  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(dom.document.activeElement?.id, dom.response.id);
+  dom.advance(650);
+  assert.equal(dom.document.activeElement?.id, dom.clarification.id);
   assert.equal(dom.window.mendHero.query(), 'arm');
 });
 
