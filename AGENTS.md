@@ -97,3 +97,4 @@
 - Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.
 - Demo hardcoding only on demo branch; shared workdir now demo, main deploys from isolated worktree. Prodmain+allphysicalSVGs+≤10karticles Qwen authorized; reuse caches first.
 - HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.
+- Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloudfullsource refresh unit please-mend-my-source-refresh.service(c0f87db,5GiB/CPU2); retainslive207k until prepared-release.path validation/swap. MainCLI d2de752 pushed.

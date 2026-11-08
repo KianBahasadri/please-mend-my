@@ -2,6 +2,28 @@ Deploy the embedded Go server directly on a non-burstable `c8g.xlarge` (4 vCPU, 
 
 Live deployment: [https://pleasemendmy.com](https://pleasemendmy.com) and [https://www.pleasemendmy.com](https://www.pleasemendmy.com), proxied through Cloudflare to `32.193.25.68`; stack `please-mend-my`, `us-east-1`, instance `i-00b3468454b650217` (`aarch64`, 4 vCPU, 64 GiB root). The former 20 GiB instance was replaced; the Elastic IP and DNS were retained. Direct IP HTTP remains available for health probes. Cloudflare uses Full (strict) and redirects HTTP to HTTPS.
 
+On 2026-11-08, application `4084210` deployed from `main` over the existing
+verified SSH connection, retaining the cloud-built 207,691-entry catalog while
+the additional sources build separately. The 24 shell responses match their
+published SHA-256 hashes on apex, and apex/www serve the committed frontend.
+HTML includes `Cache-Control: no-cache, no-transform`: Cloudflare's automatic
+analytics injection otherwise changes HTML bytes and breaks offline shell
+validation. Catalog conditional HEAD returns 304. Five separate page probes
+gave median TTFB 151 ms before and 84 ms after; these small delivery samples do
+not measure search latency or establish a causal improvement.
+
+The full-source refresh reuses the existing cloud iFixit, WikiMed, and First Aid
+runtimes without rewriting their hardlinked files. It runs the pinned Appropedia
+and wikiHow ingesters on EC2, merges all five original source runtimes with
+`merge_catalogs.py`, and passes that completed snapshot to
+`build_catalog.py --source-runtime`. `please-mend-my-source-refresh.service`
+limits preparation to two CPUs and 5 GiB; it writes
+`/opt/please-mend-my/ingest/work/prepared-release.path` and leaves the live
+catalog unchanged until separate validation and atomic publication. This avoids
+reingesting older source runtimes merely because shared helper code changed.
+Disposable `work.sqlite` files were unlinked while ingestion was inactive;
+archives, source metadata, published catalogs and rollback binary were retained.
+
 Initial measurements in this environment, before catalog integration:
 
 - Loopback `GET /`, 5 warmups then 200 gzip/keep-alive transactions: p50 **0.076 ms**, p95 **0.092 ms**.
