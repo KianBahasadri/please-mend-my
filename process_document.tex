@@ -1,5 +1,5 @@
 \documentclass[10pt,letterpaper]{article}
-\usepackage[margin=0.9in]{geometry}
+\usepackage[margin=0.82in]{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{microtype}
@@ -20,8 +20,8 @@
 % Section styling
 \titleformat{\section}{\large\bfseries\scshape}{\thesection.}{0.5em}{}[\titlerule]
 \titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
-\titlespacing*{\section}{0pt}{1.2em}{0.6em}
-\titlespacing*{\subsection}{0pt}{0.8em}{0.3em}
+\titlespacing*{\section}{0pt}{1.0em}{0.45em}
+\titlespacing*{\subsection}{0pt}{0.7em}{0.25em}
 \setlist{itemsep=0.15em, topsep=0.25em, leftmargin=1.5em}
 
 \begin{document}
@@ -53,67 +53,56 @@
 \subsection{Purpose}
 I have a lifelong habit of putting people on the spot, bringing up moral and philosophical questions in everyday conversation to test whether our assumptions hold up when examined. \textbf{pleasemendmy.com} is kind of an intimate project because it's an extension of that habit. I wanted to challenge you (yes, you \raisebox{-0.2em}{\includegraphics[height=1.15em]{docs/point-viewer.png}}) on how you use technology every day.
 
-Today's hardware and browsers can hold a searchable encyclopedia of practical knowledge on the device and answer in milliseconds, so that tool should already exist and be the default. Instead, advertising incentives, platform politics, and pressure to route basic questions through AI products have left us with slow, bloated tools. As designers there should be nothing more \underline{heartbreaking} than seeing our friends and family depend on tools that are slower, less economical, return AI answers that can change from one run to the next, and are increasingly becoming subscription services. Whatever happened to knowledge beeing free for all?
+Today's hardware and browsers can hold a searchable encyclopedia of practical knowledge on the device and answer in milliseconds, so that tool should already exist and be the default. Instead, advertising incentives, platform politics, and pressure to route basic questions through AI products have left us with slow, bloated tools. As designers there should be nothing more \underline{heartbreaking} than seeing our friends and family depend on tools that are slower, less economical, return AI answers that can change from one run to the next, and are increasingly becoming subscription services. Whatever happened to knowledge being free for all?
 
 This project is meant to be kind of punk and countercultural. I built it to criticize slow, wasteful defaults by showing the alternative, and I've decided to maintain and improve it for future use!
 
 \subsection{Audience and Goals}
-The audience is anyone looking up practical repairs, household maintenance, or first aid.
-\begin{enumerate}
-    \item \textbf{Fast answers:} Search runs in the browser, so a keystroke triggers no server request.
-    \item \textbf{Vetted sources:} Every guide comes from an existing human-written source (435,213 items). AI is used only offline to reformat text.
-    \item \textbf{Low waste:} The search index is stored on the device with \texttt{CacheStorage}, so a lookup needs no server computation.
-    \item \textbf{Two ways to ask:} A natural-language prompt (``\textit{please, mend my [object]}'') is paired with clickable part diagrams.
-\end{enumerate}
+The audience is anyone looking up practical or reference information on any topic: repairs, medicine, first aid, cooking, software, sustainability, childcare, or relationships. Rather than stopping at physical repair, the goal is to supply all the expert-vetted, reputable human-written knowledge we can source, answer locally in milliseconds without live AI, and avoid wasted network transfers.
 
 \section{Research and Insights}
 
-\subsection{From Calling Parents to Searching Online}
-A mentor conversation during this hackathon framed the problem. Young adults used to call their parents for help with things they could not find elsewhere, such as eating well, mending something broken, or caring for children. General advice was easy to find, but advice for a specific situation was hard.
+A hackathon mentor conversation framed the problem: young adults used to call their parents for help with things like eating well, mending something broken, or caring for children. General advice was easy to find, but situational advice was hard.
 
-Today people take the same questions to Google or AI. AI is good at specific, open-ended problems, but neither tool suits general knowledge lookup:
+Today people take those questions to Google, AI, or manual source hunting. AI suits open-ended problems, but all three fail everyday lookup:
 \begin{itemize}
-    \item \textbf{Search engines:} The user types a query, waits for results, opens a page, and scrolls to find the instructions.
-    \item \textbf{AI chat:} The user waits while the model queries the web and writes a long answer. The answer is often not concise, and the user cannot easily tell whether it is accurate or based on outdated sources.
+    \item \textbf{Search engines:} Sponsored links, SEO filler, and ads bury instructions below the fold. Queries tie into user profiles and tracking, trading data privacy for ad targeting while shaping results into personalized information bubbles.
+    \item \textbf{AI chat:} Users wait while a remote model streams a verbose, non-deterministic answer whose accuracy and sources are hard to verify. Capable tiers increasingly require paid subscriptions, while prompts and personal context are logged to user profiles.
+    \item \textbf{Manual source hunting:} Going straight to authentic manuals, wikis, or archives avoids ads, profiling, and AI guesswork, but knowledge sits scattered across clunky directories. Knowing where to look and digging through separate sites is harder than using Google or AI, so despite its upsides, rarely anybody does it.
 \end{itemize}
 
-\subsection{Vocabulary Gap}
-Users often do not know part names (a bicycle \textit{derailleur}) and type symptoms in everyday words (\textit{``it's not turning on''}). The prompt strips filler words while keeping negation, and the diagrams let a user point at a part instead of naming it.
-
+\newpage
 \section{Initial Mockups and Prototypes}
 
+Initially, my goal was an autonomous system that resolves problems rather than a knowledge database. In practice, everyday questions rarely need an agent, just immediate access to human instructions. Early prototypes tested that lookup:
 \begin{enumerate}
-    \item \textbf{Category filters:} Buttons for browsing by category. These repeated the directory navigation the project is meant to avoid.
-    \item \textbf{Grid of 100 result cards:} Cards below the prompt. Scanning many cards before reading anything repeats the search-result workflow.
-    \item \textbf{Hero typography:} Sketches of the prompt as stitched thread, blueprint lines, and letters built from hammers, wrenches, and rulers, to give lookup a physical, hand-made look.
+    \item \textbf{Prompt and spotlight landing:} A full-screen ``\textit{please, mend my }'' input over a spotlight backdrop, rotating basic fonts while idle floaters typed example objects.
+    \item \textbf{Directory-style iFixit search:} Local iFixit search with ``Browse library,'' category filters, a 100-card grid, and a separate ``Back to results'' view.
+    \item \textbf{Early hero wordplay:} CSS and SVG prototypes replacing font swaps with physical textures, including a riveted-metal theme alongside stitched thread, blueprint lines, and tool-shaped letters.
 \end{enumerate}
 
 \section{Iterations and Feedback}
 
+Across the commit history, the product evolved through four shifts:
 \begin{itemize}
-    \item \textbf{Inline answer:} The card grid was replaced by the top-ranked guide rendered under the prompt, with the next five results listed beside it as alternatives.
-    \item \textbf{Input stability:} The fixed prompt text cannot be selected or edited, \texttt{Ctrl+A} selects only the user's text, and the previous answer stays visible until the next one is ready, so results do not move the caret.
-    \item \textbf{No hardcoded lists:} Subject relationships, such as \textit{Inspiron} to \textit{laptop}, come from Open English WordNet across the whole catalog rather than a hand-picked list.
-    \item \textbf{Offline reformatting:} A build-time pipeline asks a language model to restructure source HTML into tools, warnings, and steps under a strict schema. It ran on a 100-guide pilot, and each result is validated before it is published.
+    \item \textbf{Repair tool to general encyclopedia:} The iFixit prototype expanded to add WikiMed, U.S. Army First Aid, Appropedia, and wikiHow (435,213 items), using offline postings, stems, and hierarchical aliases to keep browser search fast.
+    \item \textbf{Refining wordplay and triage:} The riveted-metal style was cut, while stitched thread, blueprint, and tool-letter themes were refined alongside ASCII, rainbow, and Matrix styles. Bare nouns began opening a follow-up question with part lists and clickable diagrams.
+    \item \textbf{Card grid to inline answer:} Category filters, ``Browse library,'' and the 100-card grid still made users scan and click like a search engine, so they were replaced by opening the top guide inline below the prompt.
+    \item \textbf{Offline schema restructuring:} Because HTML varies across five sources, a build-time pipeline ran an offline model on a 100-guide pilot to reorganize articles into uniform tools, warnings, and steps without query-time AI.
 \end{itemize}
 
 \section{Final Product and Outcomes}
 
 \begin{itemize}
-    \item \textbf{Prompt:} A bare noun asks \textit{``What's wrong with your [noun]?''} and shows its top guide immediately. A full symptom phrase searches directly.
-    \item \textbf{Part diagrams:} Hovering, focusing, or selecting a part in the SVG or in the list highlights the other and searches that part.
-    \item \textbf{Guides:} Each guide shows safety notices, tools, materials, steps, and a link to the original source.
-    \item \textbf{On-device storage:} The catalog is kept in \texttt{CacheStorage} and checked against the server with an \texttt{ETag} request, which returns \texttt{304 Not Modified} when nothing has changed.
+    \item \textbf{Everyday language and visual part lookup:} Users rarely know part names (a bicycle \textit{derailleur}) and type everyday symptoms (\textit{``it's not turning on''}). The prompt strips filler while keeping negation, asks \textit{``What's wrong with your [noun]?''} for bare nouns, and lets users click parts on available diagrams or lists instead of naming them.
+    \item \textbf{Immediate inline guides:} Search ranks locally as you type, rendering the top match inline with five side alternatives. Restructured pilot guides show safety notices, tools, materials, and steps; others render cleaned source HTML with attribution and source links.
+    \item \textbf{Private, low-request lookup:} Local search keeps queries private on-device with no profiling. Once loaded, the site makes almost no repeat requests, never re-fetches index data or guides already grabbed, keeps opened guides working offline, and lets a small server handle traffic with minimal bandwidth and compute.
 \end{itemize}
-
-\section{Figma}
-
-\textbf{[TODO: paste the public Figma link here]}
 
 \section{Citations and AI Use}
 
 \subsection{Visuals}
-No AI was used to create visuals, UI graphics, typography, or diagrams. Hero wordplay, spotlight lighting, and layouts were made by hand. Diagrams come from Wikimedia Commons and Openclipart under open licenses, with source hashes and credits recorded.
+No AI was used to create visuals. Diagrams, SVGs, and images come from Wikimedia Commons and Openclipart under open licenses, with source hashes and credits recorded.
 
 \subsection{Data Sources}
 \begin{itemize}
@@ -123,8 +112,8 @@ No AI was used to create visuals, UI graphics, typography, or diagrams. Hero wor
 
 \subsection{AI Use}
 \begin{itemize}
-    \item \textbf{Code:} Claude and Gemini helped write code and tests.
-    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} reformatted the 100-guide pilot into structured JSON, and was used in offline experiments that propose which shape in an existing diagram matches a part name. No model runs when a user searches.
+    \item \textbf{Code:} All code was written by LLM agents.
+    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} was used in batch processing articles into a strict schema, and to parse and map open source SVGs.
 \end{itemize}
 
 \end{document}
