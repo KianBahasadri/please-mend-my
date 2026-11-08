@@ -616,6 +616,7 @@
         for (const item of data.categories) categoryNames.set(item.id, item.name);
         hero?.setVocabulary?.(data.terms || []);
         runSearch();
+        window.dispatchEvent(new Event("mend:catalogready"));
       } else if (data.type === "results") renderCards(data);
       else if (data.type === "range" && data.requestId === requestId && data.rangeId === rangeSerial) {
         renderWindow(data.items, data.start);

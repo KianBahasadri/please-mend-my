@@ -6,7 +6,7 @@ const vm = require('node:vm');
 
 // This fixture checks DOM/events and the real registry without opening a
 // browser. It does not model CSS layout, SVG paint, or font measurements.
-function registry({ art = true } = {}) {
+function registry({ art = true, pilot = null, fetchArt } = {}) {
   const document = { activeElement: null };
   const scrolls = [];
   class Node {
@@ -69,8 +69,8 @@ function registry({ art = true } = {}) {
     assert.equal(namespace, 'http://www.w3.org/2000/svg');
     return new Node(tag);
   };
-  const window = {};
-  const context = vm.createContext({ document, window });
+  const window = pilot ? { mendSpecifierPilot: pilot } : {};
+  const context = vm.createContext({ document, window, fetch: fetchArt });
   if (art) vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/bicycle-art.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), context);
   const container = new Node('span');
@@ -262,4 +262,95 @@ test('unsafe source descriptors never create active SVG content and retain the u
     ui.part('chain', 'button').dispatch('click');
     assert.deepEqual(ui.selected, ['chain']);
   }
+});
+
+const pilotFixture = () => ({ version: 1, archetypes: [{
+  id: 'phone', aliases: ['cellphone'], artUrl: `/assets/art/phone-${'1'.repeat(64)}.json`,
+  parts: [{ id: 'screen', label: 'Screen', query: 'screen', aliases: ['display'] },
+    { id: 'battery', label: 'Battery', query: 'battery', aliases: ['charging'] }],
+}] });
+const phoneArt = () => ({ version: 1, id: 'phone', viewBox: '0 0 100 100',
+  context: [['rect', { x: 5, y: 5, width: 90, height: 90, fill: 'none', stroke: 'currentColor' }]],
+  parts: { screen: [['rect', { x: 15, y: 15, width: 70, height: 40, fill: 'none', stroke: 'currentColor' }]],
+    battery: [['rect', { x: 30, y: 65, width: 40, height: 20, fill: 'var(--paper)', stroke: 'currentColor' }]] },
+  attribution: { title: 'Phone diagram', author: 'Fixture', source: 'https://example.org/phone',
+    license: 'CC0 1.0', licenseUrl: 'https://creativecommons.org/publicdomain/zero/1.0/', changes: 'Adapted for parts.' },
+});
+const artResponse = data => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(data) });
+async function settleArt() { for (let pass = 0; pass < 24; pass++) await Promise.resolve(); }
+
+test('a lazy local diagram preserves the instant list, selected answer, scroll and focused option', async () => {
+  let resolve;
+  const requests = [];
+  const ui = registry({ pilot: pilotFixture(), fetchArt: (url, options) => {
+    requests.push({ url, options }); return new Promise(accept => { resolve = accept; });
+  } });
+  assert.equal(ui.api.resolve('cellphone').id, 'phone');
+  const instance = ui.mount('phone');
+  const list = ui.walk(ui.container).find(node => node.className === 'specifier-list');
+  const option = ui.part('screen', 'button');
+  list.scrollTop = 72;
+  instance.sync('display cracked'); option.focus();
+  assert.equal(ui.svg(), undefined, 'cold artwork never reserves an empty SVG box');
+  assert.equal(ui.container.classList.contains('is-list-only'), true);
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].url, pilotFixture().archetypes[0].artUrl);
+  assert.equal(requests[0].options.mode, 'same-origin');
+  assert.equal(requests[0].options.credentials, 'same-origin');
+  resolve(artResponse(phoneArt())); await settleArt();
+  assert.equal(ui.svg().getAttribute('aria-label'), 'Phone parts');
+  assert.equal(ui.container.classList.contains('is-list-only'), false);
+  assert.ok(ui.walk(ui.container).includes(list), 'the same list stays mounted');
+  assert.equal(list.scrollTop, 72);
+  assert.ok(ui.document.activeElement === option, 'hydration preserves existing focus');
+  assert.equal(ui.part('screen', 'g').getAttribute('aria-pressed'), 'true');
+  assert.equal(ui.part('screen', 'g').classList.contains('is-highlighted'), true);
+  assert.deepEqual(ui.selected, [], 'hydration never writes the native answer');
+});
+
+test('late diagram responses cannot replace a newer noun and cached artwork mounts without another request', async () => {
+  let resolve, requests = 0;
+  const ui = registry({ pilot: pilotFixture(), fetchArt: () => {
+    requests++; return new Promise(accept => { resolve = accept; });
+  } });
+  const previous = ui.mount('phone'); ui.mount('laptop');
+  resolve(artResponse(phoneArt())); await settleArt();
+  assert.equal(ui.svg(), undefined);
+  assert.equal(ui.container.getAttribute('aria-label'), 'Laptop parts and symptoms');
+  previous.destroy();
+  assert.equal(ui.container.hidden, false, 'destroying a stale mount cannot remove newer controls');
+  ui.mount('phone');
+  assert.ok(ui.svg(), 'cached art mounts synchronously');
+  assert.equal(requests, 1);
+});
+
+test('prefix prefetch is bounded, cached and makes an eventual diagram mount synchronous', async () => {
+  let requests = 0;
+  const ui = registry({ pilot: pilotFixture(), fetchArt: async () => { requests++; return artResponse(phoneArt()); } });
+  ui.api.prefetch('ph'); assert.equal(requests, 0);
+  ui.api.prefetch('pho'); ui.api.prefetch('phon'); ui.api.prefetch('phone');
+  await settleArt();
+  assert.equal(requests, 1);
+  ui.mount('phone'); assert.ok(ui.svg());
+  assert.equal(requests, 1);
+});
+
+test('missing, rejected and unsafe lazy artwork retain usable list controls without an error UI', async () => {
+  const unsafe = phoneArt(); unsafe.parts.screen = [['script', {}, []]];
+  for (const fetchArt of [async () => { throw new TypeError('Offline'); },
+    async () => ({ ok: false }), async () => artResponse({ ...phoneArt(), id: 'car' }),
+    async () => artResponse(unsafe)]) {
+    const ui = registry({ pilot: pilotFixture(), fetchArt });
+    ui.mount('phone'); await settleArt();
+    assert.equal(ui.svg(), undefined);
+    assert.equal(ui.container.classList.contains('is-list-only'), true);
+    ui.part('battery', 'button').dispatch('click');
+    assert.deepEqual(ui.selected, ['battery']);
+  }
+  const pilot = pilotFixture(); pilot.archetypes[0].artUrl = 'https://example.org/phone.json';
+  let requests = 0;
+  const ui = registry({ pilot, fetchArt: async () => { requests++; throw new Error('Must not request external art'); } });
+  ui.mount('phone'); await settleArt();
+  assert.equal(requests, 0);
+  assert.equal(ui.svg(), undefined);
 });

@@ -24,7 +24,7 @@ import (
 
 // Embed only public site files; repository files cannot be requested.
 //
-//go:embed index.html credits.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
+//go:embed index.html credits.html assets/*.css assets/*.js assets/art/*.json assets/fonts/*.woff2 assets/fonts/*-OFL.txt
 var siteFiles embed.FS
 
 type representation struct {
@@ -66,6 +66,16 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 			asset.contentType = "text/css; charset=utf-8"
 		case ".js":
 			asset.contentType = "text/javascript; charset=utf-8"
+		case ".json":
+			asset.contentType = "application/json; charset=utf-8"
+			if name != "assets/art/manifest.json" && strings.HasPrefix(name, "assets/art/") {
+				stem := strings.TrimSuffix(path.Base(name), ".json")
+				if dash := strings.LastIndex(stem, "-"); dash >= 0 {
+					if digest := stem[dash+1:]; len(digest) == 64 && strings.Trim(digest, "0123456789abcdef") == "" {
+						asset.cacheControl = "public, max-age=31536000, immutable"
+					}
+				}
+			}
 		case ".woff2":
 			asset.contentType = "font/woff2"
 			asset.cacheControl = "public, max-age=86400"

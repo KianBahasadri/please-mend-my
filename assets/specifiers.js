@@ -77,6 +77,27 @@
         part("hem", "Hem", "hem", ["hemming"]), part("pocket", "Pockets", "pocket", ["pockets"])],
     },
   ];
+  const pilot = window.mendSpecifierPilot;
+  const artURL = (id, value) => typeof value === "string" &&
+    new RegExp(`^/assets/art/${id}-[a-f0-9]{64}\\.json$`).test(value) ? value : "";
+  if (pilot?.version === 1 && Array.isArray(pilot.archetypes)) {
+    for (const item of pilot.archetypes) {
+      const index = definitions.findIndex(definition => definition.id === item?.id && definition.id !== "bicycle");
+      if (index < 0 || !Array.isArray(item.parts) || !item.parts.length || item.parts.length > 24 ||
+          !item.parts.every(value => value && /^[a-z][a-z0-9-]*$/.test(value.id) &&
+            typeof value.label === "string" && value.label.length <= 100 &&
+            typeof value.query === "string" && value.query.trim() && value.query.length <= 120 &&
+            Array.isArray(value.aliases) && value.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) ||
+          new Set(item.parts.map(value => value.id)).size !== item.parts.length ||
+          !Array.isArray(item.aliases) || !item.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) continue;
+      const base = definitions[index];
+      definitions[index] = { ...base,
+        aliases: [...new Set([...base.aliases, ...item.aliases])],
+        parts: item.parts.map(value => part(value.id, value.label, value.query, value.aliases)),
+        artUrl: artURL(base.id, item.artUrl),
+      };
+    }
+  }
   const aliases = new Map();
   for (const definition of definitions) {
     Object.freeze(definition.parts);
@@ -85,6 +106,75 @@
     for (const alias of definition.aliases) aliases.set(clean(alias), definition);
   }
   const resolve = subject => aliases.get(clean(subject)) || null;
+
+  const artCache = new Map();
+  const mounts = new WeakMap();
+  const artQueue = [];
+  let artFetches = 0;
+  const MAX_ART_BYTES = 1_000_000;
+
+  function pumpArt() {
+    if (typeof fetch !== "function") return;
+    while (artFetches < 2 && artQueue.length) {
+      const record = artQueue.shift();
+      artFetches += 1;
+      fetch(record.url, { credentials: "same-origin", mode: "same-origin", cache: "force-cache" })
+        .then(async response => {
+          if (!response.ok || Number(response.headers?.get("Content-Length")) > MAX_ART_BYTES) return null;
+          const text = await response.text();
+          if (text.length > MAX_ART_BYTES) return null;
+          const data = JSON.parse(text);
+          return data?.version === 1 && data.id === record.id ? data : null;
+        })
+        .catch(() => null)
+        .then(data => {
+          record.data = data;
+          record.resolve(data);
+        })
+        .finally(() => { artFetches -= 1; pumpArt(); });
+    }
+  }
+
+  function loadArt(definition, urgent = false) {
+    if (!definition.artUrl || typeof fetch !== "function") return Promise.resolve(null);
+    let record = artCache.get(definition.artUrl);
+    if (record) {
+      if (urgent) {
+        const index = artQueue.indexOf(record);
+        if (index >= 0) { artQueue.splice(index, 1); artQueue.unshift(record); }
+      }
+      return record.promise;
+    }
+    let resolve;
+    const promise = new Promise(accept => { resolve = accept; });
+    record = { id: definition.id, url: definition.artUrl, data: null, promise, resolve };
+    artCache.set(definition.artUrl, record);
+    if (artCache.size > 16) artCache.delete(artCache.keys().next().value);
+    if (urgent) artQueue.unshift(record); else artQueue.push(record);
+    pumpArt();
+    return promise;
+  }
+
+  function prefetch(subject) {
+    const value = clean(subject);
+    if (value.length < 3) return;
+    const exact = resolve(value);
+    if (exact) { loadArt(exact, true); return; }
+    const matches = new Set();
+    for (const [alias, definition] of aliases) {
+      if (alias.startsWith(value) && definition.artUrl) matches.add(definition);
+      if (matches.size === 2) break;
+    }
+    for (const definition of matches) loadArt(definition);
+  }
+
+  window.addEventListener?.("mend:querychange", () => prefetch(window.mendHero?.query?.() || ""));
+  window.addEventListener?.("mend:catalogready", () => {
+    window.requestIdleCallback?.(() => {
+      if (document.visibilityState === "hidden") return;
+      for (const definition of definitions.filter(item => item.artUrl).slice(0, 8)) loadArt(definition);
+    }, { timeout: 2000 });
+  }, { once: true });
 
   const shapeTags = new Set(["g", "path", "circle", "ellipse", "line", "polyline", "polygon", "rect"]);
   const shapeAttributes = new Set(["d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height",
@@ -98,7 +188,8 @@
     return node;
   }
 
-  function sourcedShape(descriptor, hit = false, inherited = { stroke: "none", width: 1.2 }) {
+  function sourcedShape(descriptor, hit = false, inherited = { stroke: "none", width: 1.2 }, budget = { nodes: 0 }) {
+    if (++budget.nodes > 1200) throw new Error("Diagram is too complex");
     if (!Array.isArray(descriptor) || !shapeTags.has(descriptor[0])) throw new Error("Invalid bicycle shape");
     const [tag, attributes = {}, children = []] = descriptor;
     const stroke = attributes.stroke === undefined ? inherited.stroke : attributes.stroke;
@@ -129,40 +220,43 @@
       }
     }
     if (!Array.isArray(children)) throw new Error("Invalid bicycle shape children");
-    for (const child of children) node.append(sourcedShape(child, hit, { stroke, width }));
+    for (const child of children) node.append(sourcedShape(child, hit, { stroke, width }, budget));
     return node;
   }
 
-  function bikeSVG(definition, groups) {
-    const art = window.mendBicycleArt;
-    if (!art || typeof art.viewBox !== "string" || !Array.isArray(art.context) ||
-        !definition.parts.every(item => Array.isArray(art.parts?.[item.id]) && art.parts[item.id].length)) return null;
+  function diagramSVG(definition, art, groups) {
+    if (!art || typeof art.viewBox !== "string" || !Array.isArray(art.context) || !art.parts) return null;
+    const box = art.viewBox.trim().split(/[\s,]+/).map(Number);
+    if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) return null;
+    if (definition.id === "bicycle" && !definition.parts.every(item => Array.isArray(art.parts[item.id]) && art.parts[item.id].length)) return null;
     try {
-      const svg = svgNode("svg", { class: "specifier-svg", viewBox: art.viewBox, role: "group", "aria-label": "Bicycle parts" });
+      const budget = { nodes: 0 };
+      const svg = svgNode("svg", { class: "specifier-svg", viewBox: art.viewBox, role: "group", "aria-label": `${definition.label} parts` });
       if (art.attribution) {
         const metadata = svgNode("metadata", {});
         metadata.textContent = JSON.stringify(art.attribution);
         svg.append(metadata);
       }
       const context = svgNode("g", { class: "specifier-context", "aria-hidden": "true" });
-      for (const shape of art.context) context.append(sourcedShape(shape));
+      for (const shape of art.context) context.append(sourcedShape(shape, false, undefined, budget));
       svg.append(context);
       // Preserve the source's assembly order, placing small parts above wheels.
       for (const [id, shapes] of Object.entries(art.parts)) {
         const item = definition.parts.find(candidate => candidate.id === id);
         if (!item) continue;
+        if (!Array.isArray(shapes) || !shapes.length) continue;
         const group = svgNode("g", { class: "specifier-part", "data-part": id, tabindex: "0", role: "button", "aria-label": item.label, "aria-pressed": "false" });
         const geometry = svgNode("g", { class: "specifier-geometry", "aria-hidden": "true" });
         const hit = svgNode("g", { class: "specifier-hit", "aria-hidden": "true" });
         for (const shape of shapes) {
-          geometry.append(sourcedShape(shape));
-          hit.append(sourcedShape(shape, true));
+          geometry.append(sourcedShape(shape, false, undefined, budget));
+          hit.append(sourcedShape(shape, true, undefined, budget));
         }
         group.append(geometry, hit);
         groups.set(id, group);
         svg.append(group);
       }
-      return svg;
+      return groups.size ? svg : null;
     } catch {
       groups.clear();
       return null;
@@ -186,12 +280,15 @@
   function mount(container, subject, onSelect) {
     const definition = resolve(subject);
     if (!container) return null;
+    const token = {};
+    mounts.set(container, token);
     container.replaceChildren();
     container.hidden = !definition;
     if (!definition) return null;
     container.setAttribute("aria-label", `${definition.label} parts and symptoms`);
     const groups = new Map(), options = new Map();
-    const svg = definition.svg ? bikeSVG(definition, groups) : null;
+    const cached = definition.artUrl ? artCache.get(definition.artUrl)?.data : null;
+    let svg = diagramSVG(definition, definition.id === "bicycle" ? window.mendBicycleArt : cached, groups);
     container.classList.toggle("is-list-only", !svg);
     const list = document.createElement("span");
     list.className = "specifier-list";
@@ -264,10 +361,24 @@
     if (svg) controls.append(svg);
     controls.append(list);
     container.append(controls);
+    if (!svg && definition.artUrl) loadArt(definition, true).then(art => {
+      if (disposed || mounts.get(container) !== token || !art) return;
+      const diagram = diagramSVG(definition, art, groups);
+      if (!diagram) return;
+      svg = diagram;
+      for (const item of definition.parts) if (groups.has(item.id)) bind(groups.get(item.id), item, true);
+      // Keep the existing list, its scroll position and native input untouched.
+      controls.replaceChildren(svg, list);
+      container.classList.remove("is-list-only");
+      paint();
+      window.dispatchEvent?.(new Event("mend:layout"));
+    });
     return {
       sync,
       destroy() {
         disposed = true;
+        if (mounts.get(container) !== token) return;
+        mounts.delete(container);
         container.replaceChildren();
         container.hidden = true;
         container.classList.remove("is-list-only");
@@ -276,5 +387,5 @@
     };
   }
 
-  window.mendSpecifiers = Object.freeze({ resolve, nouns: Object.freeze([...aliases.keys()]), mount });
+  window.mendSpecifiers = Object.freeze({ resolve, nouns: Object.freeze([...aliases.keys()]), mount, prefetch });
 })();

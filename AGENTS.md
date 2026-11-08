@@ -14,6 +14,7 @@
 - Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.
 - Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
+- Diagram pilot: arm/laptop/phone/car/stove/toilet/fridge/jeans; repeatable offline Qwen40 + pinned SVGs; visually gate mappings, lazy local art, instant lists, measure cost/bytes/timing.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
