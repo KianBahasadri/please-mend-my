@@ -16,7 +16,7 @@ function prepare(index, guideRecords) {
     __dirname], { input: JSON.stringify({ index, guideRecords }), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
 }
 
-async function workerFor(index, source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')) {
+async function workerFor(index, source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8'), extras = {}) {
   const messages = [];
   let fetches = 0;
   const context = vm.createContext({ self: {}, performance, setTimeout, clearTimeout,
@@ -29,6 +29,7 @@ async function workerFor(index, source = fs.readFileSync(path.join(__dirname, '.
       return { ok: true, json: async () => structuredClone(index) };
     },
     postMessage: (message) => messages.push(message),
+    ...extras,
   });
   vm.runInContext(source, context);
   async function next(type) {
@@ -423,7 +424,7 @@ test('complete literal title words outrank partial niche guides while exact orde
 
 test('long queries retain every required term beyond the old compact mask width', async () => {
   const index = fixture();
-  const terms = Array.from({ length: 33 }, (_, index) => 'required' + index);
+  const terms = Array.from({ length: 33 }, (_, index) => 'required' + String.fromCharCode(97 + Math.floor(index / 26), 97 + index % 26));
   index.search.groups[1] += '\n' + terms.join(' ');
   const worker = await workerFor(prepare(index));
   assert.equal((await worker.search(terms.join(' ') + ' battery')).total, 2);
@@ -996,6 +997,320 @@ test('failure fallback retains specific symptoms and numeric intent and never re
   assert.deepEqual(Array.from((await worker.search('dog paw wont start')).items, row => row[0]), ['dog-paw-aid']);
   assert.equal((await worker.search('MacBook A2179 Battery Repair')).items[0][0], 'model');
   assert.equal((await worker.search('Dog Paw Repair')).items[0][0], 'dog-niche', 'strict exact title remains authoritative');
+});
+
+function hierarchyFixture() {
+  const index = { version: 1, revision: 'hierarchy-fixture', source: {},
+    categories: [{ id: 'technology', name: 'Technology' }, { id: 'health', name: 'Health' }],
+    items: [
+      ['model', 'Dell Inspiron 1500 Screen Replacement', 'technology', 'guide', 'Dell Inspiron 1500'],
+      ['laptop', 'Laptop Screen Replacement', 'technology', 'article', 'Laptop'],
+      ['computer', 'Computer Screen Repair', 'technology', 'article', 'Computer'],
+      ['other-model', 'Dell Inspiron 1501 Screen Replacement', 'technology', 'guide', 'Dell Inspiron 1501'],
+      ['choking', 'Choking', 'health', 'article', ''],
+      ['dog-choking', 'Dog Choking First Aid', 'health', 'guide', 'Dog'],
+      ['wrong-domain', 'Choking Hazard Screen Repair', 'technology', 'guide', 'Machine'],
+      ['person-topic', 'Person', 'health', 'topic', ''],
+    ],
+    search: { version: 1, groups: [''], itemGroups: Array(8).fill(0) },
+    archetypes: { version: 1, revision: 'hierarchy-fixture', archetypes: [
+      ['computer', 'Computer', 1], ['laptop', 'Laptop', 3], ['dog', 'Dog', 1], ['canine', 'Canine', 1],
+    ].map(([id, label, count]) => ({ id, label, aliases: [label.toLowerCase()],
+      aliasRanks: { [label.toLowerCase()]: 0 }, guideCount: count, parts: [], artUrl: null })),
+    models: [{ name: 'Dell Inspiron 1500', nounId: 'laptop' }] },
+  };
+  const nodes = [
+    ['computer', 'Computer', 'artifact', 5, 1], ['laptop', 'Laptop', 'artifact', 5, 3],
+    ['person', 'Person', 'person', 6, 0], ['grandmother', 'Grandmother', 'person', 4, 0],
+    ['woman', 'Woman', 'person', 5, 0], ['dog', 'Dog', 'animal', 5, 1],
+    ['husky', 'Husky', 'animal', 3, 0], ['canine', 'Canine', 'animal', 4, 1],
+    ['choking', 'Choking', 'state', 4, 1],
+  ];
+  const lists = [[2], [0, 1, 3], [], [], [], [5], [], [5], [4]], data = [], offsets = [0];
+  for (const list of lists) {
+    let previous = 0;
+    for (const doc of list) {
+      let delta = doc - previous; previous = doc;
+      while (delta >= 128) { data.push((delta & 127) | 128); delta >>>= 7; }
+      data.push(delta);
+    }
+    offsets.push(data.length);
+  }
+  index.search.hierarchy = { version: 1, fields: ['id', 'label', 'domain', 'frequency', 'guideCount'], nodes,
+    parents: [[], [0], [], [4], [2], [7], [5], [], []],
+    aliases: [['grandma', 3, 0], ['grandmother', 3, 0], ['human', 2, 0], ['husky', 6, 0]],
+    documents: { offsets, data: Buffer.from(data).toString('base64') },
+    categories: nodes.map(row => row[2] === 'artifact' ? ['technology'] : ['health']),
+    domainCategories: { person: ['health'], animal: ['health'], artifact: ['technology'] },
+  };
+  return index;
+}
+
+test('hierarchy ranks exact known models before nearest class then broader ancestors without changing numeric intent', async () => {
+  const worker = await workerFor(prepare(hierarchyFixture()));
+  const result = await worker.search('Dell Inspiron 1500 screen');
+  assert.deepEqual(Array.from(result.items, row => row[0]), ['model', 'laptop', 'other-model', 'computer']);
+  assert.deepEqual(Array.from(result.inheritance, scope => [scope.id, scope.label, scope.distance]),
+    [['laptop', 'Laptop', 1], ['other-model', 'Laptop', 1], ['computer', 'Computer', 2]]);
+  const again = await worker.search('Dell Inspiron 1500 screen');
+  assert.deepEqual(again.items, result.items, 'cached queries retain inherited ranking');
+  assert.deepEqual(again.inheritance, result.inheritance, 'cached answers retain their general-guidance labels');
+  await worker.search('screen'); await worker.search('replacement');
+  for (const query of ['Dell Inspiron 1500 screen replacement', 'Dell Inspiron 1500 replacement screen']) {
+    const warm = await worker.search(query);
+    assert.equal(warm.items[0][0], 'model', 'warm multiword token plans retain exact model ranking');
+    assert.ok(warm.items.some(row => row[0] === 'laptop'));
+  }
+  assert.deepEqual(Array.from((await worker.search('Dell Inspiron 1501 screen')).items, row => row[0]), ['other-model']);
+  for (const query of ['Dell Inspiron 1502 screen', 'Dell Inspiron 1500+ screen', 'Dell Inspiron 1500 screen 9999']) {
+    assert.equal((await worker.search(query)).total, 0, query);
+  }
+  assert.equal(worker.fetches(), 1);
+});
+
+test('unfilled WordNet subtypes inherit within their domain and universal human symptoms never become pet/device matches', async () => {
+  const worker = await workerFor(prepare(hierarchyFixture()));
+  const person = await worker.search('grandma choking');
+  assert.deepEqual(Array.from(person.items, row => row[0]), ['choking']);
+  assert.deepEqual(Array.from(person.inheritance, scope => [scope.label, scope.distance]), [['person', 32]]);
+  const dog = await worker.search('husky choking');
+  assert.deepEqual(Array.from(dog.items, row => row[0]), ['dog-choking']);
+  assert.equal(dog.inheritance[0].label, 'Dog');
+  assert.equal((await worker.search('grandma not choking')).total, 0, 'inherited symptoms preserve negation');
+  assert.equal((await worker.search('grandma choking 911')).total, 0, 'residual numeric intent stays mandatory');
+  assert.equal((await worker.search('grandma missingwidget')).total, 0);
+  assert.equal(worker.fetches(), 1, 'inheritance requires no per-query catalog or guide fetch');
+});
+
+test('malformed hierarchy edges, domain categories and topic memberships fail closed at startup', async () => {
+  for (const mutate of [
+    index => index.search.hierarchy.parents[1].push(99),
+    index => index.search.hierarchy.categories[2].push('unknown-category'),
+    index => index.search.hierarchy.documents.data = Buffer.from([2, 0, 1, 2, 5, 5, 7]).toString('base64'),
+  ]) {
+    const index = prepare(hierarchyFixture()); mutate(index);
+    await assert.rejects(workerFor(index), /invalid/);
+  }
+});
+
+test('inheritance never treats a group subject alias as a directly matching requested part', async () => {
+  const index = hierarchyFixture();
+  index.search.groups.push('dog\npaw');
+  index.search.itemGroups[5] = 1;
+  const worker = await workerFor(prepare(index));
+  assert.equal((await worker.search('husky paw')).total, 0, 'a dog article without direct paw evidence does not inherit a paw repair query');
+});
+
+test('inherited parts require raw title/device evidence even when noun expansion added direct postings', async () => {
+  const index = hierarchyFixture();
+  index.categories.push({ id: 'other', name: 'Other repairs' });
+  index.items[5][1] = 'Dog Choking Paw First Aid';
+  index.items.push(['balm', 'How to Make Dog Paw Balm', 'other', 'guide', '']);
+  index.search.itemGroups.push(0);
+  const prepared = prepare(index);
+  // Simulate the release's offline noun expansion: the posting remains, but
+  // the actual source title/device never named this part.
+  prepared.items[5][1] = 'How to Adopt a Working Dog';
+  const worker = await workerFor(prepared);
+  const result = await worker.search('husky paw');
+  assert.deepEqual(Array.from(result.items, row => row[0]), ['balm']);
+  assert.equal(result.inheritance[0].label, 'Dog');
+  assert.equal(worker.fetches(), 1);
+});
+
+test('an alias-only wrong-domain membership cannot veto a canonical ancestor and real part', async () => {
+  const index = hierarchyFixture(), metadata = index.search.hierarchy;
+  index.categories.push({ id: 'other', name: 'Other repairs' });
+  index.items.push(['balm', 'How to Make Dog Paw Balm', 'other', 'guide', '']);
+  index.search.itemGroups.push(0);
+  // An ambiguous animal-name synonym linked this source to an unrelated
+  // mechanical sense. The source never actually names that canonical object.
+  metadata.nodes.push(['pawl', 'Pawl', 'artifact', 3, 1]);
+  metadata.parents.push([]); metadata.categories.push(['other']);
+  const bytes = Buffer.from(metadata.documents.data, 'base64');
+  metadata.documents.data = Buffer.concat([bytes, Buffer.from([8])]).toString('base64');
+  metadata.documents.offsets.push(bytes.length + 1);
+  const worker = await workerFor(prepare(index));
+  const result = await worker.search('husky paw');
+  assert.deepEqual(Array.from(result.items, row => row[0]), ['balm']);
+  assert.equal(result.inheritance[0].label, 'Dog');
+  assert.equal((await worker.search('grandma choking')).items[0][0], 'choking',
+    'real canonical animal evidence still fences universal human results');
+});
+
+test('inheritance intersects residual postings inside its subject scope without global token expansion', async () => {
+  const resolved = [], source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')
+    .replace('function resolveToken(token, widen = false, strict = false, plan = undefined) {',
+      'function resolveToken(token, widen = false, strict = false, plan = undefined) { resolved.push(token);');
+  const worker = await workerFor(prepare(hierarchyFixture()), source, { resolved });
+  assert.equal((await worker.search('husky choking')).items[0][0], 'dog-choking');
+  assert.equal(resolved.includes('choking'), false,
+    'a broad residual must not materialize unrelated documents or alias groups');
+});
+
+test('six visible exact model answers retain strict ranking without ancestor candidate work', async () => {
+  const index = hierarchyFixture(), scoped = [];
+  for (let at = 1; at <= 5; at++) {
+    index.items.push(['exact-' + at, 'Dell Inspiron 1500 Screen Repair ' + at,
+      'technology', 'guide', 'Dell Inspiron 1500']);
+    index.search.itemGroups.push(0);
+  }
+  const source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')
+    .replace('function hierarchyCandidates(context, scope) {',
+      'function hierarchyCandidates(context, scope) { scoped.push(context.subject);');
+  const worker = await workerFor(prepare(index), source, { scoped });
+  const result = await worker.search('Dell Inspiron 1500 screen');
+  assert.equal(result.items.length, 6);
+  assert.ok(result.items.every(row => row[4] === 'Dell Inspiron 1500'));
+  assert.equal(scoped.length, 0);
+  assert.equal(result.inheritance.length, 0);
+});
+
+test('whole known noun phrases and trailing component nouns do not invent hierarchy symptoms', async () => {
+  const index = hierarchyFixture(), contexts = [];
+  index.archetypes.archetypes.find(row => row.id === 'laptop').aliases.push('portable laptop');
+  index.search.groups.push('portable laptop'); index.search.itemGroups[1] = 1;
+  const source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')
+    .replace('const context = hierarchyContext(query);',
+      'const context = hierarchyContext(query); contexts.push(context?.subject || null);');
+  const worker = await workerFor(prepare(index), source, { contexts });
+  await worker.search('portable laptop');
+  await worker.search('repairing laptop');
+  await worker.search('missingprefix laptop');
+  await worker.search('grandma choking');
+  assert.deepEqual(contexts, [null, null, null, 'grandma']);
+  assert.equal(worker.fetches(), 1);
+});
+
+test('component-primary guides use real canonical or known-device evidence for exact subject scope', async () => {
+  for (const knownModel of [false, true]) {
+    const index = hierarchyFixture(), scoped = [];
+    index.search.groups.push('laptop');
+    for (let at = 1; at <= 6; at++) {
+      const device = knownModel ? 'Vendor Model ' + at : 'Laptop';
+      index.items.push(['battery-' + at, device + ' Battery Replacement', 'technology', 'guide', device]);
+      index.search.itemGroups.push(1);
+      if (knownModel) index.archetypes.models.push({ name: device, nounId: 'laptop' });
+    }
+    // The new guide rows intentionally have no primary Laptop membership:
+    // offline linking can select their component instead of their device.
+    const source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')
+      .replace('function hierarchyCandidates(context, scope) {',
+        'function hierarchyCandidates(context, scope) { scoped.push(context.subject);');
+    const worker = await workerFor(prepare(index), source, { scoped });
+    const result = await worker.search('laptop battery');
+    assert.equal(result.items.length, 6);
+    assert.equal(scoped.length, 0, knownModel ? 'known device binding' : 'actual canonical subject');
+    assert.equal(result.inheritance.length, 0);
+  }
+});
+
+test('inherited symptoms and materials retain source-backed structured terms without fetching guides', async () => {
+  const index = hierarchyFixture();
+  index.items.push(['anaphylaxis', 'Anaphylaxis', 'health', 'article', '']);
+  index.search.itemGroups.push(0);
+  const prepared = prepare(index, { anaphylaxis: { id: 'anaphylaxis', version: 2,
+    symptoms: ['Throat swelling', 'Hives'], materials: ['Epinephrine autoinjector'] } });
+  const worker = await workerFor(prepared);
+  for (const query of ['grandma throat swelling', 'grandmother hives', 'human epinephrine']) {
+    const result = await worker.search(query);
+    assert.deepEqual(Array.from(result.items, row => row[0]), ['anaphylaxis'], query);
+    assert.equal(result.inheritance[0].label, 'person');
+  }
+  assert.equal((await worker.search('grandma not swelling')).total, 0, 'clinical negation remains required');
+  assert.equal(worker.fetches(), 1, 'source-backed inheritance uses the prepared index only');
+});
+
+test('malformed sparse structured term evidence fails closed before worker readiness', async () => {
+  for (const malformed of [[[0, ['not-in-dictionary']]], [[0, ['laptop', 'battery']]],
+    [[0, ['battery']], [0, ['laptop']]], [[-1, ['laptop']]], [[99, ['laptop']]]]) {
+    const index = prepare(fixture());
+    index.search.inverted.structuredTerms = malformed;
+    await assert.rejects(workerFor(index), /invalid/);
+  }
+});
+
+test('numeric model aliases never turn an unknown code into a different model guide', async () => {
+  const index = { version: 1, revision: 'numeric-alias-fixture', source: {},
+    categories: [{ id: 'technology', name: 'Technology' }],
+    items: [['wrong', 'Dell Inspiron 1526 Screen Replacement', 'technology', 'guide', 'Dell Inspiron 1526']],
+    search: { version: 1, groups: ['', 'dell inspiron 1500'], itemGroups: [1] },
+  };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    assert.equal((await worker.search('Dell Inspiron 1500 screen replacement')).total, 0);
+    assert.equal((await worker.search('Dell Inspiron 150 screen replacement')).total, 0, 'a prefix present only in an alias does not become an own model match');
+    assert.equal((await worker.search('Dell Inspiron 152 screen replacement')).items[0][0], 'wrong', 'own model prefixes remain usable while typing');
+    assert.equal((await worker.search('Dell Inspiron 1526 screen')).items[0][0], 'wrong');
+  }
+});
+
+test('cached catalog schema failures reset partial worker state and recover once from the network', async () => {
+  const good = prepare(fixture()), bad = structuredClone(good), calls = [], accepted = [], rejected = [];
+  bad.search.inverted.offsets[1] = -1;
+  let probes = 0;
+  const helper = {
+    async loadCatalog(options) {
+      calls.push(options.forceNetwork);
+      return { catalog: structuredClone(options.forceNetwork ? good : bad),
+        etag: options.forceNetwork ? 'new' : 'bad', source: options.forceNetwork ? 'network' : 'cache',
+        timings: { readMs: 2, parseMs: 3 } };
+    },
+    async acceptCatalog(entry) { accepted.push(entry.etag); return true; },
+    async rejectCatalog(entry) { rejected.push(entry.etag); },
+    async probeCatalog() { probes++; return null; },
+  };
+  const worker = await workerFor(good, undefined, { self: { mendClientCache: helper } });
+  assert.deepEqual(calls, [false, true]);
+  assert.deepEqual(rejected, ['bad']);
+  assert.deepEqual(accepted, ['new'], 'only fully validated catalogs become active');
+  assert.equal(worker.ready.cacheSource, 'network');
+  assert.equal(worker.ready.catalogETag, 'new');
+  assert.equal(worker.ready.cacheTimings.readMs, 2);
+  assert.equal(worker.ready.cacheTimings.parseMs, 3);
+  await worker.search('laptop battery'); await worker.search('fridge');
+  assert.equal(probes, 1, 'the online revision probe runs once after startup, never per keystroke');
+  assert.equal(worker.fetches(), 0, 'optional cache transport owns the catalog request');
+});
+
+test('candidate workers prepare in isolation and never accept or revalidate their own generation', async () => {
+  const index = prepare(fixture()), accepted = [], rejected = [], loads = [];
+  let probes = 0;
+  const helper = {
+    async loadCatalog(options) {
+      loads.push(options);
+      return { catalog: structuredClone(index), etag: 'v2', source: 'candidate', candidateKey: 'pinned-key', timings: {} };
+    },
+    async acceptCatalog(entry) { accepted.push(entry); return true; },
+    async rejectCatalog(entry) { rejected.push(entry); },
+    async probeCatalog() { probes++; return null; },
+  };
+  const worker = await workerFor(index, undefined, { URL, self: { mendClientCache: helper,
+    location: { href: 'http://127.0.0.1:8080/assets/search-worker.js?candidateKey=pinned-key' } } });
+  assert.equal(worker.ready.candidateKey, 'pinned-key');
+  assert.equal(worker.ready.catalogETag, 'v2');
+  assert.equal(loads[0].candidateKey, 'pinned-key');
+  assert.equal((await worker.search('laptop battery')).total, 2);
+  assert.deepEqual(accepted, []);
+  assert.deepEqual(rejected, []);
+  assert.equal(probes, 0, 'a replacement cannot create a catalog-update worker loop');
+});
+
+test('valid catalog readiness does not wait for slow device-cache persistence', async () => {
+  const index = prepare(fixture());
+  let finish, probes = 0;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const helper = {
+    async loadCatalog() { return { catalog: structuredClone(index), etag: 'v1', source: 'network', timings: {} }; },
+    acceptCatalog() { return pending; },
+    async probeCatalog() { probes++; return null; },
+  };
+  const worker = await workerFor(index, undefined, { self: { mendClientCache: helper } });
+  assert.equal((await worker.search('laptop battery')).total, 2, 'worker searches while its durable copy is still being written');
+  assert.equal(probes, 0);
+  finish(true);
+  for (let pass = 0; pass < 20 && probes === 0; pass++) await Promise.resolve();
+  assert.equal(probes, 1, 'the one freshness probe starts after durable acceptance resolves');
 });
 
 

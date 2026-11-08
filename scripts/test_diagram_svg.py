@@ -79,7 +79,7 @@ class DiagramSVGTests(unittest.TestCase):
         self.assertRaises(ValueError, svg.flatten, ET.fromstring(source_svg('<use href="https://example.com/a.svg#p"/>')))
         self.assertRaises(ValueError, svg.flatten, ET.fromstring(source_svg('<use id="loop" href="#loop"/>')))
 
-    def test_mapping_requires_known_paths_parts_and_three_assemblies(self):
+    def test_mapping_requires_known_paths_but_accepts_partial_and_context_only_art(self):
         leaves, _ = svg.flatten(ET.fromstring(source_svg()))
         digest = {"viewBox": [0, 0, 100, 100], "nodes": [{"key": leaf["key"]} for leaf in leaves]}
         subject = {"id": "test", "parts": [{"id": name} for name in ('a', 'b', 'c')]}
@@ -94,11 +94,14 @@ class DiagramSVGTests(unittest.TestCase):
         unknown = deepcopy(mapping); unknown["groupMap"][0]["node"] = "missing"
         self.assertRaises(ValueError, svg.compile_art, subject, source, unknown, digest, leaves)
         incomplete = deepcopy(mapping); incomplete["groupMap"].pop()
-        self.assertRaises(ValueError, svg.compile_art, subject, source, incomplete, digest, leaves)
+        self.assertEqual(set(svg.compile_art(subject, source, incomplete, digest, leaves)['parts']), {'a', 'b'})
+        self.assertRaises(ValueError, svg.compile_art, subject, source, incomplete, digest, leaves, minimum_parts=3)
         secondary = svg.compile_art(subject, source, incomplete, digest, leaves, minimum_parts=2)
         self.assertEqual(set(secondary["parts"]), {'a', 'b'})
-        self.assertRaises(ValueError, svg.compile_art, subject, source, incomplete, digest, leaves,
-                          minimum_parts=1)
+        self.assertEqual(set(svg.compile_art(subject, source, incomplete, digest, leaves, minimum_parts=1)['parts']), {'a', 'b'})
+        context = svg.compile_art(subject, source, {'selectedSource': 'source', 'groupMap': []}, digest, leaves)
+        self.assertEqual(context['parts'], {})
+        self.assertEqual(len(context['context']), len(leaves))
         single = deepcopy(incomplete); single['groupMap'].pop()
         self.assertRaises(ValueError, svg.compile_art, subject, source, single, digest, leaves,
                           minimum_parts=2)
@@ -127,7 +130,7 @@ class DiagramSVGTests(unittest.TestCase):
         self.assertIn(leaves[3]["ast"], art["context"])
         self.assertEqual(mapping, before)
         self.assertRaises(ValueError, svg.compile_art, subject, source, mapping, digest, leaves,
-                          omit_geometry_parts=['camera', 'speaker'])
+                          omit_geometry_parts=['camera', 'speaker'], minimum_parts=3)
 
 
 if __name__ == "__main__":

@@ -66,11 +66,25 @@ def load_approved_art(root, record):
     if len(body) > 300_000:
         raise ValueError("Reviewed artwork exceeds the runtime byte bound")
     data = json.loads(body)
+    validate_art(data)
+    return data
+
+
+def validate_art(data):
+    """Validate safe, bounded vector ASTs without requiring visual approval.
+
+    Empty part maps are useful context drawings. Source quality, semantic part
+    accuracy, confidence and assembly coverage are not publication gates.
+    """
+    if not isinstance(data, dict) or data.get("version", 1) != 1:
+        raise ValueError("Artwork must be a version 1 vector AST")
+    if len(canonical(data)) > 300_000:
+        raise ValueError("Artwork exceeds the runtime byte bound")
     box = [float(value) for value in data["viewBox"].split()]
     if len(box) != 4 or not all(math.isfinite(value) for value in box) or min(box[2:]) <= 0:
         raise ValueError("Reviewed artwork needs a finite positive viewBox")
-    if not isinstance(data.get("parts"), dict) or len(data["parts"]) < 3:
-        raise ValueError("Reviewed artwork needs three distinct physical part buckets")
+    if not isinstance(data.get("parts"), dict):
+        raise ValueError("Artwork part buckets must be an object")
     shape_count = 0
     for bucket in [data["context"], *data["parts"].values()]:
         if not isinstance(bucket, list):
@@ -89,7 +103,7 @@ def load_approved_art(root, record):
                    for key in ("fill", "stroke")):
                 raise ValueError("Reviewed artwork paints must be theme-adaptive")
             shape_count += 1
-    if shape_count > 500:
+    if not 1 <= shape_count <= 500:
         raise ValueError("Reviewed artwork exceeds the runtime shape bound")
     return data
 
@@ -161,7 +175,7 @@ def inspect_svg(body):
                 if not target.strip().strip("\"'").startswith('#'):
                     raise ValueError('SVG contains external paint references')
     shapes = sum(counts[tag] for tag in SHAPES)
-    if shapes < 8: raise ValueError(f'Only {shapes} vector shapes; insufficient independent assemblies')
+    if shapes < 1: raise ValueError('SVG contains no vector geometry')
     return {'shapes': shapes, 'groups': counts['g'], 'labels': counts['text'], 'viewBox': root.get('viewBox')}
 
 
@@ -341,8 +355,8 @@ def flatten(root):
     visit(root, "0", {}, [], [])
     if dropped["image"] or dropped["active"]:
         raise ValueError("Raster-wrapped or active SVG is not a reusable vector diagram")
-    if len(leaves) < 8:
-        raise ValueError("SVG has fewer than eight independent vector shapes")
+    if not 1 <= len(leaves) <= 500:
+        raise ValueError("SVG exceeds the runtime vector shape bound")
     return leaves, dropped
 
 
@@ -422,11 +436,11 @@ def structural_digest(path, expected_sha, workdir):
     return public, leaves
 
 
-def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts=(), minimum_parts=3):
-    # A primary drawing must still identify three assemblies. A secondary view
-    # may add two previously hidden assemblies; its caller verifies novelty.
-    if type(minimum_parts) is not int or minimum_parts not in {2, 3}:
-        raise ValueError("A diagram requires two or three independent physical parts")
+def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts=(), minimum_parts=0):
+    # Optional minimums remain available to diagnostic tools; normal publishing
+    # accepts partial maps and context-only sources without a visual gate.
+    if type(minimum_parts) is not int or not 0 <= minimum_parts <= 12:
+        raise ValueError("Invalid diagnostic minimum part count")
     if mapping.get("selectedSource") != source["id"]:
         raise ValueError("Mapping selects a different source")
     parts = {part["id"] for part in subject["parts"]}
@@ -436,8 +450,6 @@ def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts
         key, part = assignment["node"], assignment["part"]
         if key not in known or part not in parts | {"context", "drop"} or key in assignments:
             raise ValueError("Mapping references an unknown or duplicated tree path/part")
-        if assignment["confidence"] == "low":
-            raise ValueError("Low-confidence component mappings require review")
         assignments[key] = part
     buckets = OrderedDict()
     context = []
@@ -462,8 +474,7 @@ def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts
             attribution[field] = source[field]
     payload = {"version": 1, "id": subject["id"], "viewBox": " ".join(f"{value:g}" for value in digest["viewBox"]),
                "context": context, "parts": buckets, "attribution": attribution}
-    if len(canonical(payload)) > 300_000:
-        raise ValueError("Compiled diagram exceeds the runtime byte bound")
+    validate_art(payload)
     return payload
 
 

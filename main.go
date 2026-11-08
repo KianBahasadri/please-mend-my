@@ -24,7 +24,7 @@ import (
 
 // Embed only public site files; repository files cannot be requested.
 //
-//go:embed index.html credits.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
+//go:embed index.html credits.html sw.js assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
 var siteFiles embed.FS
 
 type representation struct {
@@ -92,6 +92,9 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 	}
 	if err == nil {
 		err = handler.prepareCredits()
+	}
+	if err == nil {
+		err = handler.prepareOfflineShell()
 	}
 	if err != nil {
 		_ = handler.Close()
@@ -163,6 +166,7 @@ func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Reque
 			http.Error(w, "catalog unavailable", http.StatusServiceUnavailable)
 			return
 		}
+		w.Header().Set("X-PMM-Catalog-ETag", catalogETag(handler.catalog, request))
 		handler.catalog.ServeHTTP(w, request)
 		return
 	}
@@ -170,6 +174,9 @@ func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Reque
 	if !found {
 		http.NotFound(w, request)
 		return
+	}
+	if request.URL.Path == "/sw.js" {
+		w.Header().Set("Service-Worker-Allowed", "/")
 	}
 	serveStaticAsset(w, request, asset)
 }

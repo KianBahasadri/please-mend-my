@@ -39,7 +39,8 @@ answer and searches immediately; selecting that unchanged part again clears it.
 The [catalog pipeline](docs/catalog-pipeline.md) supplies nouns, models, and parts
 from the selected release. Reviewed bicycle and phone diagrams carry over from
 the [diagram pilot](docs/diagram-pilot.md); other subjects use generated lists
-until artwork passes review. On smaller screens,
+when no safe source geometry is available. Candidate drawings can appear before
+their part mappings are corrected; visual quality no longer blocks display. On smaller screens,
 the specifier moves beneath the answer, with its diagram and list still paired.
 The bicycle reuses [Al2's Wikimedia drawing](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg)
 under CC BY 3.0 and a headlight from [WRomey's Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)
@@ -65,6 +66,9 @@ Unpunctuated contractions such as `its`, `wont`, and `doesnt` follow the same
 rules as their apostrophized forms, retaining negation. Failure phrases with no
 strict matches can fall back to diagnostic guides while retaining their subject.
 Negation, symptoms, numeric model identifiers, and exact title priority remain.
+Prepared [subject ancestry](docs/search-hierarchy.md) lets known models and
+subtypes inherit compatible parent guidance when an exact procedure is missing,
+while keeping the requested symptom or part mandatory.
 The hero uses those same filler rules when deciding whether to ask a follow-up:
 `fucking dick` supports Enter just like `dick`, while the original input remains
 editable and the question uses the cleaned subject.
@@ -79,6 +83,10 @@ native typing focus and keep the previous answer visible until the new payload
 arrives. Clearing the whole query hides it immediately; an empty second field
 still searches the first subject. Direct guide links and
 browser history remain available; no loading text or spinner appears.
+The browser [stores the full catalog and recent guides](docs/device-cache.md)
+for repeat visits and offline search. Conditional revalidation prepares changed
+releases behind the active search worker; the shell service worker supports
+offline reloads. Cached startup still includes parsing and index preparation.
 
 Check the hero and search interactions without opening a browser:
 

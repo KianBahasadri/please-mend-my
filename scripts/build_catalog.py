@@ -50,6 +50,8 @@ DIAGRAM_SOURCES = ROOT / "scripts/diagram_discovery.py"
 DIAGRAM_AI = ROOT / "scripts/diagram_ai.py"
 DIAGRAM_BATCH = ROOT / "scripts/diagram_batch.py"
 DIAGRAM_REVIEW = ROOT / "scripts/review_diagram_batch.py"
+CANDIDATE_ART = ROOT / "scripts/prepare_candidate_art.py"
+CANDIDATE_SOURCES = ROOT / "scripts/data/candidate-sources.json"
 BICYCLE_SOURCES = (ROOT / "docs/references/bicycle/commons-bicycle-diagram.original.svg",
                    ROOT / "docs/references/bicycle/openclipart-bicycle.original.svg")
 SOURCE_NOTICES = (ROOT / "docs/references/wordnet/OEWN-LICENSE.md",
@@ -59,7 +61,7 @@ PIPELINE_INPUT_NAMES = ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID"
                         "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES", "RESTRUCTURE", "SEED_NOUNS", "LINK_NOUNS",
                         "NOUN_SOURCE", "ARCHETYPES", "ART_CONFIG", "PHONE_ART", "BICYCLE_ART", "PHONE_SOURCE",
                         "DIAGRAM_CREDITS", "DIAGRAM_COMPILER", "DIAGRAM_SOURCES",
-                        "DIAGRAM_AI", "DIAGRAM_BATCH", "DIAGRAM_REVIEW")
+                        "DIAGRAM_AI", "DIAGRAM_BATCH", "DIAGRAM_REVIEW", "CANDIDATE_ART", "CANDIDATE_SOURCES")
 
 
 def input_key(paths):
@@ -142,6 +144,7 @@ def ifixit_cached(data_dir):
 
 def prepared_release(manifest):
     return (manifest.get("searchIndex", {}).get("version") == 1 and
+            manifest.get("searchIndex", {}).get("hierarchyVersion") == 1 and
             manifest.get("archetypes", {}).get("version") == 1 and
             manifest.get("diagramCredits", {}).get("sha256"))
 
@@ -212,6 +215,8 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
         # Stage 0 is independent of source ingestion; its own SHA receipt avoids
         # rebuilding the noun lexicon on unchanged runs.
         run_script(SEED_NOUNS, "--data-dir", data_dir)
+        candidate_art_dir = data_dir / 'candidate-art'
+        run_script(CANDIDATE_ART, '--config', CANDIDATE_SOURCES, '--output-dir', candidate_art_dir)
         if source_runtime is None:
             if cached_ifixit:
                 print("Reusing completed iFixit source", file=sys.stderr, flush=True)
@@ -270,7 +275,8 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
                 if source_database.is_file():
                     arguments.extend(["--source-database", source_database])
             run_script(LINK_NOUNS, *arguments)
-            run_script(ARCHETYPES, "--runtime-dir", runtime, "--database", noun_database)
+            run_script(ARCHETYPES, "--runtime-dir", runtime, "--database", noun_database,
+                       '--candidate-art-dir', candidate_art_dir)
             run_script(SEARCH_INDEX, "--runtime-dir", runtime, "--data-dir", data_dir,
                        "--noun-database", noun_database)
             manifest = completed_manifest(runtime)

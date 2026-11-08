@@ -264,7 +264,7 @@
         groups.set(id, group);
         svg.append(group);
       }
-      return groups.size ? svg : null;
+      return budget.nodes ? svg : null;
     } catch {
       groups.clear();
       return null;
@@ -292,11 +292,12 @@
     mounts.set(container, token);
     container.replaceChildren();
     container.hidden = !definition || !definition.parts.length;
-    if (!definition || !definition.parts.length) return null;
+    if (!definition || !definition.parts.length && !definition.artUrl) return null;
     container.setAttribute("aria-label", `${definition.label} parts and symptoms`);
     const groups = new Map(), options = new Map();
     const cached = definition.artUrl ? artCache.get(definition.artUrl)?.data : null;
     let svg = diagramSVG(definition, cached, groups);
+    container.hidden = !definition.parts.length && !svg;
     container.classList.toggle("is-list-only", !svg);
     const list = document.createElement("span");
     list.className = "specifier-list";
@@ -367,7 +368,7 @@
     const controls = document.createElement("span");
     controls.className = "specifier-controls";
     if (svg) controls.append(svg);
-    controls.append(list);
+    if (definition.parts.length) controls.append(list);
     container.append(controls);
     if (!svg && definition.artUrl) loadArt(definition, true).then(art => {
       if (disposed || mounts.get(container) !== token || !art) return;
@@ -376,7 +377,9 @@
       svg = diagram;
       for (const item of definition.parts) if (groups.has(item.id)) bind(groups.get(item.id), item, true);
       // Keep the existing list, its scroll position and native input untouched.
-      controls.insertBefore(svg, list);
+      if (definition.parts.length) controls.insertBefore(svg, list);
+      else controls.append(svg);
+      container.hidden = false;
       container.classList.remove("is-list-only");
       paint();
       window.dispatchEvent?.(new Event("mend:layout"));

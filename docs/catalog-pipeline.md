@@ -15,7 +15,8 @@ The build stages are:
    and uncovered nouns in a build-only `gaps.json` report.
 3. Build archetypes for nouns with actionable guides. Derive parts from WordNet
    relations and components supported by linked titles; retain reviewed art
-   mappings. Unsupported diagrams use lists. All nouns use this same mechanism.
+   mappings and replay pinned candidate sources. Missing diagrams use lists.
+   All nouns use this same mechanism.
 4. Rebuild search postings and package the resident registry, guide files, hashed
    artwork, and source credits. Stage files before an atomic release rename.
 
@@ -37,8 +38,10 @@ builds synchronous alias/model maps; typing needs no dictionary request or
 external API. The parts list mounts immediately. Geometry comes from a separate
 same-origin, content-addressed JSON file, with no empty SVG area or spinner while
 unavailable. Approved bicycle and phone geometry are build inputs, not embedded
-catalog modules. New art still requires source, mapping, compiler, and visual
-review gates; noun coverage does not imply diagram coverage.
+catalog modules. New art retains source/license pins and safe-vector validation;
+visual review and mapping coverage are diagnostic and do not block display.
+Unmapped parts remain list-only beside available context geometry. Noun coverage
+does not imply diagram coverage.
 
 The Go server prepares `/api/catalog` and `/api/archetypes` once at startup.
 `/api/art/<sha256>.json` verifies the pinned body and prepared gzip on its first
@@ -110,7 +113,8 @@ The multi-view browser renderer is still a roadmap. The 300-archetype Qwen SVG
 experiment is now authorized at up to 128 concurrent remote requests, with only
 two local geometry workers, the production-sized 8 GiB memory ceiling, and an
 8 GiB free-RAM reserve. Other large AI batches remain paused. Generated mappings
-are staged for geometry and visual review before any catalog publication.
+are staged with geometry and visual-review diagnostics. Available safe candidate
+drawings can be published without quality approval; reviewed art takes priority.
 
 The benchmark's default input is the locally selected release (or `CATALOG_DIR`).
 It reports resident bytes, preparation time, memory, synchronous registry lookup,
@@ -122,7 +126,7 @@ large candidate set at runtime. Numeric queries keep their existing strict
 model gate. A 96-entry ranked-query LRU speeds revisiting an immutable query;
 benchmarks report cold first-pass and repeated-query times separately.
 
-## Local verification receipt
+## Earlier three-source verification receipt
 
 Release `18b15619…` preserves 207,691 catalog rows, 679,729 media files, and the
 100 validated structured guides. Its build seeds 57,566 noun senses, links

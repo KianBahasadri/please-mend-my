@@ -124,6 +124,8 @@ def batch_sections(batch, output):
                 status = review.get('status', view.get('status', 'unreviewed'))
                 body += '<div class="candidate"><h3>' + escaped(view.get('label', view['id'])) + ' · compiled mapping <span class="tag">' + escaped(status) + '</span></h3>'
                 body += '<p>Mapped parts: ' + escaped(', '.join(view.get('mappedParts', []))) + '</p>'
+                if view.get('reason'):
+                    body += '<p class="muted">' + escaped(view['reason']) + '</p>'
                 for issue in review.get('issues', []):
                     body += '<p class="muted">' + escaped(issue) + '</p>'
                 body += '<div class="images">' + ''.join(images) + '</div></div>'
@@ -191,7 +193,7 @@ def build(batches, output):
             write(output / name, page(label, content))
             generated.append(name)
         summaries.append({'batch': label, **counts, 'pages': names})
-    content = '<h1>Diagram candidates</h1><p class="intro">All cached source candidates and available part-mapping sheets, including rejected proposals. Images open at full size. These are local experiments.</p>'
+    content = '<h1>Diagram candidates</h1><p class="intro">All cached source candidates and available part-mapping sheets, including rejected proposals. Images open at full size. These are local experiments. Monochrome and highlighted previews adapt source colors and geometry for inspection.</p>'
     for summary in summaries:
         content += '<section class="candidate"><h2><a href="' + summary['pages'][0] + '">' + escaped(summary['batch']) + '</a></h2><p>'
         content += escaped(str(summary['subjects']) + ' subjects · ' + str(summary['candidates']) + ' candidate placements · ' + str(summary['compiledViews']) + ' compiled mappings') + '</p></section>'

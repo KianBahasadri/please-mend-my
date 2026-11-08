@@ -13,14 +13,14 @@
 - Same white/dark palette; rainbow+Matrix explicit exceptions; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
 - Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer still searches first noun. Generic SVG controller assets/specifiers.js; release-backed registry; no empty SVG box.
-- Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
+- Prefer reusable diagram SVGs (Commons/Openclipart); pin original/source/SHA/license, retain credits+adaptations; local vectors, no runtime third-party fetch. SVG visual-quality gates removed: show available candidates in main specifiers, fix quality later; keep XML/license/size safety validation; unmapped parts remain list-only interactions alongside context art.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
-- Approved art: pinned bicycle+phone JSON in scripts/data/archetype-art.json; phone camera rejected. Legacy pilot/compiler retired; diagram_svg only AST compiler, diagram_ai cached transport. Source/map/compiler/art hashes+visual gate. See docs/diagram-pilot.md.
+- Pinned bicycle+phone in scripts/data/archetype-art.json; preserve geometry. diagram_svg only AST compiler, diagram_ai cached transport. Source/map/compiler/art hashes; visual reviews diagnostic only. See docs/diagram-pilot.md.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - RAM: prod c8g.xlarge=8GiB; local jobs may use up to 8GiB (user-authorized). One heavy cgroup job/CPU2; leave ≥8GiB available; serial tests/builds; no uncapped jobs.
 - Qwen SVG batch300 authorized; maximize remote parallelism (128), geometry≤2; 8GiB cap+8GiB reserve. Other large AI runs need authorization.
-- Art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if physical coverage<75%+≥2 missing clustered parts; retain view only for≥2 new valid parts. Build-only pinned provenance/geometry+visual gates; lazy views, confident physical match switches, symptoms don't. Counts measured; shape bounds heuristic.
+- Art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if coverage<75%+≥2missing clustered parts. Quality/coverage reviews diagnostic; candidates need no visual approval/minimum part coverage to appear. Lazy views, physical match switches, symptoms don't; shape bounds heuristic.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
 - BG: preserve docs/references/approved-spotlight.css; mix wall-floor variants. Visible white beam in dark/BLACK in light, receding seam, static/fast. Ref: docs/references/spotlight-wall-floor.png.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
@@ -44,7 +44,7 @@
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.
 - DNS: authoritative/public resolvers verified; local apex negative cache may linger (www works); never alter global DNS/hosts.
 - Catalog: ingest full English Kiwix iFixit archive; categorize sourced topics (technology, household/handyman, medical when present); retain provenance/license.
-- Sources: add full English WikiMed + Army FM4-25.11 PDF chapters; same pinned local/EC2 pipeline; preserve raw text/media/provenance/licenses.
+- Sources: add full English WikiMed + Army FM4-25.11 PDF chapters + Appropedia ZIM + WikiHow full text corpus (wikihowAll.csv, CC BY-NC-SA); same pinned local/EC2 pipeline; preserve raw text/media/provenance/licenses.
 - Rough pages OK; future LLM custom-generates each entry page.
 - v2: build-only validated stage3_cache/<id>.json overlay+gzip, else v1; static Go unchanged; client dispatches steps/legacy HTML. No runtime AI/router I/O.
 - Offline stage2 clean→async OpenRouter qwen/qwen3.6-35b-a3b strict-schema, 40 parallel; SHA cache covers raw/model/prompt/config/schema; preserve provenance/safety. Pilot 25 each first aid/software/handyman/hardware; report source gaps.
@@ -67,9 +67,11 @@
 - Search every edit immediately: 0 debounce, independent of clarification pause; IME waits for commit. Empty second/awaiting specifics still searches first noun; clearing answer deselects, retains best answer until noun result ready.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
+- No "Back to search" button; hero stays editable alongside articles; preserve browser history/direct links.
 - Rank best100 browser-side; inline #1 replaces virtual cards; no Show more/Clear search. No typing-focus steals.
-- Build0–4: pinned OEWN+wordfreq nouns/edges/frequency→ALL merged-source noun/model links→build-only gaps→filled archetypes/parts/approved art→hashed release. No raw-guide scans; no fixed noun subset. Runtime registry/search+credits from release; /api/archetypes, /api/art/<sha>.json; no corpus art in assets/Git. Gate full Go/Python/JS tests+before/after bytes/startup/memory/query benchmarks.
-- Local25477e31…: 57566 seeded/17092 filled,12310 models,2 approved art; 412075/435213 linked; 100 cachedv2. New App13229+WikiHow214293; CSV1 malformed+1071 empty, App9107 foreign quarantined; raw kept.
+- Zero hardcoding: never hardcode items, nouns, emergency packs, entity lists, or subset solutions anywhere in the codebase. Every taxonomy, search feature, cache strategy, and capability must derive systematically from the full 435k+ catalog, OEWN ontology graphs, or algorithmic rules. No handpicked lists, no emergency subsets, no exceptions.
+- Build0–4: pinned OEWN+wordfreq nouns/edges/frequency→ALL merged-source noun/model links→build-only gaps→filled archetypes/parts/available art→hashed release. No raw-guide scans; no fixed noun subset. Runtime registry/search+credits from release; /api/archetypes, /api/art/<sha>.json; no corpus art in assets/Git. Gate full Go/Python/JS tests+before/after bytes/startup/memory/query benchmarks.
+- Local5b76771e…:64209nouns/17814filled,12311models;415275/435213linked;61art(2reviewed);100v2. App13229+WikiHow214293;CSV1malformed+1071empty,App9107foreign quarantined;rawkept.
 - Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.
 - Multiword search: selective-first, scoped posting probes/streaming; partial maps never cached as full. Local coldp95~9ms/cachedp95~.03ms; cold alias outlier59ms; startup~1.9s/19MB gzip. Go+186Py+134JS pass.
 - Sense bugs: bike≠motorcycle; arm≠weapon; phone≠phoneme; MacBook Air≠tune. Keep alias ranks+model/category ancestry.
@@ -81,4 +83,9 @@
 - Further cleanup wrapped: dead topic ranking/huge-scroll/queue Set removed; startup registry local; shared JSON/SHA; obsolete validator retired. Preserve compatibility/provenance;216Py/143JS+60query exact-rank comparison pass.
 - Contractions sans apostrophe equal punctuated; pronouns include he/she/his/her, contractions he's/hes/she's/shes; retain negation. Zero strict matches+resolved subject+failure phrase→subject-mandatory diagnostic synonym fallback; preserve numeric/model intent.
 - SVG10 test authorized only: metadata sense gate→bounded numbered candidate sheets→high-detail/reasoning mapping→per-part VLM prune (≥3valid); true aspect; new cache identity. Report visual pass/cost before expansion; no art publish.
-- Show even rejected/unapproved diagrams locally at /diagram-preview with source/numbered/highlight PNGs+reasons; scratch-only gallery, main art registry unchanged.
+- Show rejected/unapproved diagrams locally at /diagram-preview too; main specifiers use available candidate art without quality approval. Store generated art in hashed catalog releases, not assets/Git; pinned reviewed art takes priority.
+- Hierarchical search: offline OEWN is-a+model→noun links; exact subject/model first, parent discount, compatible superclass fallback with part/symptom mandatory. No handpicked subjects; include person senses; browser-only.
+- Localinline c5d44f3: centeredarticle+sidepossibilities, blanksecondsearchesnoun;157JS/232Py/Go pass; gallery351placements/18oldmaps.
+- SVG10 two passes:33calls/28accepted,$.109089 reported ($.0928486 accepted+$.0162404 rejected);3oldfailchargesunknown.1numericview/verification hit8Klength;0retained,partpassN/A.141MiBpeakretry; no moreAIcalls withoutrequest.
+- Devicecache: wholecatalog CacheStorage cache-first+sessionETag HEAD/revalidate; guidesLRU500 generationfenced/purgeonrelease; SWcoherentshell/offline. Prepare replacementworkerbehindactiveone; preservetyping, no per-keynetwork. Measurestartup;65MBparse/prep≠≤20ms guarantee.
+- Inherited symptom/part evidence=rawtitle/device+v2structuredTerms;nevergeneratedaliases. No-match edits retainpriorarticle,dropalternatives;wholeclearhides.

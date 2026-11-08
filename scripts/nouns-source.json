@@ -38,6 +38,7 @@
     "location",
     "motive",
     "object",
+    "person",
     "phenomenon",
     "plant",
     "possession",
@@ -66,14 +67,16 @@
       "object",
       "attribute",
       "relation",
-      "location"
+      "location",
+      "person"
     ],
     "medical": [
       "artifact",
       "body",
       "state",
       "process",
-      "substance"
+      "substance",
+      "person"
     ],
     "technology": [
       "artifact",
@@ -124,7 +127,8 @@
       "process",
       "relation",
       "state",
-      "substance"
+      "substance",
+      "person"
     ]
   }
 }

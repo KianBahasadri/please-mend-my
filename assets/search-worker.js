@@ -1,5 +1,14 @@
 "use strict";
 
+// Cache Storage is optional; private/older browsers retain the network path.
+if (typeof importScripts === "function") {
+  try { importScripts("/assets/client-cache.js"); } catch {}
+}
+const clientCache = self.mendClientCache;
+const candidateKey = typeof URL === "function" && self.location?.href
+  ? new URL(self.location.href).searchParams.get("candidateKey") || "" : "";
+let catalogEntry;
+
 const clean = (value) => {
   const text = String(value || "");
   return /[^\x00-\x7f]/.test(text) ? text.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase() : text.toLowerCase();
@@ -134,6 +143,8 @@ const primarySubjects = new Map();
 // Compact release-backed aliases, without retaining the parts/art registry.
 const subjectAliases = new Map();
 const subjectProfiles = new Map();
+let hierarchy;
+let inheritedMatches = new Map();
 // "Bike" is a published alias of both Bicycle and Motorcycle. A component
 // request without explicit motor/dirt-bike intent uses the bicycle archetype.
 const bicycleParts = new Set(["chain", "master", "link", "tire", "tyre", "tube", "brake", "cable", "gear", "derailleur",
@@ -162,7 +173,8 @@ function sendRange(request) {
   const start = Math.max(0, Math.min(ranked.length, request.start || 0));
   const end = Math.min(ranked.length, start + Math.min(60, request.count || 30));
   postMessage({ type: "range", requestId: activeRequest, rangeId: request.rangeId,
-    start, items: ranked.slice(start, end).map((index) => catalog.items[index]) });
+    start, items: ranked.slice(start, end).map((index) => catalog.items[index]),
+    inheritance: ranked.slice(start, end).filter(doc => inheritedMatches.has(doc)).map(doc => inheritedMatches.get(doc)) });
 }
 
 function lowerBound(list, word) {
@@ -198,7 +210,7 @@ function validateTerms(terms) {
   }
 }
 
-function unpackLists(encoded, byteOffsets, size, maximum, forbidden = -1) {
+function unpackLists(encoded, byteOffsets, size, maximum, forbidden = -1, allowEmpty = false) {
   if (typeof encoded !== "string" || encoded.length % 4 !== 0 ||
       !/^[A-Za-z0-9+/]*={0,2}$/.test(encoded) || !Array.isArray(byteOffsets) ||
       byteOffsets.length !== size + 1 || byteOffsets[0] !== 0) invalidIndex();
@@ -211,7 +223,8 @@ function unpackLists(encoded, byteOffsets, size, maximum, forbidden = -1) {
   let written = 0;
   for (let list = 0; list < size; list++) {
     const start = byteOffsets[list], end = byteOffsets[list + 1];
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start || end > binary.length) invalidIndex();
+    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end < start ||
+        !allowEmpty && end === start || end > binary.length) invalidIndex();
     offsets[list] = written;
     let previous = 0, at = start;
     while (at < end) {
@@ -273,7 +286,20 @@ function prepareInverted(metadata) {
       previous = doc;
     }
   }
-  inverted = { terms: metadata.terms, stemTerms: metadata.stemTerms, postings, stems };
+  const structuredTerms = new Map();
+  if (metadata.structuredTerms !== undefined) {
+    if (!Array.isArray(metadata.structuredTerms) || metadata.structuredTerms.length > entries.length) invalidIndex();
+    let previous = -1;
+    for (const row of metadata.structuredTerms) {
+      if (!Array.isArray(row) || row.length !== 2 || !Number.isInteger(row[0]) || row[0] <= previous ||
+          row[0] >= entries.length || !actionable(entries[row[0]]) || !Array.isArray(row[1]) || !row[1].length) invalidIndex();
+      validateTerms(row[1]);
+      if (row[1].some(term => metadata.terms[lowerBound(metadata.terms, term)] !== term)) invalidIndex();
+      structuredTerms.set(row[0], new Set(row[1]));
+      previous = row[0];
+    }
+  }
+  inverted = { terms: metadata.terms, stemTerms: metadata.stemTerms, postings, stems, structuredTerms };
   groupOffsets = new Uint32Array(searchGroups.length + 1);
   for (const group of itemGroups) groupOffsets[group + 1]++;
   for (let group = 1; group < groupOffsets.length; group++) groupOffsets[group] += groupOffsets[group - 1];
@@ -374,7 +400,7 @@ function fuzzyTerms(token, matches) {
 
 function tokenMatches(token, widen, strict) {
   const matches = new Map(), terms = inverted.terms;
-  for (let at = lowerBound(terms, token); at < terms.length && terms[at].startsWith(token) && (!strict || terms[at] === token); at++) {
+  for (let at = lowerBound(terms, token); at < terms.length && terms[at].startsWith(token) && (!strict || terms[at] === token || /\p{N}/u.test(token)); at++) {
     matches.set(at, terms[at] === token ? 1 : 2);
   }
   if (!strict) {
@@ -614,6 +640,13 @@ const diagnosticTitle = /\b(?:troubleshoot(?:ing)?|diagnos(?:e|is|ing|tic)|first
 const performanceTitle = /\b(?:teach|trick|pretend|play dead|playing dead|game|joke|costume)\b/;
 const preparednessTitle = /\b(?:kits?|disasters?|plans?|treats|prepare|prepared|preparing|preparation|preparedness)\b/;
 const normalizeSubject = value => words(clean(value)).join(" ");
+const identifierPattern = value => new RegExp("(?:^|[^\\p{L}\\p{N}])" +
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?=$|[^\\p{L}\\p{N}])", "u");
+// Numeric identifiers allow an own-field prefix as it is typed, never a typo
+// or a group-only model alias. Digits can start after a letter in A1708.
+const identifierPrefixPattern = value => new RegExp("(?:^|" +
+  (/^\p{N}+$/u.test(value) ? "[^\\p{N}]" : "[^\\p{L}\\p{N}]") + ")" +
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "u");
 
 function prepareSubjects(registry) {
   const ranks = new Map();
@@ -638,6 +671,309 @@ function prepareSubjects(registry) {
       subjectAliases.set(key, { id: key, label: key, guideCount: 0 });
     }
   }
+}
+
+function prepareHierarchy(metadata, registry) {
+  if (metadata === undefined) return;
+  const fields = ["id", "label", "domain", "frequency", "guideCount"];
+  if (!metadata || metadata.version !== 1 || JSON.stringify(metadata.fields) !== JSON.stringify(fields) ||
+      !Array.isArray(metadata.nodes) || metadata.nodes.length > 100000 ||
+      !Array.isArray(metadata.parents) || metadata.parents.length !== metadata.nodes.length ||
+      !Array.isArray(metadata.categories) || metadata.categories.length !== metadata.nodes.length ||
+      !Array.isArray(metadata.aliases) || !metadata.documents ||
+      !metadata.domainCategories || typeof metadata.domainCategories !== "object") invalidIndex();
+  const nodes = metadata.nodes, nodeIds = new Map(), aliases = new Map(), ranks = new Map(), models = new Map();
+  const categories = new Set(catalog.categories.map(row => row.id));
+  const domain = node => nodes[node][2].replace(/^noun\./, "");
+  for (let at = 0; at < nodes.length; at++) {
+    const row = nodes[at];
+    if (!Array.isArray(row) || row.length !== fields.length || typeof row[0] !== "string" || !row[0] ||
+        nodeIds.has(row[0]) || typeof row[1] !== "string" || !row[1].trim() || row[1].length > 4096 ||
+        typeof row[2] !== "string" || row[2].length > 50 || !Number.isFinite(row[3]) ||
+        !Number.isInteger(row[4]) || row[4] < 0) invalidIndex();
+    nodeIds.set(row[0], at);
+  }
+  function claim(value, node, rank) {
+    if (typeof value !== "string" || !value.trim() || value.length > 160 || /\p{N}/u.test(value)) return;
+    const alias = normalizeSubject(value);
+    if (alias.length < 2) return;
+    const previous = aliases.get(alias), before = ranks.get(alias) ?? Infinity;
+    if (previous === undefined || rank < before || rank === before &&
+        (nodes[node][4] > nodes[previous][4] || nodes[node][4] === nodes[previous][4] &&
+          (nodes[node][3] > nodes[previous][3] || nodes[node][3] === nodes[previous][3] && nodes[node][0] < nodes[previous][0]))) {
+      aliases.set(alias, node); ranks.set(alias, rank);
+    }
+  }
+  for (let at = 0; at < nodes.length; at++) claim(nodes[at][1], at, Infinity);
+  for (const row of registry?.archetypes || []) {
+    const node = nodeIds.get(row.id);
+    if (node === undefined) continue;
+    for (const alias of [row.label, ...row.aliases]) {
+      const key = normalizeSubject(alias);
+      claim(alias, node, Number.isSafeInteger(row.aliasRanks?.[key]) ? row.aliasRanks[key] : Infinity);
+    }
+  }
+  for (const row of metadata.aliases) {
+    if (!Array.isArray(row) || row.length !== 3 || typeof row[0] !== "string" ||
+        !Number.isInteger(row[1]) || row[1] < 0 || row[1] >= nodes.length || !Number.isFinite(row[2])) invalidIndex();
+    claim(row[0], row[1], row[2]);
+  }
+  for (const row of registry?.models || []) {
+    const node = nodeIds.get(row.nounId);
+    if (node === undefined || typeof row.name !== "string" || !row.name.trim() || row.name.length > 160) continue;
+    const key = clean(row.name).trim().replace(/\s+/g, " "), previous = models.get(key);
+    if (previous === undefined || nodes[node][4] > nodes[previous][4]) models.set(key, node);
+  }
+  for (let at = 0; at < nodes.length; at++) {
+    const parents = metadata.parents[at], allowed = metadata.categories[at];
+    if (!Array.isArray(parents) || parents.length > 64 || new Set(parents).size !== parents.length ||
+        parents.some(parent => !Number.isInteger(parent) || parent < 0 || parent >= nodes.length || parent === at) ||
+        !Array.isArray(allowed) || allowed.some(category => !categories.has(category))) invalidIndex();
+  }
+  for (const allowed of Object.values(metadata.domainCategories)) {
+    if (!Array.isArray(allowed) || allowed.some(category => !categories.has(category))) invalidIndex();
+  }
+  const documents = unpackLists(metadata.documents.data, metadata.documents.offsets, nodes.length,
+    entries.length - 1, -1, true);
+  const docDomains = new Uint8Array(entries.length), domainOffsets = new Uint32Array(entries.length + 1);
+  for (let node = 0; node < nodes.length; node++) {
+    const flag = { artifact: 1, animal: 2, person: 4 }[domain(node)] || 0;
+    for (let at = documents.offsets[node]; at < documents.offsets[node + 1]; at++) {
+      const doc = documents.values[at];
+      if (!actionable(entries[doc])) invalidIndex();
+      docDomains[doc] |= flag;
+      if (flag) domainOffsets[doc + 1]++;
+    }
+  }
+  for (let doc = 1; doc < domainOffsets.length; doc++) domainOffsets[doc] += domainOffsets[doc - 1];
+  const domainNodes = new Uint32Array(domainOffsets.at(-1)), cursors = domainOffsets.slice();
+  for (let node = 0; node < nodes.length; node++) {
+    if (!({ artifact: 1, animal: 2, person: 4 }[domain(node)])) continue;
+    for (let at = documents.offsets[node]; at < documents.offsets[node + 1]; at++) {
+      const doc = documents.values[at]; domainNodes[cursors[doc]++] = node;
+    }
+  }
+  const personCategories = new Set(metadata.domainCategories.person || []), universalPeople = [];
+  if (personCategories.size) for (let doc = 0; doc < entries.length; doc++) {
+    if (actionable(entries[doc]) && personCategories.has(entries[doc].row[2])) universalPeople.push(doc);
+  }
+  hierarchy = { nodes, parents: metadata.parents, categories: metadata.categories,
+    domainCategories: metadata.domainCategories, aliases, models, documents, docDomains, domain,
+    domainOffsets, domainNodes, canonicalDomains: new Uint8Array(entries.length), canonicalPatterns: new Map(),
+    universalPeople: Uint32Array.from(universalPeople), scopes: new Map(), scopeBytes: 0 };
+}
+
+function hierarchyContext(query) {
+  if (!hierarchy || query.length > 512) return null;
+  const pieces = [...query.matchAll(/\S+/gu)];
+  if (pieces.length < 2 || pieces.length > 32) return null;
+  // A complete known noun/model is a subject-only request, not a shorter noun
+  // plus symptoms. Otherwise "tumble dryer" becomes dryer + tumble and broad
+  // parent classes do unnecessary work before returning the same strict hits.
+  if (hierarchy.models.has(query) || hierarchy.aliases.has(normalizeSubject(query))) return null;
+  // Models are exact whitespace-delimited strings: punctuation and identifiers
+  // never undergo stemming or typo recovery. A model must exist in the release.
+  // Inheritance interprets Subject + Symptom/Part, after conversational filler
+  // normalization. A noun later in an unresolved phrase may itself be a part;
+  // original title/posting search still handles reordered and partial phrases.
+  for (const model of [true, false]) {
+    for (let width = Math.min(pieces.length - 1, 12); width > 0; width--) {
+      const first = pieces[0], last = pieces[width - 1];
+      const text = query.slice(first.index, last.index + last[0].length)
+        .replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replace(/\s+/g, " ");
+      const node = (model ? hierarchy.models : hierarchy.aliases).get(model ? text : normalizeSubject(text));
+      if (node === undefined || !model && /\p{N}/u.test(text)) continue;
+      const rest = query.slice(last.index + last[0].length).trim();
+      if (!words(rest).length) continue;
+      return { node, model, subject: text, rest };
+    }
+  }
+  return null;
+}
+
+function scopeContains(node, doc) {
+  const { offsets, values } = hierarchy.documents;
+  let low = offsets[node], high = offsets[node + 1];
+  while (low < high) {
+    const at = (low + high) >>> 1;
+    if (values[at] < doc) low = at + 1; else high = at;
+  }
+  return low < offsets[node + 1] && values[low] === doc;
+}
+
+function canonicalSubjectPattern(label) {
+  const name = words(clean(label)).join(" ");
+  if (!name) return null;
+  const phrase = " " + name + " ";
+  // Exact normalized word sequences preserve Unicode boundaries and allow
+  // punctuation separators without compiling a Unicode RegExp for every node.
+  // Per-node regex JIT was a sizeable first-query cost for ancestor fallbacks.
+  return { test: raw => (" " + words(raw).join(" ") + " ").includes(phrase) };
+}
+
+function canonicalDocDomains(doc) {
+  if (!hierarchy.docDomains[doc]) return 0;
+  const cached = hierarchy.canonicalDomains[doc];
+  if (cached & 128) return cached & 7;
+  const raw = entries[doc].title + " " + entries[doc].device;
+  let flags = 0;
+  for (let at = hierarchy.domainOffsets[doc]; at < hierarchy.domainOffsets[doc + 1]; at++) {
+    const node = hierarchy.domainNodes[at], flag = { artifact: 1, animal: 2, person: 4 }[hierarchy.domain(node)] || 0;
+    if (flags & flag) continue;
+    if (!hierarchy.canonicalPatterns.has(node)) {
+      hierarchy.canonicalPatterns.set(node, canonicalSubjectPattern(hierarchy.nodes[node][1]));
+    }
+    // Validate only actual inherited candidates. Alias-only assignments cannot
+    // veto a literal ancestor, and startup never regex-scans the full corpus.
+    if (hierarchy.canonicalPatterns.get(node)?.test(raw)) flags |= flag;
+  }
+  hierarchy.canonicalDomains[doc] = flags | 128;
+  return flags;
+}
+
+function hierarchyScope(context, ancestors, subjectPatterns, domain, conflictingDomains) {
+  const cached = hierarchy.scopes.get(context.node);
+  if (cached) return cached;
+  const found = new Set(), { offsets, values } = hierarchy.documents;
+  for (const node of ancestors.keys()) {
+    for (let at = offsets[node]; at < offsets[node + 1]; at++) found.add(values[at]);
+    // Literal canonical subjects can rescue a missing or ambiguous noun link.
+    // Union the rarest own-document posting without compiling/testing every
+    // ancestor's pattern against thousands of unrelated documents. The real
+    // canonical phrase and domain fence are checked after residual intersection.
+    let first = 0, last = Infinity;
+    for (const token of words(clean(hierarchy.nodes[node][1]))) {
+      const term = lowerBound(inverted.terms, token);
+      if (inverted.terms[term] !== token) { last = 0; break; }
+      const start = inverted.postings.offsets[term], end = inverted.postings.offsets[term + 1];
+      if (end - start < last - first) { first = start; last = end; }
+    }
+    if (!Number.isFinite(last)) continue;
+    for (let at = first; at < last; at++) {
+      const doc = inverted.postings.values[at];
+      if (doc >= entries.length) break;
+      if (!found.has(doc) && actionable(entries[doc])) found.add(doc);
+    }
+  }
+  if (domain === "person") for (const doc of hierarchy.universalPeople) found.add(doc);
+  const documents = Uint32Array.from(found).sort();
+  hierarchy.scopes.set(context.node, documents);
+  hierarchy.scopeBytes += documents.byteLength;
+  while (hierarchy.scopes.size > 32 || hierarchy.scopeBytes > 8 * 1024 ** 2) {
+    const key = hierarchy.scopes.keys().next().value;
+    hierarchy.scopeBytes -= hierarchy.scopes.get(key).byteLength;
+    hierarchy.scopes.delete(key);
+  }
+  return documents;
+}
+
+function hierarchyCandidates(context, scope) {
+  const tokens = [...new Set(words(context.rest))];
+  if (!tokens.length || tokens.length > 16) return [];
+  const plans = tokens.map(token => tokenPlan(token, false, token === "not" || token === "no" || /\p{N}/u.test(token)))
+    .sort((a, b) => a.estimate - b.estimate);
+  if (plans.some(plan => !plan.cached && !plan.matches.size)) return [];
+  // Keep subject scope mandatory before expanding any symptom/part. A common
+  // residual word must not materialize global alias groups or tokenize unrelated
+  // titles merely to discard them during ancestry scoring.
+  let candidates = scope;
+  for (const plan of plans) {
+    // Cached token plans already own complete qualities and deliberately omit
+    // expansion metadata. Never pass one to the partial-posting probe.
+    candidates = plan.cached ? candidates.filter(doc => plan.cached.quality[doc])
+      : restrictedToken(plan, candidates).documents;
+    if (!candidates.length) return [];
+  }
+  // Prepared own-document postings can also contain noun/part aliases. Only
+  // actual title/device words and source-backed v2 symptoms/materials establish
+  // the remaining symptom or part; alias expansion never supplies that evidence.
+  const ownTerms = plans.filter(plan => !/\p{N}/u.test(plan.token)).map(plan =>
+    [...(plan.matches || tokenMatches(plan.token, false, plan.strict).matches).keys()].map(term => inverted.terms[term]));
+  const identifiers = context.rest.split(/\s+/).filter(token => /\p{N}/u.test(token))
+    .map(token => identifierPrefixPattern(token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "")));
+  return candidates.filter(doc => {
+    const entry = entries[doc];
+    if (!actionable(entry) || !identifiers.every(identifier => identifier.test(entry.text))) return false;
+    const literal = new Set(words(entry.title + " " + entry.device)), structured = inverted.structuredTerms.get(doc);
+    return ownTerms.every(terms => terms.some(term => literal.has(term) || structured?.has(term)));
+  });
+}
+
+function inheritSearch(query, original) {
+  inheritedMatches = new Map();
+  const context = hierarchyContext(query);
+  if (!context) return original;
+  const ancestors = new Map([[context.node, context.model ? 1 : 0]]), domain = hierarchy.domain(context.node);
+  let frontier = [context.node];
+  for (let step = 0; step < 16 && frontier.length && ancestors.size < 64; step++) {
+    const next = [];
+    for (const node of frontier) for (const parent of hierarchy.parents[node]) {
+      if (ancestors.has(parent) || hierarchy.domain(parent) !== domain) continue;
+      ancestors.set(parent, ancestors.get(node) + 1); next.push(parent);
+      if (ancestors.size === 64) break;
+    }
+    frontier = next;
+  }
+  const exactModel = context.model ? identifierPattern(context.subject) : null;
+  const canonicalSubject = canonicalSubjectPattern(hierarchy.nodes[context.node][1]);
+  const conflictingDomains = { artifact: 6, animal: 5, person: 3 }[domain] || 0;
+  const exact = [], seen = new Set();
+  for (let at = 0; at < original.length; at++) {
+    const doc = original[at];
+    const entry = entries[doc];
+    const raw = entry.title + " " + entry.device;
+    if (entry.title === query || (context.model ? exactModel.test(raw) :
+        scopeContains(context.node, doc) || hierarchy.models.get(entry.device) === context.node ||
+        canonicalSubject?.test(raw) && !(canonicalDocDomains(doc) & conflictingDomains))) {
+      exact.push(doc); seen.add(doc);
+    }
+    // Only six positions are visible. Stop before classifying the other 94
+    // strict hits or building any parent scope when these are already exact.
+    if (at === 5 && exact.length === 6) return original;
+  }
+  const subjectPatterns = new Map([...ancestors.keys()].map(node =>
+    [node, canonicalSubjectPattern(hierarchy.nodes[node][1])]));
+  const scope = hierarchyScope(context, ancestors, subjectPatterns, domain, conflictingDomains);
+  const candidates = hierarchyCandidates(context, scope);
+  if (!candidates.length) return original;
+  const best = shortlist(), scopes = new Map();
+  for (const doc of candidates) {
+    if (seen.has(doc)) continue;
+    const entry = entries[doc];
+    let selected, distance = Infinity, universal = false, literalSubject = false;
+    const rawSubject = entry.title + " " + entry.device;
+    for (const [node, level] of ancestors) {
+      const primary = scopeContains(node, doc);
+      const literal = subjectPatterns.get(node)?.test(rawSubject) && !(canonicalDocDomains(doc) & conflictingDomains);
+      if (level < distance && (primary || literal)) {
+        selected = node; distance = level; literalSubject = Boolean(literal);
+      }
+    }
+    // Universal human health articles often name the condition rather than
+    // "person". The release supplies allowed categories, and primary noun
+    // memberships exclude pet/device senses; artifact domains never widen here.
+    if (selected === undefined && domain === "person" &&
+        (hierarchy.domainCategories[domain] || []).includes(entry.row[2]) && !(canonicalDocDomains(doc) & 3)) {
+      selected = context.node;
+      distance = 32; universal = true;
+    }
+    if (selected === undefined) continue;
+    const allowed = hierarchy.categories[selected];
+    if (!universal && !literalSubject && allowed.length && !allowed.includes(entry.row[2])) continue;
+    let score = 10000 - distance * 1000 + titleScore(entry, context.rest, words(context.rest),
+      words(context.rest).map(word => " " + word), entry.row[3] === "article" ? 20 : 0);
+    if (!entry.device || normalizeSubject(entry.device) === normalizeSubject(hierarchy.nodes[selected][1])) score += 160;
+    best.add(doc, score);
+    if (distance > 0) scopes.set(doc, { id: entry.row[0], subject: context.subject,
+      label: universal ? domain : hierarchy.nodes[selected][1], distance });
+  }
+  const inherited = best.sorted();
+  const combined = [...exact, ...inherited].slice(0, RESULT_LIMIT);
+  // Existing literal results still work when a release's link graph lacks an
+  // exact noun edge; inherited evidence must never erase an exact source title.
+  if (!combined.length) return original;
+  for (const doc of combined) if (scopes.has(doc)) inheritedMatches.set(doc, scopes.get(doc));
+  return combined;
 }
 
 function failureContext(query, tokens) {
@@ -759,10 +1095,10 @@ function indexedSearch(query, tokens) {
   // Literal punctuation in model identifiers remains significant after word
   // tokenization, e.g. S23+ must not match S23 and WH-1000XM4 stays one model.
   const identifiers = query.split(/\s+/).filter(token => /\p{N}/u.test(token))
-    .map(token => token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, ""));
+    .map(token => identifierPrefixPattern(token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "")));
   const intersect = (widen) => {
     const lists = [];
-    const plans = tokens.map(token => tokenPlan(token, widen, tokens.length > 1 && (token === "not" || token === "no")))
+    const plans = tokens.map(token => tokenPlan(token, widen, /\p{N}/u.test(token) || tokens.length > 1 && (token === "not" || token === "no")))
       .sort((a, b) => a.estimate - b.estimate);
     let candidates;
     for (const plan of plans) {
@@ -798,7 +1134,7 @@ function indexedSearch(query, tokens) {
       }
       if (!matches) continue;
       for (const identifier of identifiers) {
-        if (!entry.text.includes(identifier) && !searchGroups[itemGroups[doc]].includes(identifier)) { matches = false; break; }
+        if (!identifier.test(entry.text)) { matches = false; break; }
       }
       if (!matches) continue;
       const bonus = entry.row[3] === "guide" ? 15 : 0;
@@ -837,6 +1173,8 @@ function legacySearch(query, literalQuery = "") {
   const wordPrefixes = tokens.map(token => " " + token);
   const negations = tokens.map(token => token === "not" ? /\bnot\b/ : token === "no" ? /\bno\b/ : null);
   const broad = tokens.length === 1 && query.length > 1 && /^\p{L}+$/u.test(query);
+  const identifiers = tokens.filter(token => /\p{N}/u.test(token))
+    .map(token => identifierPrefixPattern(token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "")));
   // Transitional compatibility while an old catalog is still cached. Published
   // builds have prepared postings; their searches never take this scan path.
   const compact = tokens.length <= 31;
@@ -852,7 +1190,7 @@ function legacySearch(query, literalQuery = "") {
   }
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index], group = itemGroups[index], aliasMask = groupMasks[group];
-    if (!actionable(entry)) continue;
+    if (!actionable(entry) || identifiers.some(identifier => !identifier.test(entry.text))) continue;
     if (literalQuery && entry.title === literalQuery) {
       best.add(index, 3000 + (entry.row[3] === "guide" ? 15 : 0));
       continue;
@@ -896,11 +1234,15 @@ function search(request) {
   const started = performance.now(), literal = clean(request.query).trim(), query = searchPhrase(literal);
   const exact = query === literal ? "" : literal;
   if (queryCache.has(literal)) {
-    ranked = queryCache.get(literal);
+    const cached = queryCache.get(literal);
+    ranked = cached.documents;
+    inheritedMatches = new Map(cached.inheritance);
     queryCache.delete(literal);
-    queryCache.set(literal, ranked);
+    queryCache.set(literal, cached);
   } else {
     ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
+    inheritedMatches = new Map();
+    if (inverted && hierarchy) ranked = inheritSearch(query, ranked);
     if (inverted && exact) {
       const titles = literalTitles(literal);
       if (titles.length) {
@@ -911,13 +1253,15 @@ function search(request) {
     // Immutable catalog: revisiting an input (Backspace, guide return, repeated
     // searches) can reuse its ranked IDs. Bound both key size and entry count.
     if (literal.length <= 512) {
-      queryCache.set(literal, ranked);
+      queryCache.set(literal, { documents: ranked, inheritance: [...inheritedMatches] });
       if (queryCache.size > 96) queryCache.delete(queryCache.keys().next().value);
     }
   }
   activeRequest = request.requestId;
   postMessage({ type: "results", requestId: activeRequest, total: ranked.length,
-    items: ranked.slice(0, Math.min(60, request.count || 30)).map((index) => catalog.items[index]), duration: performance.now() - started });
+    items: ranked.slice(0, Math.min(60, request.count || 30)).map((index) => catalog.items[index]),
+    inheritance: ranked.slice(0, Math.min(60, request.count || 30)).filter(doc => inheritedMatches.has(doc)).map(doc => inheritedMatches.get(doc)),
+    duration: performance.now() - started });
 }
 
 self.onmessage = ({ data }) => {
@@ -925,10 +1269,21 @@ self.onmessage = ({ data }) => {
   else if (data.type === "range") sendRange(data);
 };
 
-async function loadCatalog() {
+async function loadCatalog(forceNetwork = false) {
   const delays = [250, 500, 1000, 2000, 4000];
   for (let attempt = 0; ; attempt += 1) {
     let response, failure;
+    if (clientCache) {
+      try {
+        catalogEntry = await clientCache.loadCatalog({ candidateKey, forceNetwork });
+        return catalogEntry.catalog;
+      } catch (error) {
+        if (candidateKey || error.status && ![429, 500, 502, 503, 504].includes(error.status)) throw error;
+        if (attempt === delays.length) throw error;
+        await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+        continue;
+      }
+    }
     try {
       response = await fetch("/api/catalog", { credentials: "same-origin", mode: "same-origin",
         ...(attempt ? { cache: "no-store" } : {}) });
@@ -948,10 +1303,21 @@ async function loadCatalog() {
   }
 }
 
+function resetPreparedCatalog() {
+  catalog = undefined; entries = []; searchGroups = [""]; itemGroups = undefined;
+  inverted = undefined; groupOffsets = undefined; groupDocuments = undefined;
+  trie = undefined; maximumWordLength = 0; broadBonuses = undefined; shortPrefixes = undefined;
+  hierarchy = undefined; inheritedMatches = new Map(); ranked = [];
+  primarySubjects.clear(); subjectAliases.clear(); subjectProfiles.clear();
+  tokenCache.clear(); tokenCacheBytes = 0; queryCache.clear();
+}
+
 (async () => {
-  try {
-    const started = performance.now();
-    catalog = await loadCatalog();
+  const started = performance.now();
+  let forceNetwork = false;
+  for (;;) try {
+    catalog = await loadCatalog(forceNetwork);
+    const prepareStarted = performance.now();
     if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories)) throw new Error("The repair library format is invalid.");
     const categories = new Map(catalog.categories.map((category) => [category.id, clean(category.name)]));
     const devices = new Map();
@@ -999,18 +1365,40 @@ async function loadCatalog() {
     // A JSON string crosses the worker boundary without deep-cloning thousands
     // of nested part arrays on the main thread. Parse it once in the page.
     prepareSubjects(catalog.archetypes);
+    prepareHierarchy(catalog.search?.hierarchy, catalog.archetypes);
+    if (catalog.search?.hierarchy) delete catalog.search.hierarchy;
     const archetypesJSON = catalog.archetypes ? JSON.stringify(catalog.archetypes) : "";
     delete catalog.archetypes;
+    const prepareDuration = performance.now() - prepareStarted;
+    // A replacement remains inactive until the main page is ready to swap.
+    // Initial loads are persisted only after every index/schema check succeeds.
+    const initialAcceptance = clientCache && !candidateKey
+      ? Promise.resolve(clientCache.acceptCatalog(catalogEntry)).catch(() => false) : Promise.resolve(false);
     ready = true;
     postMessage({ type: "ready", total: entries.length, categories: catalog.categories, source: catalog.source,
       revision: catalog.revision, aliasGroups: searchGroups.length - 1, invertedIndex: Boolean(inverted),
       termCount: inverted?.terms.length || 0, stemming: Boolean(inverted), fuzzy: Boolean(inverted),
       terms: inverted?.terms || [],
       archetypesJSON,
+      catalogETag: catalogEntry?.etag || "", candidateKey,
+      cacheSource: catalogEntry?.source || "network", cacheTimings: catalogEntry?.timings || {}, prepareDuration,
       resultLimit: RESULT_LIMIT,
       loadDuration: performance.now() - started });
     if (pending) schedule(pending);
+    if (clientCache && !candidateKey && catalogEntry?.etag) {
+      initialAcceptance.then(() => clientCache.probeCatalog(catalogEntry.etag)).then(update => {
+        if (update) postMessage({ type: "catalog-update", ...update });
+      }).catch(() => {});
+    }
+    return;
   } catch (error) {
+    if (clientCache && catalogEntry?.source === "cache" && !forceNetwork && !candidateKey) {
+      await clientCache.rejectCatalog(catalogEntry).catch(() => {});
+      resetPreparedCatalog(); catalogEntry = undefined; forceNetwork = true;
+      continue;
+    }
+    if (clientCache && candidateKey && catalogEntry) await clientCache.rejectCatalog(catalogEntry).catch(() => {});
     postMessage({ type: "error", message: error.message || "The repair library could not be loaded." });
+    return;
   }
 })();

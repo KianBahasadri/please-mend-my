@@ -90,6 +90,17 @@ class NounEnrichmentTests(unittest.TestCase):
 
 
 class SearchPreparationTests(unittest.TestCase):
+    def test_structured_term_evidence_excludes_generated_noun_aliases_and_categories(self):
+        index = fixture()
+        records = {'one': {'id': 'one', 'version': 2,
+                           'symptoms': ['No sound', 'Unresponsive screen'], 'materials': ['Mineral oil']}}
+        result = search.prepare_index(index, records, {'one': {'paw', 'synthetic-alias'}})
+        self.assertEqual(result['structuredTerms'], [[0, ['mineral', 'no', 'oil', 'screen', 'sound', 'unresponsive']]])
+        self.assertIn('paw', unpack(result), 'ordinary semantic postings remain available')
+        self.assertNotIn('paw', result['structuredTerms'][0][1], 'aliases are never symptom evidence')
+        self.assertNotIn('technology', result['structuredTerms'][0][1])
+        self.assertNotIn('structuredTerms', search.prepare_index(index))
+
     def write_runtime(self, directory, index=None, structured=None):
         root = Path(directory)
         runtime = root / "runtime"

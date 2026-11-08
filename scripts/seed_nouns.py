@@ -76,7 +76,7 @@ def parse_wordnet(source: Path, domains: set[str]) -> tuple[dict, dict, list]:
                     stack[-2].remove(element)
             elif element.tag == "Synset":
                 domain = element.get("lexfile", "").removeprefix("noun.")
-                if element.get("partOfSpeech") == "n" and domain in domains:
+                if element.get("partOfSpeech") == "n" and (domain in domains or domain == "Tops"):
                     identifier = element.attrib["id"]
                     # members define the lexicon's canonical sense label, not the
                     # first alphabetically encountered alias or an LLM guess.
@@ -132,6 +132,12 @@ def build_seed(source: Path, destination: Path, frequency=None, config: dict | N
             if not choices:
                 continue
             label = _canonical(members, choices)
+            # OEWN puts its semantic roots (person, animal, artifact, ...) in
+            # noun.Tops rather than their descendants' lexical files. Keep all
+            # roots so ancestry is complete; an exact canonical domain name
+            # carries that domain without a manually maintained synset list.
+            if domain == "Tops" and normalize(label) in config["domains"]:
+                domain = normalize(label)
             # Proper names are distributed separately by OEWN. Retain capitalized
             # common acronyms, but not lexical entries lacking a common form.
             if not any(form[0].islower() or form.isupper() for form, _ in choices):

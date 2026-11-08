@@ -257,7 +257,8 @@
     // Show prepared narrowing controls as soon as the whole subject matches.
     // Keep native focus on the first field until a pause or explicit action,
     // so continuing from "car" to "carpet" never types into the answer.
-    const preview = name && specifiers?.resolve?.(name)?.parts.length && document.visibilityState !== "hidden" &&
+    const prepared = name && specifiers?.resolve?.(name);
+    const preview = prepared && (prepared.parts.length || prepared.artUrl) && document.visibilityState !== "hidden" &&
       !document.body.classList.contains("reading");
     if (sameSubject || preview) updateLine(name, remount);
     else updateLine("");

@@ -423,6 +423,25 @@ test('a missing registry stays empty and filled data without parts has no empty 
   assert.equal(ui.container.hidden, true);
 });
 
+test('unreviewed context-only vectors display without fake highlights and support art-only nouns', async () => {
+  for (const parts of [pilotFixture().archetypes[0].parts, []]) {
+    const pilot = pilotFixture(); pilot.archetypes[0].parts = parts;
+    const art = phoneArt();
+    art.context = Object.values(art.parts).flat(); art.parts = {};
+    const ui = await registry({ pilot, fetchArt: async () => artResponse(art) });
+    ui.mount('phone');
+    if (!parts.length) assert.equal(ui.container.hidden, true, 'pending art reserves no empty box');
+    await settleArt();
+    assert.ok(ui.svg(), 'source geometry appears even without approved part mappings');
+    assert.equal(ui.container.hidden, false);
+    assert.equal(ui.svg().children.filter(node => node.dataset.part).length, 0);
+    if (parts.length) {
+      ui.part('battery', 'button').dispatch('click');
+      assert.deepEqual(ui.selected, ['battery'], 'unmapped part list remains usable');
+    }
+  }
+});
+
 test('model names resolve literally while release replacement clears stale aliases', async () => {
   const ui = await registry({ art: false });
   assert.equal(ui.api.resolve('MacBook A2179').id, 'laptop');

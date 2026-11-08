@@ -24,7 +24,8 @@ class DiagramSourceIntegrityTests(unittest.TestCase):
                       b'<feImage href="https://example.com/raster.png"/>']:
             with self.subTest(extra=extra), self.assertRaises(ValueError):
                 svg.inspect_svg(SVG.replace(b'</svg>', extra + b'</svg>'))
-        with self.assertRaises(ValueError): svg.inspect_svg(b'<svg><path d="M0 0"/></svg>')
+        self.assertEqual(svg.inspect_svg(b'<svg><path d="M0 0"/></svg>')['shapes'], 1,
+                         'simple vectors no longer require a visual complexity minimum')
 
     def test_unused_namespace_entity_is_stripped_without_xml_resolution(self):
         dtd = b'<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "https://example.com/never-fetch.dtd" [<!ENTITY ns_flows "http://ns.adobe.com/Flows/1.0/">]>'

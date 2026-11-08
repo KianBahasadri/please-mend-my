@@ -29,11 +29,15 @@ def write_wordnet(path):
         ('community', 'community', 'group', 'A group living together.', []),
         ('earth', 'earth', 'object', 'The world.', []),
         ('resume', 'resume', 'communication', 'A short account of qualifications.', []),
+        ('person', 'person', 'person', 'A human being.', []),
+        ('grandmother', 'grandmother', 'person', 'A mother of a parent.', [('hypernym', 'person')]),
+        ('proper-person', 'Alice', 'person', 'A proper personal name.', []),
         ('proper', 'London', 'location', 'A proper place name.', []),
     ]
     entries, synsets = [], []
     for identifier, label, domain, definition, relations in definitions:
-        aliases = [label, 'résumé'] if identifier == 'resume' else ([label, 'air'] if identifier == 'tune' else [label])
+        aliases = [label, 'résumé'] if identifier == 'resume' else ([label, 'air'] if identifier == 'tune'
+                  else [label, 'grandma'] if identifier == 'grandmother' else [label])
         for index, alias in enumerate(aliases):
             entries.append(f'<LexicalEntry id="entry-{identifier}-{index}"><Lemma writtenForm="{escape(alias)}" partOfSpeech="n"/><Sense synset="{identifier}"/></LexicalEntry>')
         edges = ''.join(f'<SynsetRelation relType="{kind}" target="{target}"/>' for kind, target in relations)
@@ -80,7 +84,7 @@ class NounPipelineTests(unittest.TestCase):
 
     def test_seed_preserves_synonyms_parent_and_part_edges_without_proper_names(self):
         connection = self.connection(self.seed)
-        self.assertEqual(self.receipt['nouns'], 15)
+        self.assertEqual(self.receipt['nouns'], 17)
         self.assertIsNone(connection.execute("SELECT id FROM nouns WHERE id='proper'").fetchone())
         self.assertEqual(connection.execute("SELECT frequency FROM nouns WHERE id='earth'").fetchone(), (4.0,))
         self.assertEqual(connection.execute("SELECT normalized FROM noun_aliases WHERE alias='résumé'").fetchone(), ('resume',))
@@ -90,6 +94,27 @@ class NounPipelineTests(unittest.TestCase):
         self.assertEqual(sum(row == ('arm', 'bone', 'has-part') for row in edges), 1)
         self.assertEqual(normalize('SM-G991B'), 'sm g991b')
         self.assertEqual(alias_ranks(connection)['resume']['resume'], 0)
+
+    def test_common_human_roles_are_seeded_with_ancestry_but_proper_people_are_not(self):
+        connection = self.connection(self.seed)
+        self.assertEqual(connection.execute("SELECT domain FROM nouns WHERE id='grandmother'").fetchone(), ('person',))
+        self.assertIsNone(connection.execute("SELECT id FROM nouns WHERE id='proper-person'").fetchone())
+        self.assertIn(('person', 'grandmother', 'is-a'), connection.execute('SELECT parent_id,child_id,relation FROM noun_edges'))
+        self.assertEqual(connection.execute("SELECT normalized FROM noun_aliases WHERE alias='grandma'").fetchone(), ('grandma',))
+
+    def test_top_level_roots_keep_full_ancestry_and_derive_domains_from_canonical_names(self):
+        source = self.source.read_text().replace('lexfile="noun.person"><Definition>A human being.',
+                                                'lexfile="noun.Tops"><Definition>A human being.')
+        source = source.replace('lexfile="noun.artifact"><Definition>A conveyance for transport.',
+                                'lexfile="noun.Tops"><Definition>A conveyance for transport.')
+        self.source.write_text(source)
+        build_seed(self.source, self.seed, frequency=lambda _: 4.0)
+        connection = self.connection(self.seed)
+        self.assertEqual(connection.execute("SELECT domain FROM nouns WHERE id='person'").fetchone(), ('person',))
+        self.assertEqual(connection.execute("SELECT domain FROM nouns WHERE id='vehicle'").fetchone(), ('Tops',))
+        edges = set(connection.execute('SELECT parent_id,child_id,relation FROM noun_edges'))
+        self.assertIn(('person', 'grandmother', 'is-a'), edges)
+        self.assertIn(('vehicle', 'car', 'is-a'), edges)
 
     def test_links_all_sources_keeps_models_and_counts_actionable_guides_only(self):
         index = self.write_index([

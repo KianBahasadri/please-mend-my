@@ -50,9 +50,13 @@ class SharedTextTests(unittest.TestCase):
                              "symptoms": ["it's swollen", "no sensation", "café"],
                              "materials": ["½ cup", "WH-1000XM4"]}}
         prepared = search.prepare_index(index, records)
+        self.assertEqual(prepared.pop("structuredTerms"),
+                         [[2, ["1", "1000", "1000xm4", "2", "4", "cafe", "cup", "it", "no", "s", "sensation", "swollen", "wh"]]])
         body = json.dumps(prepared, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
         # Measured before moving any helper; a search-format change must be an
         # explicit behavior change instead of slipping through this refactor.
+        # Source-backed evidence is an additive field; the original postings
+        # and token normalization must still match their frozen byte fixture.
         self.assertEqual(hashlib.sha256(body).hexdigest(),
                          "51681dff4c3817a0be08b220c221e8f133efb4a824987d3c55eedb3f6af95ec7")
 

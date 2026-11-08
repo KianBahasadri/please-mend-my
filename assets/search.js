@@ -10,9 +10,11 @@
   const body = document.getElementById("guide-body");
   const navigationError = document.getElementById("guide-nav-error");
   const hero = window.mendHero;
+  const clientCache = window.mendClientCache;
   const details = new Map();
   const prefetchedImages = new Set();
   const queue = [];
+  const loading = new Set();
   const stats = { indexLoadMs: null, searchMs: [], inputToResultsMs: [], cachedOpenMs: [], detailRequests: 0 };
   window.mendSearchStats = stats;
   let worker;
@@ -27,7 +29,14 @@
   let searchFrame = 0;
   let pendingSearch;
   let choices = [];
+  let choiceScopes = new Map();
   let explicitNavigation = false;
+  let catalogETag = "";
+  let replacement = null;
+  let swapTimer = 0;
+  let lastEditAt = -Infinity;
+  let refreshProbe = false;
+  const attemptedUpdates = new Set();
   const composingInputs = new Set();
   const searchBlocked = () => composingInputs.size > 0 || document.visibilityState === "hidden";
 
@@ -63,6 +72,7 @@
     cancelPendingGuide();
     currentGuide = null;
     choices = [];
+    choiceScopes = new Map();
     document.body.classList.remove("searching");
     results.hidden = true;
     panel.hidden = true;
@@ -87,6 +97,7 @@
 
   function executeSearch(text) {
     requestId += 1;
+    pruneQueue(new Set());
     document.body.classList.add("searching");
     inputAt = performance.now();
     if (!ready) return;
@@ -108,6 +119,13 @@
       queue.splice(index, 1);
       details.delete(record.id);
       record.reject(new Error("This answer is no longer requested."));
+    }
+    // An obsolete slow prefetch must not occupy all four fetch slots while the
+    // newest #1 waits. Keep rendered data; cancel only no-longer-wanted I/O.
+    for (const record of loading) {
+      if (wanted.has(record.id) || record.id === currentGuide || record.id === pendingGuide || !record.controller) continue;
+      details.delete(record.id);
+      record.controller.abort();
     }
   }
 
@@ -147,14 +165,23 @@
     while (activeFetches < 4 && queue.length) {
       const record = queue.shift();
       record.state = "loading";
+      record.controller = typeof AbortController === "function" ? new AbortController() : null;
+      loading.add(record);
       activeFetches += 1;
       stats.detailRequests += 1;
-      fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin", mode: "same-origin" })
+      const generation = catalogETag;
+      const signal = record.controller?.signal;
+      const response = clientCache?.fetchGuide
+        ? clientCache.fetchGuide(record.id, { etag: generation, signal })
+        : fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin", mode: "same-origin",
+          ...(signal ? { signal } : {}) });
+      response
         .then((response) => {
           if (!response.ok) throw new Error(`This repair page could not be loaded (${response.status}).`);
           return response.json();
         })
         .then((detail) => {
+          if (generation && generation !== catalogETag) throw new Error("Catalog changed");
           record.data = detail;
           record.state = "ready";
           cacheImages(detail);
@@ -170,7 +197,7 @@
           }
         })
         .catch((error) => { record.state = "error"; record.reject(error); })
-        .finally(() => { activeFetches -= 1; pump(); });
+        .finally(() => { loading.delete(record); activeFetches -= 1; pump(); });
     }
   }
 
@@ -195,9 +222,23 @@
     const seen = new Set();
     const rows = message.items.filter(row => (row[3] === "guide" || row[3] === "article") &&
       !seen.has(row[0]) && seen.add(row[0])).slice(0, 6);
-    if (!rows.length) { hideResults(); return; }
+    if (!rows.length) {
+      // A nonempty query without a replacement must not erase its current
+      // answer. Retire pending payloads and alternatives; whole-query clearing
+      // still uses hideResults() immediately.
+      cancelPendingGuide();
+      choices = []; choiceScopes = new Map();
+      renderPossibilities();
+      pruneQueue(new Set());
+      if (currentGuide === null) { results.hidden = true; panel.hidden = true; }
+      return;
+    }
     pruneQueue(new Set(rows.slice(0, 5).map(row => row[0])));
-    showGuide(rows[0][0], false, { automatic: true, rows, searchRequest: message.requestId });
+    const scopes = new Map((Array.isArray(message.inheritance) ? message.inheritance : [])
+      .filter(scope => scope && typeof scope.id === "string" && typeof scope.label === "string" &&
+        scope.label.trim() && scope.label.length <= 160 && Number.isInteger(scope.distance) && scope.distance > 0)
+      .map(scope => [scope.id, scope]));
+    showGuide(rows[0][0], false, { automatic: true, rows, scopes, searchRequest: message.requestId });
     for (const row of rows.slice(1, 5)) loadDetail(row[0]);
   }
 
@@ -358,12 +399,13 @@
     return content;
   }
 
-  function renderGuide(detail, focusHeading = false) {
+  function renderGuide(detail, focusHeading = false, scope) {
     body.removeAttribute("aria-busy");
     const fragment = document.createDocumentFragment();
     const heading = node("h1", "guide-title", detail.title || "Repair guide");
     heading.tabIndex = -1;
     fragment.append(heading);
+    if (scope) fragment.append(node("p", "guide-scope", `General guidance for ${scope.label}`));
     if (typeof detail.summary === "string" && detail.summary) fragment.append(node("p", "guide-summary", detail.summary));
     fragment.append(renderProvenance(detail));
     const coverUrl = safeUrl(detail.images?.[0]);
@@ -401,10 +443,10 @@
     document.body.classList.add("searching");
     panel.hidden = false;
     results.hidden = false;
-    document.getElementById("close-guide").hidden = !explicitNavigation;
     if (options.rows) choices = options.rows;
+    if (options.scopes) choiceScopes = options.scopes;
     if (addHistory) history.pushState({ guide: id }, "", guideHref(id));
-    renderGuide(detail, !options.automatic);
+    renderGuide(detail, !options.automatic, choiceScopes.get(id));
     renderPossibilities();
     if (options.automatic) stats.inputToResultsMs.push(performance.now() - inputAt);
     window.dispatchEvent(new Event("mend:layout"));
@@ -457,7 +499,6 @@
   function closeGuide(addHistory = true) {
     explicitNavigation = false;
     cancelPendingGuide();
-    document.getElementById("close-guide").hidden = true;
     if (addHistory) history.pushState({}, "", location.pathname);
     if (hero) hero.focus(); else input.focus({ preventScroll: true });
     hero?.settle?.();
@@ -474,20 +515,23 @@
   });
 
   const queryChanged = () => {
+    lastEditAt = performance.now();
     if (explicitNavigation) {
       explicitNavigation = false;
       history.replaceState?.({}, "", location.pathname);
-      document.getElementById("close-guide").hidden = true;
     }
     cancelPendingGuide();
     invalidateSearch();
     runSearch();
+    scheduleSwap();
   };
   if (hero) window.addEventListener("mend:querychange", queryChanged);
   else input.addEventListener("input", queryChanged);
   window.addEventListener("mend:settle", () => runSearch());
   for (const field of [input, document.getElementById("clarification-response")].filter(Boolean)) {
-    field.addEventListener("compositionstart", () => { composingInputs.add(field); cancelPendingGuide(); invalidateSearch(); });
+    field.addEventListener("compositionstart", () => {
+      lastEditAt = performance.now(); composingInputs.add(field); cancelPendingGuide(); invalidateSearch();
+    });
     field.addEventListener("compositionend", () => {
       composingInputs.delete(field);
       // The committed value can equal the last preedit value, so the hero may
@@ -498,8 +542,8 @@
   document.addEventListener("visibilitychange", () => {
     invalidateSearch();
     if (document.visibilityState !== "hidden") runSearch();
+    if (document.visibilityState !== "hidden") scheduleSwap();
   });
-  document.getElementById("close-guide").addEventListener("click", () => closeGuide());
   window.addEventListener("popstate", () => {
     const id = new URL(location.href).searchParams.get("guide");
     if (id) showGuide(id, false); else closeGuide(false);
@@ -511,39 +555,138 @@
     }
   });
 
+  function configureWorker(data) {
+    ready = true;
+    setStatus("");
+    count.textContent = "";
+    latestSource = data.source;
+    catalogETag = typeof data.catalogETag === "string" ? data.catalogETag : "";
+    stats.indexLoadMs = data.loadDuration;
+    stats.indexCacheSource = data.cacheSource || "network";
+    stats.indexReadMs = data.cacheTimings?.readMs ?? null;
+    stats.indexParseMs = data.cacheTimings?.parseMs ?? null;
+    stats.indexPrepareMs = data.prepareDuration ?? null;
+    let archetypes = data.archetypes;
+    const encoded = typeof data.archetypesJSON === "string" ? data.archetypesJSON
+      : typeof archetypes === "string" ? archetypes : "";
+    if (encoded) {
+      try { archetypes = JSON.parse(encoded); } catch {}
+    }
+    if (!archetypes || typeof archetypes !== "object") archetypes = { version: 1, archetypes: [], models: [] };
+    window.mendSpecifiers?.configure?.(archetypes);
+    hero?.setVocabulary?.(data.terms || []);
+    runSearch();
+    window.dispatchEvent(new Event("mend:catalogready"));
+  }
+
+  function discardReplacement(record) {
+    if (replacement !== record) return;
+    record.worker.terminate?.();
+    clientCache.rejectCatalog?.({ etag: record.etag, candidateKey: record.key }).catch(() => {});
+    replacement = null;
+    if (swapTimer) clearTimeout(swapTimer);
+    swapTimer = 0;
+  }
+
+  function clearGuideGeneration() {
+    cancelPendingGuide();
+    for (const record of queue.splice(0)) record.reject(new Error("Catalog changed"));
+    for (const record of loading) record.controller?.abort();
+    details.clear(); prefetchedImages.clear();
+  }
+
+  async function swapReplacement(record) {
+    if (!record || replacement !== record || record.accepting || !record.data) return;
+    if (composingInputs.size || document.visibilityState === "hidden") return;
+    record.accepting = true;
+    try {
+      if (!record.accepted) {
+        record.accepted = await clientCache.acceptCatalog({ etag: record.etag, candidateKey: record.key });
+        if (!record.accepted) { discardReplacement(record); return; }
+      }
+      if (replacement !== record) return;
+      // Accepting Cache Storage is asynchronous. An IME composition or a new
+      // keystroke can begin meanwhile, so recheck the idle boundary afterwards.
+      if (composingInputs.size || document.visibilityState === "hidden" || performance.now() - lastEditAt < 380) return;
+      const previous = worker;
+      catalogETag = record.etag;
+      clearGuideGeneration();
+      invalidateSearch();
+      worker = record.worker; replacement = null;
+      previous.terminate?.();
+      configureWorker(record.data);
+    } catch { discardReplacement(record); }
+    finally { record.accepting = false; if (replacement === record) scheduleSwap(); }
+  }
+
+  function scheduleSwap() {
+    if (!replacement?.data || composingInputs.size || document.visibilityState === "hidden") return;
+    if (swapTimer) clearTimeout(swapTimer);
+    const delay = Math.max(0, 380 - (performance.now() - lastEditAt));
+    if (typeof setTimeout === "function") swapTimer = setTimeout(() => {
+      swapTimer = 0; swapReplacement(replacement);
+    }, delay);
+    else if (!delay) swapReplacement(replacement);
+  }
+
+  function startReplacement(update) {
+    if (!clientCache || !update?.candidateKey || !update.etag || update.etag === catalogETag || attemptedUpdates.has(update.etag)) return;
+    attemptedUpdates.add(update.etag);
+    if (replacement) discardReplacement(replacement);
+    const source = new Worker(`/assets/search-worker.js?candidateKey=${encodeURIComponent(update.candidateKey)}`);
+    const record = { worker: source, etag: update.etag, key: update.candidateKey, data: null, accepting: false, accepted: false };
+    replacement = record;
+    connectWorker(source, record);
+  }
+
+  function connectWorker(source, record = null) {
+    source.onmessage = ({ data }) => {
+      if (record && replacement === record) {
+        if (data.type === "ready") {
+          if (data.catalogETag !== record.etag || data.candidateKey !== record.key) { discardReplacement(record); return; }
+          record.data = data; scheduleSwap();
+        }
+        else if (data.type === "error") discardReplacement(record);
+        return;
+      }
+      if (source !== worker) return;
+      if (data.type === "ready") configureWorker(data);
+      else if (data.type === "results") renderAnswers(data);
+      else if (data.type === "catalog-update") startReplacement(data);
+      else if (data.type === "error") {
+        setStatus(data.message);
+        count.textContent = "The repair library could not be loaded. Refresh to try again.";
+      }
+    };
+    source.onerror = () => {
+      if (record && replacement === record) discardReplacement(record);
+      else if (source === worker) setStatus("The repair index could not start. Refresh to try again.");
+    };
+  }
+
+  function refreshCatalog(nextETag = "") {
+    if (!clientCache?.probeCatalog || !ready || !catalogETag || refreshProbe || replacement ||
+        nextETag && attemptedUpdates.has(nextETag)) return;
+    refreshProbe = true;
+    Promise.resolve().then(() => clientCache.probeCatalog(catalogETag))
+      .then(update => { if (update) startReplacement(update); })
+      .catch(() => {}).finally(() => { refreshProbe = false; });
+  }
+
   if (location.protocol === "file:") {
     setStatus("Open the website through the Go server to search the repair library.");
   } else if (typeof Worker === "undefined") {
     setStatus("This browser does not support local repair search. Please use a current browser.");
   } else {
     worker = new Worker("/assets/search-worker.js");
-    worker.onmessage = ({ data }) => {
-      if (data.type === "ready") {
-        ready = true;
-        setStatus("");
-        count.textContent = "";
-        latestSource = data.source;
-        stats.indexLoadMs = data.loadDuration;
-        // Cached workers may still send the earlier object representation.
-        let archetypes = data.archetypes;
-        const encoded = typeof data.archetypesJSON === "string" ? data.archetypesJSON
-          : typeof archetypes === "string" ? archetypes : "";
-        if (encoded) {
-          try { archetypes = JSON.parse(encoded); }
-          catch { /* Keep an available legacy object, or use an empty registry. */ }
-        }
-        if (!archetypes || typeof archetypes !== "object") archetypes = { version: 1, archetypes: [], models: [] };
-        window.mendSpecifiers?.configure?.(archetypes);
-        hero?.setVocabulary?.(data.terms || []);
-        runSearch();
-        window.dispatchEvent(new Event("mend:catalogready"));
-      } else if (data.type === "results") renderAnswers(data);
-      else if (data.type === "error") {
-        setStatus(data.message);
-        count.textContent = "The repair library could not be loaded. Refresh to try again.";
-      }
-    };
-    worker.onerror = () => setStatus("The repair index could not start. Refresh to try again.");
+    connectWorker(worker);
+    clientCache?.registerShell?.().catch(() => {});
+    clientCache?.subscribe?.(event => {
+      if (event?.type === "catalog-changed") refreshCatalog(event.etag);
+    });
+    // The initial worker can start entirely offline. Reconnection revalidates
+    // that resident release without delaying typing or reloading the page.
+    window.addEventListener("online", () => refreshCatalog());
   }
 
   const initialGuide = new URL(location.href).searchParams.get("guide");

@@ -18,7 +18,7 @@ async function heroFor(options = {}) {
   dom.window.addEventListener('mend:querychange', () => dom.queries.push(dom.window.mendHero.query()));
   const context = vm.createContext(dom.context);
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), context);
-  dom.window.mendSpecifiers.configure(releaseFixture({ specifics: Boolean(options.specifiers), art: Boolean(options.specifiers) }));
+  dom.window.mendSpecifiers.configure(options.registry || releaseFixture({ specifics: Boolean(options.specifiers), art: Boolean(options.specifiers) }));
   if (options.specifiers) {
     context.fetch = async () => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(bicycleArt()) });
     dom.window.mendSpecifiers.prefetch('bike');
@@ -904,4 +904,15 @@ test('inline answer text permits native selection while actual background retain
   dom.response.blur();
   await Promise.resolve();
   assert.equal(dom.document.activeElement, dom.response, 'ordinary blur protection resumes after a background/input interaction');
+});
+
+test('a registry noun with context art and no mapped parts still clarifies immediately', async () => {
+  const registry = { version: 1, archetypes: [{ id: 'gadget', label: 'Gadget', aliases: ['gadget'],
+    guideCount: 1, parts: [], artUrl: '/api/art/' + 'a'.repeat(64) + '.json' }], models: [] };
+  const dom = await heroFor({ registry });
+  dom.type(dom.response, 'gadget');
+  assert.equal(dom.visible(), true);
+  assert.equal(dom.question.textContent, "What's wrong with your gadget?");
+  assert.equal(dom.document.activeElement.id, 'response', 'art-only recognition preserves native first-field focus');
+  assert.equal(dom.specifierContainer.hidden, true, 'no empty SVG box while art is unavailable');
 });

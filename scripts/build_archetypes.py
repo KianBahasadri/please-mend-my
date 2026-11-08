@@ -18,7 +18,7 @@ import sqlite3
 
 from diagram_credits import render as render_credits
 from ingest_common import atomic_write, json_bytes, porter, normalize_words as normalized
-from diagram_svg import load_approved_art
+from diagram_svg import load_approved_art, validate_art
 
 ROOT = Path(__file__).resolve().parents[1]
 APPROVED_ART = ROOT / "scripts/data/archetype-art.json"
@@ -91,7 +91,7 @@ def stem_phrase(value):
     return " ".join(porter(word) for word in normalized(value).split())
 
 
-def compile_registry(database, revision, art_config=APPROVED_ART):
+def compile_registry(database, revision, art_config=APPROVED_ART, candidate_art_dir=None):
     """Return a resident registry and art bodies using only linked compact rows."""
     with closing(database_connection(database)) as connection:
         nouns = {row["id"]: dict(row) for row in connection.execute(
@@ -203,6 +203,8 @@ def compile_registry(database, revision, art_config=APPROVED_ART):
                         "parts": parts, "guideCount": noun["guide_count"],
                         "frequency": noun["frequency"], "artUrl": None, "attribution": None})
     art = import_approved_art(records, art_config, nouns)
+    if candidate_art_dir is not None:
+        art.update(import_candidate_art(records, candidate_art_dir))
     # The first matching definition wins in the resident alias map. Broad labels
     # retain their normal meaning instead of rare/ambiguous WordNet senses.
     return {"version": 1, "revision": revision, "sources": lexical_sources(), "archetypes": records, "models": models}, art
@@ -238,15 +240,45 @@ def import_approved_art(records, config_path, nouns=None):
     return bodies
 
 
-def prepare(runtime, database, art_config=APPROVED_ART):
+def import_candidate_art(records, directory):
+    """Attach safe cached proposals by exact noun ID, after pinned reviewed art."""
+    directory = Path(directory)
+    manifest = json.loads((directory / 'manifest.json').read_bytes())
+    if manifest.get('version') != 1 or not isinstance(manifest.get('artifacts'), list):
+        raise ValueError('Invalid candidate artwork manifest')
+    targets = {row['id']: row for row in records if not row.get('artUrl')}
+    bodies = {}
+    for record in manifest['artifacts']:
+        target = targets.get(record['id'])
+        if target is None:
+            continue
+        sha = record['sha256']
+        if not isinstance(sha, str) or not re.fullmatch(r'[a-f0-9]{64}', sha):
+            raise ValueError('Invalid candidate artwork hash')
+        body = (directory / 'art' / (sha + '.json')).read_bytes()
+        if hashlib.sha256(body).hexdigest() != sha:
+            raise ValueError('Candidate artwork hash changed')
+        data = json.loads(body)
+        validate_art(data)
+        if data['id'] != target['id']:
+            raise ValueError('Candidate drawing belongs to a different noun')
+        bodies[sha] = body
+        target.update(artUrl='/api/art/' + sha + '.json', attribution=data['attribution'],
+                      artStatus='candidate', qualityApprovalRequired=False)
+        # Candidate mappings and list controls share the same text definitions.
+        # A context-only drawing can retain the existing generic parts list.
+        if record.get('parts'):
+            target['parts'] = record['parts']
+    return bodies
+
+
+def prepare(runtime, database, art_config=APPROVED_ART, candidate_art_dir=None):
     runtime, database = Path(runtime).resolve(), Path(database).resolve()
     index_path, manifest_path = runtime / "index.json", runtime / "manifest.json"
     index, manifest = json.loads(index_path.read_bytes()), json.loads(manifest_path.read_bytes())
     if not manifest.get("runtimeComplete") or manifest.get("revision") != index.get("revision"):
         raise ValueError("Archetypes require a completed unpublished catalog")
-    payload, art = compile_registry(database, index["revision"], art_config)
-    # Only a finite, reviewed mapping can publish geometry. Generic filled nouns
-    # get immediate parts, with no fake SVG box or forced drawing.
+    payload, art = compile_registry(database, index["revision"], art_config, candidate_art_dir)
     art_dir = runtime / "art"
     art_dir.mkdir(mode=0o755, exist_ok=True)
     for digest, body in art.items():
@@ -287,8 +319,9 @@ def main():
     parser.add_argument("--runtime-dir", type=Path, required=True)
     parser.add_argument("--database", type=Path, required=True)
     parser.add_argument("--art-config", type=Path, default=APPROVED_ART)
+    parser.add_argument("--candidate-art-dir", type=Path)
     args = parser.parse_args()
-    print(json.dumps(prepare(args.runtime_dir, args.database, args.art_config)), flush=True)
+    print(json.dumps(prepare(args.runtime_dir, args.database, args.art_config, args.candidate_art_dir)), flush=True)
 
 
 if __name__ == "__main__":

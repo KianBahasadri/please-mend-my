@@ -270,10 +270,6 @@ a:focus-visible {
   .other-possibilities { margin-top: 0.5rem; }
 }
 
-.back-button {
-  margin-bottom: 1.8rem;
-}
-
 .guide-panel h1,
 .guide-panel h2,
 .guide-panel h3,
@@ -300,6 +296,12 @@ a:focus-visible {
 .guide-summary {
   color: color-mix(in srgb, var(--ink) 72%, transparent);
   font-size: 1.1rem;
+}
+
+.guide-scope {
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  font-size: 0.85rem;
+  margin: 0.5rem 0 1rem;
 }
 
 .guide-source {

@@ -12,8 +12,8 @@ async function settleArt() { for (let pass = 0; pass < 24; pass++) await Promise
 async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } = {}) {
   const dom = makeDOM();
   const ids = ['catalog-status', 'search-results', 'result-cards', 'result-count',
-    'guide-panel', 'guide-body', 'guide-nav-error', 'close-guide'];
-  const elements = Object.fromEntries(ids.map(id => [id, dom.add(id === 'close-guide' ? 'button' : 'div', id)]));
+    'guide-panel', 'guide-body', 'guide-nav-error'];
+  const elements = Object.fromEntries(ids.map(id => [id, dom.add('div', id)]));
   elements['search-results'].hidden = true;
   elements['guide-panel'].hidden = true;
   elements['guide-nav-error'].hidden = true;
@@ -71,6 +71,11 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
       dom.flushFrames();
     },
     results(requestId, rows = []) { workers[0].emit({ type: 'results', requestId, total: rows.length, items: rows, duration: 1 }); },
+    back() {
+      location.href = location.origin + location.pathname;
+      dom.window.dispatchEvent(new dom.context.Event('popstate'));
+      dom.flushFrames();
+    },
     clickGuide() {
       const link = dom.add('a', 'example-link');
       link.href = 'http://127.0.0.1:8080/?guide=example';
@@ -360,7 +365,7 @@ test('return from an open guide searches and restores the native answer caret im
   assert.equal(ui.document.body.classList.contains('reading'), false, 'the inline answer never hides the hero');
   assert.equal(ui.elements['guide-panel'].hidden, false);
   const prior = ui.searches().length;
-  ui.event(ui.elements['close-guide'], 'click'); ui.flushFrames();
+  ui.back();
   assert.equal(ui.document.body.classList.contains('reading'), false);
   assert.equal(ui.document.activeElement, ui.clarification);
   assert.equal(ui.searches().length, prior + 1);

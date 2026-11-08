@@ -18,6 +18,13 @@ spec.loader.exec_module(host_keys)
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_prepared_release_requires_the_new_resident_hierarchy(self):
+        manifest = {"searchIndex": {"version": 1}, "archetypes": {"version": 1},
+                    "diagramCredits": {"sha256": "e" * 64}}
+        self.assertFalse(builder.prepared_release(manifest))
+        manifest["searchIndex"]["hierarchyVersion"] = 1
+        self.assertTrue(builder.prepared_release(manifest))
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
@@ -102,6 +109,11 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(self.argument(args, "--data-dir"), self.data)
             (self.data / "nouns").mkdir(exist_ok=True)
             (self.data / "nouns/seed.sqlite").write_bytes(b"seed fixture")
+        elif script == builder.CANDIDATE_ART:
+            self.assertEqual(self.argument(args, "--config"), builder.CANDIDATE_SOURCES)
+            directory = self.argument(args, "--output-dir")
+            directory.mkdir(exist_ok=True)
+            (directory / "manifest.json").write_text('{"version":1,"artifacts":[]}')
         elif script == builder.LINK_NOUNS:
             self.assertEqual(self.argument(args, "--database"), self.data / "nouns/catalog.sqlite")
             self.assertEqual(self.argument(args, "--seed-database"), self.data / "nouns/seed.sqlite")
@@ -142,7 +154,7 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(self.argument(args, "--data-dir"), self.data)
             runtime = self.argument(args, "--runtime-dir")
             self.assertTrue(runtime.name.startswith(".merge-"))
-            self.update_manifest(runtime, searchIndex={"version": 1})
+            self.update_manifest(runtime, searchIndex={"version": 1, "hierarchyVersion": 1})
         else:
             self.fail("Unexpected pipeline command: " + str(args))
         return subprocess.CompletedProcess(args, 0)
@@ -162,8 +174,8 @@ class ReleaseTests(unittest.TestCase):
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 12)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.INGEST, builder.ENRICH, builder.WIKIMED,
+            self.assertEqual(run.call_count, 13)
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.CANDIDATE_ART, builder.INGEST, builder.ENRICH, builder.WIKIMED,
                                          builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS,
                                          builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual(release.name, builder.pipeline_key(self.data / "stage3_cache"))
@@ -175,7 +187,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(receipt["pipelineSha256"], release.name)
         self.assertEqual(receipt["pythonVersion"], builder.PYTHON_VERSION)
         self.assertEqual(receipt["uvVersion"], builder.UV_VERSION)
-        self.assertEqual(receipt["searchIndex"], {"version": 1})
+        self.assertEqual(receipt["searchIndex"], {"version": 1, "hierarchyVersion": 1})
         self.assertEqual([source["id"] for source in receipt["sources"]], ["ifixit", "wikimed", "first-aid", "appropedia", "wikihow"])
         self.assertTrue(receipt["sources"][2]["documentVerified"])
         self.assertIsNone(receipt["sources"][2]["zimChecksumVerified"])
@@ -228,7 +240,7 @@ class ReleaseTests(unittest.TestCase):
             self.wikimed.write_text("# changed WikiMed archive pin\n")
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.CANDIDATE_ART, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual((self.data / "runtime/manifest.json").read_bytes(), ifixit_manifest)
         self.assertEqual((first / "index.json").read_bytes(), first_index)
         self.assertTrue((second / "ingest.json").is_file())
@@ -245,7 +257,7 @@ class ReleaseTests(unittest.TestCase):
             self.commands.clear()
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.CANDIDATE_ART, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         receipt = json.loads((second / "ingest.json").read_bytes())
         self.assertEqual(receipt["structuredGuides"]["processedItems"], 0)
         self.assertEqual(receipt["structuredGuides"]["rejectedItems"], 1)
@@ -320,7 +332,7 @@ class ReleaseTests(unittest.TestCase):
         self.commands.clear()
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
             builder.build_release(self.data, self.releases)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.CANDIDATE_ART, builder.WIKIMED, builder.FIRST_AID, builder.APPROPEDIA, builder.WIKIHOW, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
 
     def test_incomplete_wikimed_cannot_reach_merge(self):
         previous = self.previous_release()
@@ -456,7 +468,7 @@ class ReleaseTests(unittest.TestCase):
             return read(path)
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command), patch.object(Path, "read_bytes", compact_only):
             release = builder.build_release(self.data, self.releases, source_runtime=source)
-        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.LINK_NOUNS,
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.CANDIDATE_ART, builder.LINK_NOUNS,
                                          builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual((source / "manifest.json").read_bytes(), before_manifest)
         self.assertEqual((release / "guides/wikimed.json").stat().st_ino,

@@ -9,7 +9,7 @@ from __future__ import annotations
 import argparse
 import base64
 from collections.abc import Mapping
-from collections import defaultdict
+from collections import defaultdict, deque
 import gzip
 import hashlib
 import heapq
@@ -20,9 +20,10 @@ import sqlite3
 import stat
 import unicodedata
 
-from ingest_common import clean, json_bytes, porter, tokens
+from ingest_common import clean, json_bytes, normalize_words, porter, tokens
 
 ROOT = Path(__file__).resolve().parent.parent
+NOUN_SOURCE = Path(__file__).with_name("nouns-source.json")
 
 
 def lexicographic(value):
@@ -146,6 +147,106 @@ def noun_terms(index, database):
     return expanded
 
 
+def prepare_hierarchy(index, database, config_path=NOUN_SOURCE):
+    """Compile lexical ancestry and primary guide membership, never article bodies.
+
+    Structural nodes retain unfilled descendants such as breeds and kinship roles
+    so they can inherit a guide-backed ancestor without masquerading as filled UI
+    archetypes. Primary links exclude incidental title-component associations.
+    Numeric model names stay in the existing registry, outside lexical aliases.
+    """
+    if database is None:
+        return None
+    registry = index.get("archetypes")
+    if not isinstance(registry, dict) or registry.get("version") != 1:
+        raise ValueError("Hierarchy preparation requires the prepared archetype registry")
+    categories = {row["id"] for row in index.get("categories", [])}
+    configuration = json.loads(Path(config_path).read_bytes())
+    category_domains = configuration["categoryDomains"]
+    # The catch-all category has no useful semantic fence. Never export it as a
+    # universal domain fallback (human choking must not inherit pet recipes).
+    catch_all = set(category_domains.get("other", []))
+    domain_categories = defaultdict(list)
+    for category, domains in sorted(category_domains.items()):
+        if category not in categories or category == "other" or catch_all and set(domains) >= catch_all:
+            continue
+        for domain in sorted(set(domains)):
+            domain_categories[domain].append(category)
+    docs = {row[0]: position for position, row in enumerate(index["items"])}
+    if len(docs) != len(index["items"]):
+        raise ValueError("Hierarchy catalog IDs must be unique")
+    connection = sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        nodes = [[identifier, label, domain.removeprefix("noun."), frequency, count]
+                 for identifier, label, domain, frequency, count in connection.execute(
+                     "SELECT id,label,domain,frequency,guide_count FROM nouns ORDER BY id")]
+        positions = {row[0]: position for position, row in enumerate(nodes)}
+        parents, children = [set() for _ in nodes], [[] for _ in nodes]
+        for parent, child in connection.execute(
+                "SELECT parent_id,child_id FROM noun_edges WHERE relation='is-a' ORDER BY child_id,parent_id"):
+            if parent not in positions or child not in positions:
+                raise ValueError("Hierarchy relationship refers to an unknown noun")
+            parent, child = positions[parent], positions[child]
+            if parent == child:
+                raise ValueError("Hierarchy cannot contain a self parent")
+            parents[child].add(parent)
+        parents = [sorted(values) for values in parents]
+        for child, values in enumerate(parents):
+            for parent in values:
+                children[parent].append(child)
+        # Reject a corrupted cycle before publishing, rather than asking every
+        # browser traversal to discover a malformed ontology repeatedly.
+        remaining = [len(values) for values in parents]
+        pending = deque(position for position, degree in enumerate(remaining) if degree == 0)
+        visited = 0
+        while pending:
+            visited += 1
+            for child in children[pending.popleft()]:
+                remaining[child] -= 1
+                if remaining[child] == 0:
+                    pending.append(child)
+        if visited != len(nodes):
+            raise ValueError("Hierarchy is-a relationships contain a cycle")
+        # Filled aliases are already present in the resident archetype payload;
+        # only structural/unfilled aliases need an additional lexical table.
+        filled = {row["id"] for row in registry["archetypes"]}
+        extra_aliases = {}
+        for identifier, raw_alias, rank in connection.execute(
+                "SELECT noun_id,alias,rank FROM noun_aliases ORDER BY noun_id,alias"):
+            if identifier not in positions:
+                raise ValueError("Hierarchy alias refers to an unknown noun")
+            if identifier in filled:
+                continue
+            alias = normalize_words(raw_alias)
+            if not 2 <= len(alias) <= 160 or any(char.isdigit() for char in alias):
+                continue
+            key = alias, positions[identifier]
+            extra_aliases[key] = min(rank, extra_aliases.get(key, rank))
+        aliases = [[alias, node, rank] for (alias, node), rank in sorted(
+            extra_aliases.items(), key=lambda item: (lexicographic(item[0][0]), item[0][1]))]
+        documents, observed_categories = [set() for _ in nodes], [set() for _ in nodes]
+        for guide, noun in connection.execute(
+                "SELECT g.guide_id,g.noun_id FROM guide_nouns g JOIN items i ON i.id=g.guide_id "
+                "WHERE i.kind IN ('guide','article') AND g.reason!='title-component' "
+                "ORDER BY g.noun_id,g.guide_id"):
+            if guide not in docs or noun not in positions:
+                raise ValueError("Hierarchy guide link refers to an unknown catalog ID or noun")
+            doc, node = docs[guide], positions[noun]
+            row = index["items"][doc]
+            if row[3] not in {"guide", "article"}:
+                raise ValueError("Hierarchy actionable link disagrees with catalog kind")
+            documents[node].add(doc)
+            observed_categories[node].add(row[2])
+    finally:
+        connection.close()
+    offsets, data = pack_postings(sorted(values) for values in documents)
+    return {"version": 1, "fields": ["id", "label", "domain", "frequency", "guideCount"],
+            "nodes": nodes, "parents": parents, "aliases": aliases,
+            "categories": [sorted(values) for values in observed_categories],
+            "domainCategories": dict(sorted(domain_categories.items())),
+            "documents": {"encoding": "delta-varint-base64", "offsets": offsets, "data": data}}
+
+
 def prepare_short_prefixes(items, groups, references, postings):
     """Exact top-100 single-letter rankings, computed offline from real postings.
 
@@ -214,7 +315,7 @@ def prepare_index(index, guide_records=None, noun_records=None):
         raise ValueError("Catalog exceeds uint32 posting capacity.")
     extra, literals = guide_terms(guide_records)
     unseen = set(extra)
-    guide_literals = []
+    guide_literals, structured_terms = [], []
     for identifier, row in enumerate(items):
         if not isinstance(row, list) or len(row) < 5:
             raise ValueError("Search rows must retain the five-field catalog shape.")
@@ -226,6 +327,11 @@ def prepare_index(index, guide_records=None, noun_records=None):
                 raise ValueError("Structured guide ID occurs more than once in the catalog.")
             unseen.remove(row[0])
             own.update(extra[row[0]])
+            if extra[row[0]]:
+                # Preserve the provenance of real structured symptoms/materials.
+                # Inheritance must not mistake noun aliases added to the same
+                # postings for an actually requested symptom or component.
+                structured_terms.append([identifier, sorted(extra[row[0]], key=lexicographic)])
             if row[0] in literals:
                 guide_literals.append([identifier, literals[row[0]]])
         for term in own:
@@ -255,6 +361,8 @@ def prepare_index(index, guide_records=None, noun_records=None):
         # Numeric/model queries retain the worker's strict literal gate. Only
         # these few source fields need text beside the compact token postings.
         result["guideLiterals"] = guide_literals
+    if structured_terms:
+        result["structuredTerms"] = structured_terms
     return result
 
 
@@ -308,8 +416,13 @@ def prepare(data_dir, runtime=None, noun_database=None):
         raise ValueError("Inverted search preparation requires a completed unpublished enriched catalog.")
     records = load_guide_records(runtime, index, manifest)
     semantic = noun_terms(index, noun_database)
+    hierarchy = prepare_hierarchy(index, noun_database)
     prepared = prepare_index(index, records, semantic)
     index["search"]["inverted"] = prepared
+    if hierarchy is not None:
+        index["search"]["hierarchy"] = hierarchy
+    else:
+        index["search"].pop("hierarchy", None)
     body = json_bytes(index)
     packed = gzip.compress(body, compresslevel=9, mtime=0)
     manifest["runtimeComplete"] = False
@@ -321,6 +434,10 @@ def prepare(data_dir, runtime=None, noun_database=None):
                 "documents": prepared["documents"], "groups": prepared["groups"],
                 "structuredDocuments": len(records), "guideFields": ["symptoms", "materials"],
                 "nounDocuments": len(semantic),
+                "hierarchyVersion": hierarchy["version"] if hierarchy else None,
+                "hierarchyNodes": len(hierarchy["nodes"]) if hierarchy else 0,
+                "hierarchyEdges": sum(map(len, hierarchy["parents"])) if hierarchy else 0,
+                "hierarchyJsonBytes": len(json_bytes(hierarchy)) if hierarchy else 0,
                 "indexSha256": hashlib.sha256(body).hexdigest()}
     manifest.update({"runtimeComplete": True, "indexBytes": len(body), "indexGzipBytes": len(packed),
                      "searchIndex": metadata})
