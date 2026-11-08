@@ -70,6 +70,27 @@ const fixture = () => ({ version: 1, revision: 'fixture', source: {},
   search: { version: 1, groups: ['', 'laptop\nnotebook', 'fridge\nrefrigerator'], itemGroups: [1, 1, 2, 0] },
 });
 
+test('demo direct data ignores stale persistent catalog helpers and stays resident after startup', async () => {
+  const index = prepare(fixture());
+  let requests = 0, imports = 0;
+  const worker = await workerFor(index, undefined, {
+    URL,
+    self: { location: { href: 'http://127.0.0.1:8080/assets/search-worker.js?dataCache=off' },
+      mendClientCache: { loadCatalog() { throw Error('Stale persisted catalog must not run'); } } },
+    importScripts() { imports++; },
+    fetch: async (url, options) => {
+      requests++;
+      assert.equal(url, '/api/catalog');
+      assert.equal(options.cache, 'no-store');
+      return { ok: true, json: async () => structuredClone(index) };
+    },
+  });
+  assert.equal((await worker.search('laptop battery')).items[0][0], 'exact-laptop');
+  assert.equal((await worker.search('fridge')).items[0][0], 'fridge');
+  assert.equal(requests, 1, 'typing searches the resident catalog without network');
+  assert.equal(imports, 0);
+});
+
 test('prepared aliases combine with title terms, prefixes work, and exact titles win', async () => {
   const worker = await workerFor(prepare(fixture()));
   assert.equal(worker.ready.invertedIndex, true);

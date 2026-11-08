@@ -17,7 +17,7 @@
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
 - Pinned bicycle+phone in scripts/data/archetype-art.json; preserve geometry. diagram_svg only AST compiler, diagram_ai cached transport. Source/map/compiler/art hashes; visual reviews diagnostic only. See docs/diagram-pilot.md.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
-- Delegate to subagents; one/repo area at a time; no clobbering.
+- Current search fix: work directly; no subagents (user request). Otherwise one agent/repo area; no clobbering.
 - RAM: prod c8g.xlarge=8GiB; local jobs may use up to 8GiB (user-authorized). One heavy cgroup job/CPU2; leave ≥8GiB available; serial tests/builds; no uncapped jobs.
 - Qwen paused by user; no AI calls/restarts until reauthorized. Keep paid caches+OpenRouter $10 cap. Prod may use full RAM; local reserve still8GiB.
 - Art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if coverage<75%+≥2missing clustered parts. Quality/coverage reviews diagnostic; candidates need no visual approval/minimum part coverage to appear. Lazy views, physical match switches, symptoms don't; shape bounds heuristic.
@@ -100,3 +100,4 @@
 - Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps. Cloud a49d8bc3:435213 prepared, unpromoted; live4084210 still207691.
 - Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloud refresh finished (5GiB/CPU2), no active jobs; prepared-release.path awaits validation/promotion. Keep live207k unchanged for local-demo work.
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
+- Demo workaround: data-demo-data=direct bypasses persisted index/guide cache; browser-resident ranking unchanged. Bug: stale first-letter article despite current alternatives; persistent-cache recovery still pending.

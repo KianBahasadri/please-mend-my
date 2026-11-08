@@ -2,6 +2,12 @@
 
 A responsive typing page with rotating typography and subtle monochrome lighting.
 
+The `demo` branch temporarily selects direct data loading with
+`data-demo-data="direct"`. It bypasses persistent catalog/guide caches to avoid
+a stale article after a failed catalog upgrade. The full catalog still loads
+once into the search worker; keystrokes remain local. This workaround is kept
+off `main`.
+
 Fifteen hero styles rotate without consecutive repeats. Alongside pixel, serif,
 comic, poster, typewriter, handwritten, and emoji styles, five repair treatments
 add stitched lettering, a torn tape patch, tool-shaped letters, blueprint marks,
