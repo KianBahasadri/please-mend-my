@@ -36,6 +36,15 @@
   let scrollFrame = 0;
   let pendingFocus = null;
   let resultsScrollY = 0;
+  const TYPING_PAUSE_MS = 180;
+  let searchTimer = null;
+
+  function cancelSearchTimer() {
+    if (searchTimer !== null) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+  }
 
   function geometry() {
     const css = getComputedStyle(cards);
@@ -130,14 +139,13 @@
     status.textContent = message || "";
   }
 
-  function runSearch() {
-    requestId += 1;
-    pendingFocus = null;
+  function runSearch(immediate = false) {
+    cancelSearchTimer();
     const text = query();
     const active = Boolean(text);
-    document.body.classList.toggle("searching", active);
-    results.hidden = !active || currentGuide !== null;
     if (!active) {
+      document.body.classList.remove("searching");
+      results.hidden = true;
       cards.replaceChildren();
       resultTotal = 0;
       cards.style.height = "0px";
@@ -145,6 +153,21 @@
       searchFrame = 0;
       return;
     }
+    if (!immediate) {
+      searchTimer = setTimeout(() => {
+        searchTimer = null;
+        executeSearch(text);
+      }, TYPING_PAUSE_MS);
+      return;
+    }
+    executeSearch(text);
+  }
+
+  function executeSearch(text) {
+    requestId += 1;
+    pendingFocus = null;
+    document.body.classList.add("searching");
+    results.hidden = currentGuide !== null;
     inputAt = performance.now();
     if (!ready) {
       results.hidden = true;
@@ -527,7 +550,7 @@
     body.removeAttribute("aria-busy");
     window.dispatchEvent(new Event("mend:layout"));
     if (addHistory) history.pushState({}, "", location.pathname);
-    runSearch();
+    runSearch(true);
     window.scrollTo(0, resultsScrollY);
     scheduleWindow();
     if (hero) hero.focus();
@@ -570,7 +593,7 @@
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
         for (const item of data.categories) categoryNames.set(item.id, item.name);
-        runSearch();
+        runSearch(true);
       } else if (data.type === "results") renderCards(data);
       else if (data.type === "range" && data.requestId === requestId && data.rangeId === rangeSerial) {
         renderWindow(data.items, data.start);

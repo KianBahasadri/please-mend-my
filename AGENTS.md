@@ -40,15 +40,17 @@
 - Cache complete schema-valid responses before postprocessing; drop unsupported optional links/images; never activate partial/invalid output. Retry cached responses offline.
 - Local v2: 100/25 each; overlay ac9690ea… (raw f55559d2…); cache 0 calls/2.8s; guides gzip -78%; symptom index +7KB. Gaps: PipeWire/Wi-Fi drops/Windows boot/leaking pipes.
 - Attribution: credits only, no formatting/sanitizing notices; license separate.
+- Guides provide curated external reference links (e.g. Arch Wiki, original wikiHow/iFixit articles, service manuals) for deeper troubleshooting; standard new-tab rel protections; positioned right-aligned on the provenance/license metadata line.
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.
 - Disposable ingest SQLite: journal/sync OFF; unlink scratch on restart (no GB-scale DROP); publish complete snapshots only.
 - Publish runtime dirs 0755; verify unprivileged read before swapping live binary/catalog.
 - Additional sources proposed: Appropedia ZIM (CC BY-SA) + public domain textile/garment mending + procedural datasets.
-- Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms). Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
+- Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms) using Qwen 3.6 35B A3B with structured output. Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
+- Typing pause: results list stays hidden during initial typing and reveals only after a 180ms pause; clearing input cancels timer and hides results immediately; guide return stays immediate.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
 - Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.

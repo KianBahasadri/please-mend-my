@@ -71,6 +71,8 @@ function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
   };
   const frames = new Map();
   let frameId = 0;
+  const timers = new Map();
+  let timerId = 0;
   const posted = [], requests = [], workers = [];
   class Worker {
     constructor(url) { assert.equal(url, '/assets/search-worker.js'); workers.push(this); }
@@ -84,6 +86,8 @@ function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
     getComputedStyle: () => ({ columnGap: '13.6px', getPropertyValue: name => name === '--columns' ? '3' : '208' }),
     requestAnimationFrame: fn => { const id = ++frameId; frames.set(id, fn); return id; },
     cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, fn); return id; },
+    clearTimeout: id => timers.delete(id),
     fetch: async (url, options) => {
       requests.push(url);
       assert.equal(url, '/api/guides/example');
@@ -93,7 +97,16 @@ function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
   });
   window.scrollTo = () => {};
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/search.js'), 'utf8'), context);
-  const flush = () => { const batch = [...frames.values()]; frames.clear(); for (const fn of batch) fn(); };
+  const flush = () => {
+    while (timers.size || frames.size) {
+      const timerBatch = [...timers.values()];
+      timers.clear();
+      for (const fn of timerBatch) fn();
+      const frameBatch = [...frames.values()];
+      frames.clear();
+      for (const fn of frameBatch) fn();
+    }
+  };
   return {
     document, window, elements, posted, requests, workers, flush,
     get heroFocuses() { return heroFocuses; },
@@ -108,6 +121,22 @@ function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
     },
   };
 }
+
+test('results list stays hidden on first type and reveals only after the typing pause', () => {
+  const ui = searchUI();
+  ui.ready();
+  assert.equal(ui.elements['search-results'].hidden, true);
+  ui.change('a');
+  assert.equal(ui.elements['search-results'].hidden, true, 'results must stay hidden on first type');
+  assert.equal(ui.document.body.classList.contains('searching'), false);
+  assert.equal(ui.posted.length, 0);
+  ui.change('arm');
+  assert.equal(ui.elements['search-results'].hidden, true, 'results must stay hidden while typing continues');
+  ui.flush();
+  assert.equal(ui.elements['search-results'].hidden, false, 'results must reveal after the typing pause');
+  assert.equal(ui.document.body.classList.contains('searching'), true);
+  assert.equal(ui.posted.at(-1).query, 'arm');
+});
 
 test('hero noun and symptom changes coalesce into one suffix-only worker search', () => {
   const ui = searchUI();
