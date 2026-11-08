@@ -18,8 +18,8 @@
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - RAM: prod c8g.xlarge=8GiB; local jobs may use up to 8GiB (user-authorized). One heavy cgroup job/CPU2; leave ≥8GiB available; serial tests/builds; no uncapped jobs.
-- No large Qwen runs until explicitly authorized; current noun/art build is deterministic/cache-only.
-- Next art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if physical coverage<75%+≥2 missing clustered parts; retain view only for≥2 new valid parts. Build-only pinned provenance/geometry+visual gates; lazy views, confident physical match switches, symptoms don't. Counts measured; shape bounds heuristic; Qwen paused.
+- Qwen SVG batch300 authorized; maximize remote parallelism (128), geometry≤2; 8GiB cap+8GiB reserve. Other large AI runs need authorization.
+- Art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if physical coverage<75%+≥2 missing clustered parts; retain view only for≥2 new valid parts. Build-only pinned provenance/geometry+visual gates; lazy views, confident physical match switches, symptoms don't. Counts measured; shape bounds heuristic.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
 - BG: preserve docs/references/approved-spotlight.css; mix wall-floor variants. Visible white beam in dark/BLACK in light, receding seam, static/fast. Ref: docs/references/spotlight-wall-floor.png.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.

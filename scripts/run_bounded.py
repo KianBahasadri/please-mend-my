@@ -56,7 +56,10 @@ def main() -> int:
             '--property=MemoryMax=' + str(cap),
             '--property=MemoryHigh=' + str(cap * 3 // 4),
             '--property=MemorySwapMax=0', '--property=OOMPolicy=stop',
-            '--property=TasksMax=128', '--property=CPUQuota=200%',
+            # 128 remote API threads plus the controller/render subprocesses.
+            # RAM and CPU remain the binding limits; tasks must not truncate
+            # the explicitly authorized parallel network batch.
+            '--property=TasksMax=256', '--property=CPUQuota=200%',
             '--setenv=GOMAXPROCS=2', '--setenv=GOMEMLIMIT=512MiB',
             '--setenv=GOFLAGS=-p=1', '--setenv=NODE_OPTIONS=--max-old-space-size=768',
             '--setenv=OMP_NUM_THREADS=1', '--setenv=OPENBLAS_NUM_THREADS=1',
