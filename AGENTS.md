@@ -17,6 +17,8 @@
 - Diagram pilot8: phone screen/buttons/speaker approved; camera map rejected; 7 lists. Qwen40/SHA cache; 21 SVG pins; source/map/compiler/art-hash visual gate. Lazy local art+instant lists; offline replay14s/0calls. See docs/diagram-pilot.md.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
+- RAM: 3 crashes reported; one heavy job at a time, cgroup cap 2GiB/CPU2, serial tests/builds, leave ≥8GiB available; no uncapped corpus jobs/parallel test suites.
+- No large Qwen runs until explicitly authorized; current noun/art build is deterministic/cache-only.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
 - BG: preserve docs/references/approved-spotlight.css; mix wall-floor variants. Visible white beam in dark/BLACK in light, receding seam, static/fast. Ref: docs/references/spotlight-wall-floor.png.
 - Go stdlib net/http server; deploy AWS EC2; sustained speed > cost.
