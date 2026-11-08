@@ -27,6 +27,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--memory-mib', type=int, default=2048)
     parser.add_argument('--reserve-gib', type=int, default=8)
+    parser.add_argument('--tasks-max', type=int, default=256,
+                        help='Bound threads/processes; 512 permits two 128-request network batches in one capped job.')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command
@@ -34,6 +36,8 @@ def main() -> int:
         parser.error('provide a command after --')
     if not 256 <= args.memory_mib <= 8192 or args.reserve_gib < 8:
         parser.error('memory cap must be 256–8192 MiB (prod RAM), with at least 8 GiB reserved')
+    if not 64 <= args.tasks_max <= 512:
+        parser.error('task cap must be 64–512')
     executable = shutil.which(command[0])
     if not executable:
         parser.error('command not found: ' + command[0])
@@ -59,7 +63,7 @@ def main() -> int:
             # 128 remote API threads plus the controller/render subprocesses.
             # RAM and CPU remain the binding limits; tasks must not truncate
             # the explicitly authorized parallel network batch.
-            '--property=TasksMax=256', '--property=CPUQuota=200%',
+            '--property=TasksMax=' + str(args.tasks_max), '--property=CPUQuota=200%',
             '--setenv=GOMAXPROCS=2', '--setenv=GOMEMLIMIT=512MiB',
             '--setenv=GOFLAGS=-p=1', '--setenv=NODE_OPTIONS=--max-old-space-size=768',
             '--setenv=OMP_NUM_THREADS=1', '--setenv=OPENBLAS_NUM_THREADS=1',

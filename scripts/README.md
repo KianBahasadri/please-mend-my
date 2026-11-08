@@ -54,6 +54,29 @@ cost before expanding; a larger run needs authorization. The batch does not
 mutate a served release or bypass visual approval. Historical 300-item evidence
 remains in `catalog-data/build/diagram-batch-300/`.
 
+For an authorized full physical-noun rollout, use the resumable windowed runner:
+
+```sh
+python3 scripts/run_bounded.py --memory-mib 4096 -- python3 scripts/diagram_rollout.py \
+  --runtime-dir "$(cat catalog-data/local-catalog.path)" \
+  --database catalog-data/build/nouns/catalog.sqlite \
+  --work-dir catalog-data/build/diagram-batch-all \
+  --reuse-batch catalog-data/build/diagram-batch-300 \
+  --reuse-batch catalog-data/build/diagram-batch-10 \
+  --concurrency 128 --chunk-size 128 --geometry-workers 2
+```
+
+This considers every filled artifact/body noun, without frequency, guide-count,
+or existing-part thresholds, then collapses overlapping aliases and rejects
+contradictory senses. Exact taxonomy/source/mapping caches are reused. Geometry
+windows discard regenerable contact sheets after mapping, retaining paid
+responses, original source pins, portable `candidate-sources.json` metadata and
+compiled art. A 2 GiB disk reserve stops further work safely. Visual verification
+does not run or suppress available art; missing maps keep safe context drawings.
+`progress.json` records completed windows and provider-reported cost. Rerun the
+same command after interruption; it never changes `local-catalog.path` or
+publishes an incomplete release. `--env-file` supports isolated worktrees.
+
 Pinned inputs:
 
 | Source | Archive | Bytes | SHA-256 |
