@@ -75,20 +75,28 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   return ui;
 }
 
-test('one 380ms settle opens bike specifics with full-width prompt and no cards', async () => {
+test('bike results start immediately while its question keeps the 380ms pause and full-width prompt', async () => {
   const ui = await searchUI(); ui.ready();
   const width = ui.response.clientWidth;
-  ui.change('bike'); ui.advance(379);
+  ui.change('bike'); ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'bike');
   assert.equal(ui.question.textContent, '');
-  assert.equal(ui.elements['search-results'].hidden, true);
-  assert.equal(ui.searches().length, 0);
+  assert.equal(ui.elements['search-results'].hidden, false);
+  const stale = ui.searches().at(-1).requestId;
+  ui.advance(379);
+  assert.equal(ui.question.textContent, '');
+  assert.equal(ui.elements['search-results'].hidden, false);
+  assert.equal(ui.searches().length, 1);
   ui.advance(1);
   assert.equal(ui.question.textContent, "What's wrong with your bike?");
   assert.equal(ui.specifierContainer.hidden, false);
   assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
   assert.equal(ui.document.activeElement, ui.clarification);
   assert.equal(ui.elements['search-results'].hidden, true);
-  assert.equal(ui.searches().length, 0, 'a settled broad noun never briefly searches topic cards');
+  assert.equal(ui.searches().length, 1, 'opening an unanswered question cancels results without another query');
+  ui.results(stale, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
+  assert.equal(ui.elements['search-results'].hidden, true, 'a pre-question response cannot reopen blank specifics');
+  assert.equal(ui.elements['result-cards'].children.length, 0);
   assert.equal(ui.response.clientWidth, width, 'underneath specifier does not change first-line width');
   assert.equal(ui.workspace.parentNode.contains(ui.question), true);
   assert.equal(ui.workspace.contains(ui.question), false, 'question stays outside the split workspace');
@@ -134,20 +142,43 @@ test('two-way hover/focus and manual answer matches synchronize exact SVG/list p
   ui.answer('master link broken');
   assert.equal(group.classList.contains('is-selected'), true);
   assert.equal(option.classList.contains('is-selected'), true);
-  assert.equal(ui.elements['search-results'].hidden, true, 'manual matching highlights before the shared settle');
-  ui.advance(379); assert.equal(ui.searches().length, 0);
-  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'road bike master link broken');
+  ui.flushFrames();
+  assert.equal(ui.elements['search-results'].hidden, false, 'typing an answer reveals results without a settle delay');
+  assert.equal(ui.searches().at(-1).query, 'road bike master link broken');
+  ui.advance(1000);
+  assert.equal(ui.searches().length, 1, 'the later clarification settle does not repeat the search');
 });
 
-test('resident real words settle at380ms and unknown/model/one-letter tails use1000ms', async () => {
+test('real words, unknown tokens, models and one-letter prefixes all search without a timer', async () => {
   for (const [query, delay] of [['broken laptop', 380], ['broken carpet', 380], ['broken flubbergorp', 1000],
     ['headphones WH-1000XM4', 1000], ['broken z', 1000], ['broken zygomatic', 380]]) {
     const ui = await searchUI(); ui.ready(['zygomatic']); ui.change(query);
     assert.equal(ui.window.mendHero.settleDelay(), delay, query);
-    ui.advance(delay - 1); assert.equal(ui.searches().length, 0, query);
-    ui.advance(1); assert.equal(ui.searches().at(-1).query, query);
+    ui.flushFrames();
+    assert.equal(ui.searches().at(-1).query, query);
+    ui.advance(delay);
+    assert.equal(ui.searches().length, 1, 'clarification timing never delays or repeats a phrase search');
     assert.equal(ui.requests.length, 0, 'dictionary lookup and typed search need no API request');
   }
+});
+
+test('each successive edit searches in its next frame and rapid edits coalesce to the latest query', async () => {
+  const ui = await searchUI(); ui.ready();
+  for (const text of ['b', 'br', 'broken', 'broken l', 'broken laptop', 'broken WH-1000XM4']) {
+    const prior = ui.searches().length;
+    ui.change(text); ui.flushFrames();
+    assert.equal(ui.searches().length, prior + 1);
+    assert.equal(ui.searches().at(-1).query, text);
+  }
+  const prior = ui.searches().length;
+  ui.change('broken phone'); ui.change('broken phonex'); ui.change('broken phonexy');
+  assert.equal(ui.searches().length, prior, 'the rendering frame still coalesces same-frame edits');
+  ui.flushFrames();
+  assert.equal(ui.searches().length, prior + 1);
+  assert.equal(ui.searches().at(-1).query, 'broken phonexy');
+  ui.advance(2000);
+  assert.equal(ui.searches().length, prior + 1);
+  assert.equal(ui.requests.length, 0);
 });
 
 test('car to carpet and bike to bikes continue typing without a premature clarification', async () => {
@@ -163,16 +194,21 @@ test('car to carpet and bike to bikes continue typing without a premature clarif
   assert.equal(ui.elements['search-results'].hidden, true);
 });
 
-test('startup dictionary updates preserve elapsed timing and never bypass the shared settle', async () => {
+test('startup searches the latest edit immediately without waiting for clarification timing', async () => {
   const ui = await searchUI(); ui.change('broken zygomatic'); ui.advance(100);
   ui.ready(['zygomatic']);
-  assert.equal(ui.searches().length, 0);
-  ui.advance(279); assert.equal(ui.searches().length, 0);
-  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken zygomatic');
-  const pending = await searchUI(); pending.change('broken laptop'); pending.advance(380);
+  assert.equal(ui.searches().at(-1).query, 'broken zygomatic');
+  ui.advance(1000); assert.equal(ui.searches().length, 1);
+  const pending = await searchUI(); pending.change('broken laptop'); pending.change('broken phone');
+  pending.flushFrames();
   assert.equal(pending.searches().length, 0);
   pending.ready();
-  assert.equal(pending.searches().at(-1).query, 'broken laptop', 'an already-settled query runs as soon as its index is ready');
+  assert.equal(pending.searches().at(-1).query, 'broken phone', 'index readiness immediately searches the current text');
+  const noun = await searchUI(); noun.change('bike'); noun.advance(100); noun.ready();
+  assert.equal(noun.searches().at(-1).query, 'bike');
+  noun.advance(279); assert.equal(noun.question.textContent, '');
+  noun.advance(1); assert.equal(noun.question.textContent, "What's wrong with your bike?");
+  assert.equal(noun.elements['search-results'].hidden, true);
 });
 
 test('catalog recovery clears the stale error and preserves the current hero state', async () => {
@@ -218,14 +254,14 @@ test('full-phrase Enter/Tab and noun punctuation settle immediately without rewr
   assert.equal(ui.searches().at(-1).query, 'bike? chain');
 });
 
-test('empty answer Backspace dissolves then settles the suppressed noun without reopening', async () => {
+test('empty answer Backspace dissolves and immediately searches the suppressed noun without reopening', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
   ui.key(ui.clarification, 'Backspace');
   assert.equal(ui.question.textContent, '');
   assert.equal(ui.specifierContainer.hidden, true);
   assert.equal(ui.document.activeElement, ui.response);
-  ui.advance(379); assert.equal(ui.searches().length, 0);
-  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'bike');
+  ui.flushFrames(); assert.equal(ui.searches().at(-1).query, 'bike');
+  ui.advance(1000); assert.equal(ui.searches().length, 1);
   assert.equal(ui.question.textContent, '');
   ui.change('');
   assert.equal(ui.elements['search-results'].hidden, true);
@@ -250,18 +286,35 @@ test('pending edits retain displayed results but reject old replies and never st
   assert.equal(ui.searches().at(-1).query, 'bike');
 });
 
-test('composition waits until commitment and hidden/reading views cancel pending work', async () => {
+test('composition searches only committed text immediately and hidden/reading views cancel pending work', async () => {
   const ui = await searchUI(); ui.ready();
   ui.event(ui.response, 'compositionstart'); ui.change('broken laptop'); ui.advance(2000);
   assert.equal(ui.searches().length, 0);
-  ui.event(ui.response, 'compositionend'); ui.advance(379); assert.equal(ui.searches().length, 0);
-  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken laptop');
+  ui.event(ui.response, 'compositionend'); ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'broken laptop');
+  ui.advance(1000); assert.equal(ui.searches().length, 1);
   ui.change('bike'); ui.document.visibilityState = 'hidden'; ui.event(ui.document, 'visibilitychange');
   ui.advance(1000); assert.equal(ui.searches().length, 1);
   ui.document.visibilityState = 'visible'; ui.event(ui.document, 'visibilitychange');
   ui.document.body.classList.add('reading'); await Promise.resolve(); ui.advance(1000);
   assert.equal(ui.question.textContent, '');
   assert.equal(ui.searches().length, 1);
+});
+
+test('index readiness during composition waits for same-value commit in either field', async () => {
+  const first = await searchUI();
+  first.event(first.response, 'compositionstart'); first.change('broken laptop'); first.ready();
+  first.flushFrames();
+  assert.equal(first.searches().length, 0);
+  first.event(first.response, 'compositionend'); first.flushFrames();
+  assert.equal(first.searches().at(-1).query, 'broken laptop');
+  assert.equal(first.searches().length, 1);
+  const answer = await searchUI(); answer.change('bike'); answer.key(answer.response, 'Enter');
+  answer.event(answer.clarification, 'compositionstart'); answer.answer('chain'); answer.ready();
+  assert.equal(answer.searches().length, 0);
+  answer.event(answer.clarification, 'compositionend'); answer.flushFrames();
+  assert.equal(answer.searches().at(-1).query, 'bike chain');
+  assert.equal(answer.searches().length, 1);
 });
 
 test('return from an open guide searches and restores the native answer caret immediately', async () => {
@@ -289,10 +342,11 @@ test('list-only nouns narrow cleanly and unsupported nouns never get empty SVG b
   assert.equal(ui.elements['search-results'].hidden, true);
 });
 
-test('a cached older page without the hero controller still searches the editable suffix', async () => {
+test('a cached older page without the hero controller searches the editable suffix immediately', async () => {
   const ui = await searchUI({ heroAvailable: false }); ui.ready();
-  ui.change('broken arm'); ui.advance(999); assert.equal(ui.searches().length, 0);
-  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken arm');
+  ui.change('broken arm'); ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'broken arm');
+  ui.advance(2000); assert.equal(ui.searches().length, 1);
   assert.equal(ui.requests.length, 0);
 });
 

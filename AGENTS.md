@@ -4,7 +4,7 @@
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
-- Underline editable areas+idle floaters. Shared settle: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank focused answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
+- Underline editable areas+idle floaters. Clarification pause: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank focused answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
@@ -56,7 +56,7 @@
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
-- Hero/search share one settle timer; no separate debounce. Awaiting specifics→hide cards; clear answer→deselect/hide now; settled answers reveal; keep prior results while ordinary edits settle.
+- Search every edit immediately: 0 debounce, independent of clarification pause; IME waits for commit. Awaiting specifics→hide cards; clear answer→deselect/hide now; keep prior cards until fresh results.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
 - Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.

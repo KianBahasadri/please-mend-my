@@ -28,22 +28,25 @@ python3 scripts/prepare_bicycle_art.py --check
 ```
 
 `window.mendHero` exposes `query()`, `focus()`, `isAwaitingSpecifics()`,
-`settleDelay()`, `setVocabulary(terms)`, and immediate `settle()`. Its one timer
-handles both inputs. The worker's startup `ready.terms` supplies the sorted
-resident dictionary, checked with binary search. A vocabulary arriving during a
-pause recalculates its deadline from the last edit, without restarting the beat.
+`settleDelay()`, `setVocabulary(terms)`, and immediate `settle()`. Its timer
+controls automatic clarification independently of live search. The worker's
+startup `ready.terms` supplies the sorted resident dictionary, checked with
+binary search. A vocabulary arriving during a pause recalculates its deadline
+from the last edit, without restarting the beat.
 Composition, hidden documents, and open guides cancel pending settlement.
 
-`mend:querychange` invalidates pending frames and old worker responses. It hides
-cards immediately for empty queries or an unanswered clarification. `mend:settle`
-fires after the hero's clarification transition; search then uses the combined
-editable text. A bare subject therefore never briefly reveals cards before
-asking for specifics. Explicit actions and guide return bypass the timer.
+`mend:querychange` searches the combined editable text immediately, coalescing
+edits within one animation frame and rejecting stale worker replies. There is
+no search debounce or dictionary-dependent wait. Empty queries and unanswered
+clarifications hide cards immediately; committed answers search immediately.
+IME preedit waits for commitment. `mend:settle` handles clarification transitions
+and explicit shortcuts; live results never wait for that event. Bare subjects
+can show results while typing, then hide them when the blank clarification opens.
 
 Part selection focuses the answer and tries a native `insertText` edit to retain
 undo history where supported, falling back to `setRangeText` if the edit was not
 applied. Native input events may fire synchronously or be absent, so the hero
-updates its state in either case and cancels any pending delay before searching.
+updates its state in either case and coalesces duplicate query notifications.
 The optional legacy command is used only from part callbacks, never recursively
 from an input handler. Browser differences are described in
 [Mozilla's editing API documentation](https://developer.mozilla.org/en-US/docs/Web/API/Document/execCommand).

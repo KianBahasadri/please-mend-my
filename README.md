@@ -13,18 +13,19 @@ Prefix measurements run during fitting and font changes, never during ordinary
 typing.
 
 Both typing areas are underlined, matching the little idle typing animations.
-Hero clarification and results share one settle timer: 380 ms after a recognized
-trailing word of at least two letters, or 1000 ms for an unfamiliar token, typo,
-or model number. The worker supplies its resident dictionary once at startup;
-word checks then run synchronously in the page. Enter, Tab, or a noun-ending
-`?`, `.`, or `!` settles immediately; typed punctuation remains intact. Clearing
-an input cancels pending work and hides the corresponding UI immediately.
+Search updates on every edit with no typing delay or debounce, including unknown
+words and model numbers. IME input searches on commitment. Clarification alone
+waits 380 ms after a recognized trailing word of at least two letters, or 1000 ms
+for an unfamiliar token. The worker supplies its resident dictionary once at
+startup; word checks then run synchronously in the page. Enter, Tab, or a
+noun-ending `?`, `.`, or `!` confirms an eligible subject immediately; typed punctuation
+remains intact. Clearing an input hides the corresponding UI immediately.
 
 Settled bare subjects such as `bike` reveal `What's wrong with your bike?` and
-focus the blank native answer beneath it. Cards stay hidden until that answer
-has content. The first line and question retain the full container width; a
-workspace below pairs the answer with a bicycle diagram and a scrollable parts
-list. Diagram and list highlights follow hover, focus, selection, and matching
+focus the blank native answer beneath it. Once clarification opens, cards stay
+hidden until that answer has content. The first line and question retain the full
+container width; a workspace below pairs the answer with a bicycle diagram and a
+scrollable parts list. Diagram and list highlights follow hover, focus, selection, and matching
 typed answers. Selecting a part fills the answer and searches immediately;
 selecting that unchanged part again clears it. Arm, laptop, phone, car, stove,
 toilet, refrigerator, and jeans have list-only specifiers. On smaller screens,

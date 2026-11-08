@@ -36,18 +36,10 @@
   let scrollFrame = 0;
   let pendingFocus = null;
   let resultsScrollY = 0;
-  const sharedSettle = typeof hero?.settle === "function";
-  let settledQuery = null;
-  // Only an older cached page without the shared hero controller uses this
-  // compatibility timer. Current pages have exactly one settle timer in hero.js.
-  let searchTimer = null;
+  const composingInputs = new Set();
 
-  function cancelSearchTimer() {
-    if (searchTimer !== null) {
-      clearTimeout(searchTimer);
-      searchTimer = null;
-    }
-  }
+  const searchBlocked = () => composingInputs.size > 0 || document.visibilityState === "hidden" ||
+    document.body.classList.contains("reading");
 
   function geometry() {
     const css = getComputedStyle(cards);
@@ -158,24 +150,14 @@
     requestedStart = -1;
   }
 
-  function runSearch(immediate = false) {
-    cancelSearchTimer();
+  function runSearch(force = false) {
     const text = query();
     if (!text || hero?.isAwaitingSpecifics?.()) {
-      settledQuery = text;
       invalidateSearch();
       hideResults();
       return;
     }
-    if (!immediate) {
-      searchTimer = setTimeout(() => {
-        searchTimer = null;
-        settledQuery = text;
-        executeSearch(text);
-      }, hero?.settleDelay?.() || 1000);
-      return;
-    }
-    settledQuery = text;
+    if (searchBlocked() || !force && pendingSearch?.query === text) return;
     executeSearch(text);
   }
 
@@ -193,6 +175,7 @@
     pendingSearch = { type: "search", requestId, query: text, count: Math.min(60, (Math.ceil(innerHeight / layout.step) + 6) * layout.columns) };
     if (!searchFrame) searchFrame = requestAnimationFrame(() => {
       searchFrame = 0;
+      if (searchBlocked()) { pendingSearch = null; return; }
       worker.postMessage(pendingSearch);
     });
   }
@@ -569,8 +552,8 @@
     if (addHistory) history.pushState({}, "", location.pathname);
     if (hero) hero.focus();
     else input.focus({ preventScroll: true });
-    if (sharedSettle) hero.settle();
-    else runSearch(true);
+    hero?.settle?.();
+    runSearch(true);
     window.scrollTo(0, resultsScrollY);
     scheduleWindow();
   }
@@ -586,14 +569,25 @@
 
   const queryChanged = () => {
     cancelPendingGuide();
-    settledQuery = null;
     invalidateSearch();
-    if (!query() || hero?.isAwaitingSpecifics?.()) hideResults();
-    if (!sharedSettle) runSearch();
+    runSearch();
   };
   if (hero) window.addEventListener("mend:querychange", queryChanged);
   else input.addEventListener("input", queryChanged);
-  if (sharedSettle) window.addEventListener("mend:settle", () => runSearch(true));
+  window.addEventListener("mend:settle", () => runSearch());
+  for (const field of [input, document.getElementById("clarification-response")].filter(Boolean)) {
+    field.addEventListener("compositionstart", () => { composingInputs.add(field); invalidateSearch(); });
+    field.addEventListener("compositionend", () => {
+      composingInputs.delete(field);
+      // The committed value can equal the last preedit value, so the hero may
+      // correctly emit no querychange. Search that committed value now anyway.
+      queryChanged();
+    });
+  }
+  document.addEventListener("visibilitychange", () => {
+    invalidateSearch();
+    if (document.visibilityState !== "hidden") runSearch();
+  });
   document.getElementById("close-guide").addEventListener("click", () => closeGuide());
   window.addEventListener("popstate", () => {
     const id = new URL(location.href).searchParams.get("guide");
@@ -621,8 +615,7 @@
         stats.indexLoadMs = data.loadDuration;
         for (const item of data.categories) categoryNames.set(item.id, item.name);
         hero?.setVocabulary?.(data.terms || []);
-        if (!sharedSettle || settledQuery !== null && settledQuery === query()) runSearch(true);
-        else if (!query() || hero?.isAwaitingSpecifics?.()) hideResults();
+        runSearch();
       } else if (data.type === "results") renderCards(data);
       else if (data.type === "range" && data.requestId === requestId && data.rangeId === rangeSerial) {
         renderWindow(data.items, data.start);
