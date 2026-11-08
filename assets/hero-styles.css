@@ -355,3 +355,161 @@
 .hero-prompt-art--inline[data-repair="cutpaper"] .repair-letter::before {
   content: "\00a0";
 }
+
+/* The terminal grid also measures the real textarea, preserving its native
+   suffix advance, wrapping, selection and single caret. No alternate input. */
+:is(:root[data-theme="ascii"], [data-style="ascii"],
+  :root[data-theme="matrix"], [data-style="matrix"]) {
+  --font: "Space Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  --weight: 400;
+  --tracking: 0em;
+  --leading: 1.24;
+  --size: clamp(3rem, 8.5vw, 8.5rem);
+}
+
+:is(:root[data-theme="rainbow"], [data-style="rainbow"]) {
+  --font: "Arial Rounded MT Bold", "Trebuchet MS", "DejaVu Sans", sans-serif;
+  --weight: 700;
+  --tracking: -0.04em;
+  --leading: 1.2;
+}
+
+:root, [data-style="rainbow"] {
+  --rainbow-0: #ff8c9e;
+  --rainbow-1: #ffbf80;
+  --rainbow-2: #ffe580;
+  --rainbow-3: #90e5b7;
+  --rainbow-4: #89d8ff;
+  --rainbow-5: #b2bcff;
+  --rainbow-6: #d4a7ff;
+  --matrix-ink: #82f5ad;
+}
+
+@media (prefers-color-scheme: light) {
+  :root, [data-style="rainbow"] {
+    --rainbow-0: #a1163a;
+    --rainbow-1: #853700;
+    --rainbow-2: #625200;
+    --rainbow-3: #115d3d;
+    --rainbow-4: #005564;
+    --rainbow-5: #3449a5;
+    --rainbow-6: #69318c;
+    --matrix-ink: #0b5b32;
+  }
+}
+
+:is([data-theme="ascii"], [data-theme="rainbow"], [data-theme="matrix"])
+  :is(h1, .hero-input, .hero-underline, #measure),
+.floater:is([data-style="ascii"], [data-style="rainbow"], [data-style="matrix"]) {
+  font-kerning: none;
+  font-variant-ligatures: none;
+}
+
+.floater:is([data-style="ascii"], [data-style="rainbow"], [data-style="matrix"]) {
+  font-family: var(--font);
+  font-weight: var(--weight);
+  letter-spacing: var(--tracking);
+  line-height: var(--leading);
+}
+
+[data-repair="ascii"] .repair-letter {
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-repair="ascii"] .repair-letter::after {
+  content: attr(data-ascii);
+  position: absolute;
+  top: 1em;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: "Space Mono", "DejaVu Sans Mono", "Courier New", monospace;
+  font-size: 0.17em;
+  font-weight: 400;
+  line-height: 1;
+  letter-spacing: 0;
+  white-space: pre;
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+}
+
+.hero-prompt-art--inline[data-repair="ascii"] .repair-letter {
+  display: inline-block;
+  width: 0.6em;
+}
+
+[data-repair="rainbow"] .repair-letter {
+  color: var(--rainbow-ink);
+  -webkit-text-fill-color: var(--rainbow-ink);
+}
+
+[data-theme="rainbow"] .hero-input,
+.floater[data-style="rainbow"] .floater-answer {
+  color: var(--rainbow-6);
+}
+
+[data-theme="rainbow"] .hero-input:focus {
+  caret-color: var(--ink);
+}
+
+[data-theme="rainbow"] .hero-input::selection {
+  color: var(--paper);
+  -webkit-text-fill-color: var(--paper);
+  background: var(--ink);
+}
+
+[data-theme="matrix"] :is(h1, .hero-input),
+.floater[data-style="matrix"] {
+  color: var(--matrix-ink);
+  text-shadow: 0 0 0.055em rgb(80 240 140 / 22%);
+}
+
+[data-theme="matrix"] :is(.hero-suffix, .floater-answer) {
+  text-decoration-color: var(--matrix-ink);
+}
+
+[data-theme="matrix"] .hero-input:focus {
+  caret-color: var(--matrix-ink);
+}
+
+[data-theme="matrix"] .hero-area::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: repeating-linear-gradient(transparent 0 3px, rgb(60 220 120 / 5%) 3px 4px);
+}
+
+.matrix-rain {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  user-select: none;
+  contain: strict;
+  opacity: 0.42;
+  /* Keep the area immediately behind the hero quiet; preserve the spotlight. */
+  mask-image: linear-gradient(90deg, rgb(0 0 0 / 30%), #000 75%);
+}
+
+@media (prefers-color-scheme: light) {
+  [data-theme="matrix"] :is(h1, .hero-input),
+  .floater[data-style="matrix"] { text-shadow: none; }
+  .matrix-rain { opacity: 0.25; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .matrix-rain { display: none; }
+}
+
+@media (forced-colors: active) {
+  .matrix-rain, [data-theme="matrix"] .hero-area::after { display: none; }
+  [data-theme="matrix"] :is(h1, .hero-input) { color: CanvasText; text-shadow: none; }
+  [data-repair="rainbow"] .repair-letter { color: CanvasText; -webkit-text-fill-color: CanvasText; }
+  [data-repair="ascii"] .repair-letter::after { color: CanvasText; -webkit-text-fill-color: CanvasText; }
+  [data-theme="rainbow"] .hero-input { color: CanvasText; }
+}

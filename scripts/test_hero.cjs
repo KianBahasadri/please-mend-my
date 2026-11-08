@@ -6,7 +6,7 @@ const vm = require('node:vm');
 const { makeDOM } = require('./hero_test_dom.cjs');
 const { releaseFixture, bicycleArt } = require('./specifier_test_data.cjs');
 const themes = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox',
-  'stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper'];
+  'stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper', 'ascii', 'rainbow', 'matrix'];
 
 // Run the shipped controller, not a duplicate of its state machine. The fixture
 // models native textarea selection/events; font metrics and CSS paint are not
@@ -709,7 +709,7 @@ test('editable underline content stays in sync through typing, cut, and reset', 
   assert.equal(dom.window.mendHero.query(), '');
 });
 
-test('all twelve themes retain protected prompts and the controller stays static with reduced motion', async () => {
+test('all fifteen themes retain protected prompts and the controller stays static with reduced motion', async () => {
   for (const theme of themes) {
     const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
     assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔧 my ' : 'please, mend my ');
@@ -725,7 +725,7 @@ test('all twelve themes retain protected prompts and the controller stays static
   }
 });
 
-test('all twelve styles fit the visible question and first prompt on narrow and wide layouts', async () => {
+test('all fifteen styles fit the visible question and first prompt on narrow and wide layouts', async () => {
   // Injectable proportional metrics exercise the controller's real measurement
   // path. They model different font widths, not browser font shaping or paint.
   for (const [styleIndex, theme] of themes.entries()) {

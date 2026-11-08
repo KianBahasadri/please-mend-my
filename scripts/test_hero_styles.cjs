@@ -7,7 +7,8 @@ const { makeDOM } = require('./hero_test_dom.cjs');
 
 const source = fs.readFileSync(path.join(__dirname, '../assets/hero-styles.js'), 'utf8');
 const controller = fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8');
-const repairs = ['stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper'];
+const repairs = ['stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper', 'ascii', 'rainbow'];
+const terminals = ['matrix'];
 const originalThemes = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox'];
 
 // Synthetic Range bounds exercise the real decoration/controller seam. This
@@ -76,10 +77,10 @@ function descendantText(node) {
 
 function walk(node) { return [node, ...node.children.flatMap(walk)]; }
 
-test('the shared catalog contains twelve unique styles and retains canonical accessible prompts', () => {
+test('the shared catalog contains fifteen unique styles and retains canonical accessible prompts', () => {
   const dom = styleDOM();
-  assert.deepEqual(Array.from(dom.styles.themes), [...originalThemes, ...repairs]);
-  assert.equal(new Set(dom.styles.themes).size, 12);
+  assert.deepEqual(Array.from(dom.styles.themes), [...originalThemes, ...repairs, ...terminals]);
+  assert.equal(new Set(dom.styles.themes).size, 15);
   assert.equal(dom.styles.themes.includes('spareparts'), false);
   assert.equal(Object.isFrozen(dom.styles.themes), true);
   for (const theme of dom.styles.themes) {
@@ -207,4 +208,64 @@ test('all floater styles keep exactly one canonical prompt and create no editabl
     }
   }
   assert.equal(dom.document.animations, 0);
+});
+
+test('ASCII banners use inert five-row glyph data in the native character advance boxes', () => {
+  const dom = styleDOM({ theme: 'ascii', width: 320 });
+  vm.runInContext(controller, dom.context);
+  const art = dom.art()[0];
+  assert.ok(art);
+  const letters = art.children;
+  assert.equal(letters.length, dom.styles.prompt('ascii').length);
+  for (const letter of letters) {
+    assert.equal(letter.dataset.ascii.split('\n').length, 5);
+    assert.ok(letter.dataset.ascii.split('\n').every(row => row.length === 5));
+    assert.match(letter.dataset.ascii, /^[# \n]+$/);
+    assert.ok(parseFloat(letter.style.width) > 0);
+  }
+  const reads = dom.metrics.reads;
+  dom.response.value += 'relationship';
+  dom.event(dom.response, 'input', { inputType: 'insertText', bubbles: true });
+  assert.equal(dom.art()[0], art);
+  assert.equal(dom.metrics.reads, reads);
+  assert.equal(dom.window.mendHero.query(), 'relationship');
+  assert.equal(descendantText(art), 'please, mend my ');
+});
+
+test('rainbow colors only measured fixed letters and never replaces the native input', () => {
+  const dom = styleDOM({ theme: 'rainbow' });
+  vm.runInContext(controller, dom.context);
+  const art = dom.art()[0];
+  assert.ok(art);
+  assert.equal(new Set(art.children.map(node => node.style['--rainbow-ink'])).size, 7);
+  dom.response.value += 'broken arm';
+  dom.response.setSelectionRange(15, 25, 'backward');
+  const native = dom.native();
+  dom.response.clientWidth = 768;
+  dom.event(dom.window, 'resize');
+  assert.deepEqual(dom.native(), native);
+  assert.equal(dom.art().length, 1);
+  assert.equal(dom.firstField.querySelectorAll('textarea').length, 1);
+});
+
+test('new light and dark text palettes remain legible over the spotlight', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../assets/hero-styles.css'), 'utf8');
+  function luminance(hex) {
+    const values = [1, 3, 5].map(at => parseInt(hex.slice(at, at + 2), 16) / 255)
+      .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+    return values.reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+  }
+  function contrast(foreground, background) {
+    const pair = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+    return (pair[0] + 0.05) / (pair[1] + 0.05);
+  }
+  for (let index = 0; index < 7; index++) {
+    const colors = [...css.matchAll(new RegExp(`--rainbow-${index}: (#[a-f0-9]{6})`, 'g'))].map(match => match[1]);
+    assert.equal(colors.length, 2);
+    assert.ok(contrast(colors[0], '#353535') >= 4.5, `dark rainbow ${index}`);
+    assert.ok(contrast(colors[1], '#d5d5d5') >= 4.5, `light rainbow ${index}`);
+  }
+  const matrix = [...css.matchAll(/--matrix-ink: (#[a-f0-9]{6})/g)].map(match => match[1]);
+  assert.ok(contrast(matrix[0], '#353535') >= 4.5);
+  assert.ok(contrast(matrix[1], '#d5d5d5') >= 4.5);
 });

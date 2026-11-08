@@ -3,9 +3,26 @@
 
   const originals = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
   const repairs = ["stitched", "taped", "tooltype", "blueprint", "cutpaper"];
-  const themes = Object.freeze([...originals, ...repairs]);
+  const terminals = ["ascii", "rainbow", "matrix"];
+  const decorated = [...repairs, "ascii", "rainbow"];
+  const themes = Object.freeze([...originals, ...repairs, ...terminals]);
   const prompt = theme => theme === "toolbox" ? "🙏, 🔧 my " : "please, mend my ";
   const svgNS = "http://www.w3.org/2000/svg";
+  // Five-column terminal banners. Generated CSS text is inert decoration, so
+  // the actual prompt stays canonical and floater bursts never expand 400 bits.
+  const asciiGlyphs = {
+    p: ["#### ", "#   #", "#### ", "#    ", "#    "],
+    l: ["#    ", "#    ", "#    ", "#    ", "#####"],
+    e: ["#####", "#    ", "#### ", "#    ", "#####"],
+    a: [" ### ", "#   #", "#####", "#   #", "#   #"],
+    s: [" ####", "#    ", " ### ", "    #", "#### "],
+    m: ["#   #", "## ##", "# # #", "#   #", "#   #"],
+    n: ["#   #", "##  #", "# # #", "#  ##", "#   #"],
+    d: ["#### ", "#   #", "#   #", "#   #", "#### "],
+    y: ["#   #", " # # ", "  #  ", "  #  ", "  #  "],
+    ",": ["     ", "     ", "     ", "  ## ", "  #  "],
+    " ": ["     ", "     ", "     ", "     ", "     "],
+  };
 
   function span(className, text = "") {
     const node = document.createElement("span");
@@ -195,7 +212,7 @@
       return node;
     };
 
-    if (theme === "tooltype" || theme === "cutpaper") {
+    if (theme === "tooltype" || theme === "cutpaper" || theme === "ascii" || theme === "rainbow") {
       const toolMap = {
         0: hammer,
         1: wrench,
@@ -207,8 +224,10 @@
         11: level,
       };
       for (let at = 0; at < text.length; at++) {
-        const glyph = add(at, at + 1, `repair-letter repair-letter-${at}`);
+        const glyph = add(at, at + 1, "repair-letter");
         if (text[at] === " ") glyph.classList.add("repair-space");
+        if (theme === "ascii") glyph.dataset.ascii = asciiGlyphs[text[at]].join("\n");
+        if (theme === "rainbow") glyph.style.setProperty("--rainbow-ink", `var(--rainbow-${at % 7})`);
         if (theme === "tooltype" && toolMap[at]) {
           glyph.classList.add("repair-replaced-letter");
           const original = span("repair-original-letter", text[at]);
@@ -231,7 +250,6 @@
       if (theme === "stitched") mend.append(stitches());
       if (theme === "blueprint") {
         const dimension = span("repair-dimension");
-        dimension.append(span("repair-dimension-label", ""));
         mend.append(dimension);
       }
     }
@@ -240,14 +258,14 @@
   }
 
   function decorateFloater(node, theme) {
-    if (!repairs.includes(theme)) return;
+    if (!decorated.includes(theme)) return;
     const art = build(theme);
     art.classList.add("hero-prompt-art--inline");
     node.replaceChildren(art);
   }
 
   function mount(field, prefixNode, theme) {
-    if (!repairs.includes(theme) || !field || !prefixNode ||
+    if (!decorated.includes(theme) || !field || !prefixNode ||
         typeof document.createRange !== "function" ||
         typeof document.createElementNS !== "function" ||
         !window.CSS?.supports?.("clip-path", "polygon(0 0, 100% 0, 100% 100%)")) return null;
