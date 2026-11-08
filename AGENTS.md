@@ -8,7 +8,7 @@
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
-- Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/spareparts/blueprint/cutpaper; inert fixed-prefix art, native suffix/caret; match floaters.
+- Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/blueprint/cutpaper; spareparts retired. Inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
 - Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.

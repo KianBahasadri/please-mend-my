@@ -34,14 +34,6 @@
   --leading: 1.2;
 }
 
-:is(:root[data-theme="spareparts"], [data-style="spareparts"]) {
-  --font: "Bungee", sans-serif;
-  --weight: 400;
-  --tracking: -0.045em;
-  --leading: 1.24;
-  --size: clamp(3rem, 8.5vw, 8.5rem);
-}
-
 :is(:root[data-theme="blueprint"], [data-style="blueprint"]) {
   --font: "Space Mono", monospace;
   --weight: 400;
@@ -59,23 +51,23 @@
 }
 
 :is([data-theme="stitched"], [data-theme="taped"], [data-theme="tooltype"],
-  [data-theme="spareparts"], [data-theme="blueprint"], [data-theme="cutpaper"])
+  [data-theme="blueprint"], [data-theme="cutpaper"])
   :is(h1, .hero-input, .hero-underline, #measure),
 .floater:is([data-style="stitched"], [data-style="taped"], [data-style="tooltype"],
-  [data-style="spareparts"], [data-style="blueprint"], [data-style="cutpaper"]) {
+  [data-style="blueprint"], [data-style="cutpaper"]) {
   font-kerning: none;
   font-variant-ligatures: none;
 }
 
 .floater:is([data-style="stitched"], [data-style="taped"], [data-style="tooltype"],
-  [data-style="spareparts"], [data-style="blueprint"], [data-style="cutpaper"]) {
+  [data-style="blueprint"], [data-style="cutpaper"]) {
   font-family: var(--font);
   font-weight: var(--weight);
   letter-spacing: var(--tracking);
   line-height: var(--leading);
 }
 
-.floater:is([data-style="taped"], [data-style="spareparts"], [data-style="blueprint"], [data-style="cutpaper"]) {
+.floater:is([data-style="taped"], [data-style="blueprint"], [data-style="cutpaper"]) {
   font-size: 0.84em;
 }
 
@@ -261,42 +253,6 @@
 
 .repair-tool-hole {
   fill: var(--paper);
-}
-
-/* One mismatched metal stroke and slotted rivets make the m look rebuilt. */
-.repair-spare-part {
-  position: absolute;
-  top: 0.19em;
-  left: -0.015em;
-  width: 0.78em;
-  height: 0.78em;
-  overflow: visible;
-  transform: rotate(-6deg);
-}
-
-.repair-metal {
-  fill: var(--ink);
-  stroke: var(--paper);
-  stroke-width: 2.2;
-}
-
-.repair-metal-edge {
-  fill: none;
-  stroke: var(--paper);
-  stroke-width: 1.1;
-  opacity: 0.7;
-}
-
-.repair-rivet {
-  fill: var(--paper);
-  stroke: var(--ink);
-  stroke-width: 0.7;
-}
-
-.repair-rivet-slot {
-  fill: none;
-  stroke: var(--ink);
-  stroke-width: 0.8;
 }
 
 /* Drafting outlines and a dimension line, confined to the fixed word. */

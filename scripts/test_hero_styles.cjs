@@ -7,7 +7,7 @@ const { makeDOM } = require('./hero_test_dom.cjs');
 
 const source = fs.readFileSync(path.join(__dirname, '../assets/hero-styles.js'), 'utf8');
 const controller = fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8');
-const repairs = ['stitched', 'taped', 'tooltype', 'spareparts', 'blueprint', 'cutpaper'];
+const repairs = ['stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper'];
 const originalThemes = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox'];
 
 // Synthetic Range bounds exercise the real decoration/controller seam. This
@@ -76,10 +76,11 @@ function descendantText(node) {
 
 function walk(node) { return [node, ...node.children.flatMap(walk)]; }
 
-test('the shared catalog contains thirteen unique styles and retains canonical accessible prompts', () => {
+test('the shared catalog contains twelve unique styles and retains canonical accessible prompts', () => {
   const dom = styleDOM();
   assert.deepEqual(Array.from(dom.styles.themes), [...originalThemes, ...repairs]);
-  assert.equal(new Set(dom.styles.themes).size, 13);
+  assert.equal(new Set(dom.styles.themes).size, 12);
+  assert.equal(dom.styles.themes.includes('spareparts'), false);
   assert.equal(Object.isFrozen(dom.styles.themes), true);
   for (const theme of dom.styles.themes) {
     assert.equal(dom.styles.prompt(theme), theme === 'toolbox' ? '🙏, 🔧 my ' : 'please, mend my ');

@@ -2,10 +2,10 @@
 
 A responsive typing page with rotating typography and subtle monochrome lighting.
 
-Thirteen hero styles rotate without consecutive repeats. Alongside pixel, serif,
-comic, poster, typewriter, handwritten, and emoji styles, six repair treatments
-add stitched lettering, a torn tape patch, tool-shaped letters, riveted spare
-parts, blueprint marks, and cut-paper lettering. The new treatments decorate only
+Twelve hero styles rotate without consecutive repeats. Alongside pixel, serif,
+comic, poster, typewriter, handwritten, and emoji styles, five repair treatments
+add stitched lettering, a torn tape patch, tool-shaped letters, blueprint marks,
+and cut-paper lettering. The repair treatments decorate only
 the protected prompt; the editable text and caret stay native. The idle typing
 floaters share the same styles. Artwork uses local fonts, CSS, and inline vectors
 in the system light/dark palette; backgrounds keep their three-load rotation.

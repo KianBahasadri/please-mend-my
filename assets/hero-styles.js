@@ -2,7 +2,7 @@
   "use strict";
 
   const originals = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
-  const repairs = ["stitched", "taped", "tooltype", "spareparts", "blueprint", "cutpaper"];
+  const repairs = ["stitched", "taped", "tooltype", "blueprint", "cutpaper"];
   const themes = Object.freeze([...originals, ...repairs]);
   const prompt = theme => theme === "toolbox" ? "🙏, 🔧 my " : "please, mend my ";
   const svgNS = "http://www.w3.org/2000/svg";
@@ -181,16 +181,6 @@
     ], "0 0 40 64");
   }
 
-  function mechanicalPart() {
-    return drawing("repair-spare-part", [
-      ["path", { d: "M30 14 49 14 45 86 26 86Z", class: "repair-metal" }],
-      ["path", { d: "M32 20 43 20 M29 80 40 80", class: "repair-metal-edge" }],
-      ["circle", { cx: "38", cy: "28", r: "3", class: "repair-rivet" }],
-      ["circle", { cx: "35", cy: "72", r: "3", class: "repair-rivet" }],
-      ["path", { d: "M36 28h4 M33 72h4", class: "repair-rivet-slot" }],
-    ]);
-  }
-
   function build(theme, position) {
     const art = span("hero-prompt-art");
     art.dataset.repair = theme;
@@ -239,7 +229,6 @@
       const mend = add(8, 12, "repair-mend");
       add(12, text.length, "repair-my");
       if (theme === "stitched") mend.append(stitches());
-      if (theme === "spareparts") mend.append(mechanicalPart());
       if (theme === "blueprint") {
         const dimension = span("repair-dimension");
         dimension.append(span("repair-dimension-label", ""));
