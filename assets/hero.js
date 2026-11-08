@@ -14,7 +14,7 @@
   const measure = document.getElementById("measure");
   const theme = document.documentElement.dataset.theme;
   const styles = window.mendHeroStyles;
-  const prompt = styles?.prompt?.(theme) ?? (theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ");
+  const prompt = styles?.prompt?.(theme) ?? (theme === "toolbox" ? "🙏, 🔧 my " : "please, mend my ");
   let promptArt;
   // A small local vocabulary makes the automatic prompt conservative. Explicit
   // Enter/Tab can also clarify an unfamiliar single-word object; phrases do not.

@@ -591,7 +591,7 @@ test('editable underline content stays in sync through typing, cut, and reset', 
 test('all thirteen themes retain protected prompts and the controller stays static with reduced motion', async () => {
   for (const theme of themes) {
     const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
-    assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
+    assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔧 my ' : 'please, mend my ');
     dom.reveal('relationship');
     assert.equal(dom.document.activeElement, dom.clarification);
     assert.equal(dom.question.textContent, "What's wrong with your relationship?");

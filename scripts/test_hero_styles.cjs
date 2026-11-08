@@ -82,7 +82,7 @@ test('the shared catalog contains thirteen unique styles and retains canonical a
   assert.equal(new Set(dom.styles.themes).size, 13);
   assert.equal(Object.isFrozen(dom.styles.themes), true);
   for (const theme of dom.styles.themes) {
-    assert.equal(dom.styles.prompt(theme), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
+    assert.equal(dom.styles.prompt(theme), theme === 'toolbox' ? '🙏, 🔧 my ' : 'please, mend my ');
   }
 });
 

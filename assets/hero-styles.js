@@ -4,7 +4,7 @@
   const originals = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
   const repairs = ["stitched", "taped", "tooltype", "spareparts", "blueprint", "cutpaper"];
   const themes = Object.freeze([...originals, ...repairs]);
-  const prompt = theme => theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
+  const prompt = theme => theme === "toolbox" ? "🙏, 🔧 my " : "please, mend my ";
   const svgNS = "http://www.w3.org/2000/svg";
 
   function span(className, text = "") {
