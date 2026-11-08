@@ -7,6 +7,15 @@ catalog, with no cache lookups, AI calls, or format routing in the Go handler.
 The existing handler still reads a guide on its first prefetch and caches a
 bounded working set in memory.
 
+Before publication, `prepare_search.py` adds each validated guide's `symptoms`
+and `materials` to that document's inverted postings. It reads only IDs recorded
+in `manifest.structuredGuides.itemIds`, with no raw-guide content scan. The same
+normalization, Porter stems, and typo rules apply to those words. Numeric-bearing
+field text is retained as sparse `guideLiterals` metadata for the worker's
+existing literal identifier check; model punctuation remains significant.
+Five-field catalog rows and shared aliases remain unchanged. Queries need no
+guide fetches or external services.
+
 The browser dispatches v2/steps payloads to a text-only renderer, with tools,
 materials, safety notes, symptoms, checkable steps, local images, and copyable
 commands. Existing sanitized HTML uses the legacy renderer. Source credits and
@@ -87,8 +96,10 @@ published snapshot is modified in place.
 ## Build and serve locally
 
 The canonical pinned builder applies the overlay after merging source catalogs
-and before preparing the browser index. Its release key includes the active
-cache fingerprint, so new processed output cannot be hidden by release reuse.
+and before preparing the browser index. The standalone overlay also rebuilds
+postings in its unpublished stage, so both paths include symptoms and materials.
+Their release keys include the active cache fingerprint and indexer code, so
+new processed output cannot be hidden by release reuse.
 `--stage3-cache` overrides the default `<data-dir>/stage3_cache`.
 
 An existing raw release can receive the overlay without reingesting sources:
@@ -105,8 +116,8 @@ go build -o /tmp/please-mend-my-local .
 CATALOG_DIR=<printed-release-path> ADDR=127.0.0.1:8080 /tmp/please-mend-my-local
 ```
 
-A new overlay hardlinks unchanged guide/media files and atomically replaces only
-processed JSON/gzip and its own metadata. It enumerates filenames once to build
+A new overlay hardlinks unchanged guide/media files and atomically replaces
+processed JSON/gzip, the prepared index/gzip, and its own metadata. It enumerates filenames once to build
 the snapshot, without auditing guide/media contents. Repeating an unchanged
 overlay reuses its completed release. An empty active cache returns the original
 release immediately. The original legacy release must remain the base for later

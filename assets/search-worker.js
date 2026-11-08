@@ -222,6 +222,20 @@ function prepareInverted(metadata) {
   // Empty group zero has no postings; accepting it could associate aliases with
   // unrelated documents and is therefore an invalid catalog, not a search miss.
   const stems = unpackLists(metadata.stemPostings, metadata.stemOffsets, metadata.stemTerms.length, metadata.terms.length - 1);
+  if (metadata.guideLiterals !== undefined) {
+    if (!Array.isArray(metadata.guideLiterals)) invalidIndex();
+    let previous = -1;
+    for (const literal of metadata.guideLiterals) {
+      if (!Array.isArray(literal) || literal.length !== 2) invalidIndex();
+      const [doc, text] = literal;
+      if (!Number.isInteger(doc) || doc <= previous || doc < 0 || doc >= entries.length ||
+          typeof text !== "string" || !text.trim() || clean(text) !== text || !/\p{N}/u.test(text)) invalidIndex();
+      // Keep exact punctuation/model checks for generated materials and numeric
+      // symptoms without duplicating every guide string in browser search rows.
+      entries[doc].text += " " + text;
+      previous = doc;
+    }
+  }
   inverted = { terms: metadata.terms, stemTerms: metadata.stemTerms, postings, stems };
   groupOffsets = new Uint32Array(searchGroups.length + 1);
   for (const group of itemGroups) groupOffsets[group + 1]++;

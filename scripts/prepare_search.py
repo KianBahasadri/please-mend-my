@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import argparse
 import base64
+from collections.abc import Mapping
 from collections import defaultdict
 import gzip
 import hashlib
 import json
 from pathlib import Path
 import re
+import stat
 import unicodedata
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -147,8 +149,47 @@ def pack_postings(lists):
     return offsets, base64.b64encode(packed).decode("ascii")
 
 
-def prepare_index(index):
-    """Return deterministic search.inverted metadata for an enriched index."""
+def guide_terms(guide_records):
+    """Validate optional v2 inputs and keep their terms document-specific.
+
+    This is build-time data, not extra browser rows or shared alias groups.
+    Absent fields retain the same empty-list meaning as legacy records.
+    """
+    if guide_records is None:
+        return {}, {}
+    if isinstance(guide_records, Mapping):
+        entries = guide_records.items()
+    else:
+        try:
+            entries = ((record.get("id") if isinstance(record, dict) else None, record)
+                       for record in iter(guide_records))
+        except TypeError as error:
+            raise ValueError("Structured guide records must be a mapping or iterable.") from error
+    result, literals = {}, {}
+    for identifier, record in entries:
+        if (not isinstance(identifier, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", identifier)
+                or not isinstance(record, dict) or record.get("id") != identifier
+                or type(record.get("version")) is not int or record["version"] != 2
+                or identifier in result):
+            raise ValueError("Structured guide records need unique matching v2 identities.")
+        own, literal_values = set(), []
+        for field in ("symptoms", "materials"):
+            values = record.get(field, [])
+            if not isinstance(values, list) or not all(isinstance(value, str) for value in values):
+                raise ValueError("Structured guide " + field + " must be an array of strings.")
+            for value in values:
+                own.update(tokens(value))
+                normalized = clean(value)
+                if any(unicodedata.category(char).startswith("N") for char in normalized):
+                    literal_values.append(normalized)
+        result[identifier] = own
+        if literal_values:
+            literals[identifier] = " ".join(literal_values)
+    return result, literals
+
+
+def prepare_index(index, guide_records=None):
+    """Return deterministic postings, optionally including v2 symptoms/materials."""
     items, categories, search = index.get("items"), index.get("categories"), index.get("search")
     if not isinstance(items, list) or not isinstance(categories, list) or not isinstance(search, dict):
         raise ValueError("Prepared search requires a catalog and completed alias enrichment.")
@@ -163,12 +204,24 @@ def prepare_index(index):
     count = len(items)
     if count + len(groups) >= 2**32:
         raise ValueError("Catalog exceeds uint32 posting capacity.")
+    extra, literals = guide_terms(guide_records)
+    unseen = set(extra)
+    guide_literals = []
     for identifier, row in enumerate(items):
         if not isinstance(row, list) or len(row) < 5:
             raise ValueError("Search rows must retain the five-field catalog shape.")
         own = set(tokens(row[1])) | set(tokens(row[4])) | set(tokens(names.get(row[2], "")))
+        if extra and row[0] in extra:
+            if row[0] not in unseen:
+                raise ValueError("Structured guide ID occurs more than once in the catalog.")
+            unseen.remove(row[0])
+            own.update(extra[row[0]])
+            if row[0] in literals:
+                guide_literals.append([identifier, literals[row[0]]])
         for term in own:
             postings[term].add(identifier)
+    if unseen:
+        raise ValueError("Structured guides must refer to catalog item IDs.")
     for group, text in enumerate(groups[1:], 1):
         for term in set(tokens(text)):
             postings[term].add(count + group)
@@ -183,10 +236,15 @@ def prepare_index(index):
             roots[root].append(identifier)
     stem_terms = sorted(roots, key=lexicographic)
     stem_offsets, stem_body = pack_postings(roots[root] for root in stem_terms)
-    return {"version": 1, "normalization": "NFKD-no-marks-lower", "tokenizer": "unicode-LN",
-            "stemmer": "porter1980", "documents": count, "groups": len(groups), "terms": terms,
-            "offsets": offsets, "postings": body, "stemTerms": stem_terms,
-            "stemOffsets": stem_offsets, "stemPostings": stem_body}
+    result = {"version": 1, "normalization": "NFKD-no-marks-lower", "tokenizer": "unicode-LN",
+              "stemmer": "porter1980", "documents": count, "groups": len(groups), "terms": terms,
+              "offsets": offsets, "postings": body, "stemTerms": stem_terms,
+              "stemOffsets": stem_offsets, "stemPostings": stem_body}
+    if guide_literals:
+        # Numeric/model queries retain the worker's strict literal gate. Only
+        # these few source fields need text beside the compact token postings.
+        result["guideLiterals"] = guide_literals
+    return result
 
 
 def json_bytes(value):
@@ -199,16 +257,50 @@ def atomic_write(path, body):
     temporary.replace(path)
 
 
+def load_guide_records(runtime, index, manifest):
+    """Read only the v2 IDs recorded by validation, never enumerate raw guides."""
+    structured = manifest.get("structuredGuides", {})
+    if not isinstance(structured, dict):
+        raise ValueError("Structured guide completion metadata is invalid.")
+    count = structured.get("processedItems", 0)
+    identifiers = structured.get("itemIds", [])
+    if (type(count) is not int or count < 0 or not isinstance(identifiers, list)
+            or not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{20}", value)
+                       for value in identifiers) or len(set(identifiers)) != len(identifiers)):
+        raise ValueError("Structured guide IDs or completed count are invalid.")
+    if len(identifiers) != count:
+        raise ValueError("Structured guides need their complete itemIds; rebuild the validated overlay.")
+    if not count:
+        return {}
+    known = {row[0] for row in index.get("items", []) if isinstance(row, list) and row}
+    if not set(identifiers) <= known:
+        raise ValueError("Structured guide IDs must exist in the catalog.")
+    guides = runtime / "guides"
+    if not stat.S_ISDIR(guides.lstat().st_mode):
+        raise ValueError("Structured guide directory must not be a symlink.")
+    records = {}
+    for identifier in sorted(identifiers):
+        path = guides / (identifier + ".json")
+        if not stat.S_ISREG(path.lstat().st_mode):
+            raise ValueError("Structured guide input must be a regular file, not a symlink.")
+        records[identifier] = json.loads(path.read_bytes())
+    guide_terms(records)  # Validate before a caller can write completion metadata.
+    return records
+
+
 def prepare(data_dir, runtime=None):
     """Prepare an unpublished completed runtime; never mutate a served release."""
     data_dir = Path(data_dir).resolve()
     runtime = Path(runtime).resolve() if runtime else data_dir / "runtime"
     index_path, manifest_path = runtime / "index.json", runtime / "manifest.json"
+    if any(not stat.S_ISREG(path.lstat().st_mode) for path in (index_path, manifest_path)):
+        raise ValueError("Search index and completion metadata must be regular files, not symlinks.")
     index, manifest = json.loads(index_path.read_bytes()), json.loads(manifest_path.read_bytes())
     if (not manifest.get("runtimeComplete") or manifest.get("revision") != index.get("revision") or
             manifest.get("searchEnrichment", {}).get("version") != 1):
         raise ValueError("Inverted search preparation requires a completed unpublished enriched catalog.")
-    prepared = prepare_index(index)
+    records = load_guide_records(runtime, index, manifest)
+    prepared = prepare_index(index, records)
     index["search"]["inverted"] = prepared
     body = json_bytes(index)
     packed = gzip.compress(body, compresslevel=9, mtime=0)
@@ -219,6 +311,7 @@ def prepare(data_dir, runtime=None):
     metadata = {"version": 1, "tokenizer": prepared["tokenizer"], "stemmer": prepared["stemmer"],
                 "terms": len(prepared["terms"]), "stems": len(prepared["stemTerms"]),
                 "documents": prepared["documents"], "groups": prepared["groups"],
+                "structuredDocuments": len(records), "guideFields": ["symptoms", "materials"],
                 "indexSha256": hashlib.sha256(body).hexdigest()}
     manifest.update({"runtimeComplete": True, "indexBytes": len(body), "indexGzipBytes": len(packed),
                      "searchIndex": metadata})

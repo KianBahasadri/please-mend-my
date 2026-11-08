@@ -7,6 +7,7 @@ entry remain byte-for-byte legacy responses. No serving-time routing is needed.
 from __future__ import annotations
 
 import argparse
+from contextlib import redirect_stdout
 import fcntl
 import gzip
 import hashlib
@@ -103,6 +104,7 @@ def overlay_guides(runtime, cache_dir, expected_fingerprint=None):
     if expected_fingerprint is not None and fingerprint != expected_fingerprint:
         raise RuntimeError("Stage 3 cache changed during the catalog build; rerun with stable inputs.")
     applied = rejected = delta = 0
+    item_ids = []
     for identifier, cached in candidates.items():
         raw_path = runtime / "guides" / (identifier + ".json")
         try:
@@ -123,10 +125,12 @@ def overlay_guides(runtime, cache_dir, expected_fingerprint=None):
         _replace(raw_path, body)
         _replace(raw_path.with_name(raw_path.name + ".gz"), packed)
         applied += 1
+        item_ids.append(identifier)
         delta += len(body) - len(raw_bytes)
     if cache_fingerprint(cache_dir) != fingerprint:
         raise RuntimeError("Stage 3 cache changed during the catalog build; refusing to publish.")
     metadata = {"version": 2, "cacheSha256": fingerprint, "processedItems": applied,
+                "itemIds": sorted(item_ids),
                 "legacyItems": manifest["indexedItems"] - applied, "rejectedItems": rejected}
     manifest["structuredGuides"] = metadata
     if "guideJsonBytes" in manifest:
@@ -153,6 +157,7 @@ def overlay_release(source_runtime, cache_dir, release_root):
     the snapshot, never scans their content. The original runtime stays intact.
     """
     from build_catalog import completed_manifest, input_key
+    from prepare_search import prepare
     from structured_guides import canonical_bytes
 
     source = Path(source_runtime).absolute()
@@ -173,7 +178,9 @@ def overlay_release(source_runtime, cache_dir, release_root):
     release_root.mkdir(parents=True, exist_ok=True)
     if source.stat().st_dev != release_root.stat().st_dev:
         raise ValueError("Overlay releases must share a filesystem with their raw source.")
-    inputs = input_key((Path(__file__).resolve(), ROOT / "scripts/structured_guides.py"))
+    input_paths = (Path(__file__).resolve(), ROOT / "scripts/structured_guides.py",
+                   ROOT / "scripts/prepare_search.py")
+    inputs = input_key(input_paths)
     source_identity = {"manifest": manifest, "indexSha256": hashlib.sha256((source / "index.json").read_bytes()).hexdigest()}
     key = hashlib.sha256(canonical_bytes({"overlayInputs": inputs, "cache": fingerprint,
                                          "source": source_identity})).hexdigest()
@@ -197,14 +204,23 @@ def overlay_release(source_runtime, cache_dir, release_root):
             _link_directory(source / "guides", stage / "guides")
             _link_directory(source / "media", stage / "media")
             metadata = overlay_guides(stage, cache_dir, fingerprint)
+            # The guide overlay changes searchable symptoms/materials. Rebuild
+            # postings only in this unpublished stage; atomic index replacements
+            # break source hardlinks before any new bytes are written.
+            with tempfile.TemporaryDirectory(prefix=".search-", dir=release_root) as work:
+                with redirect_stdout(sys.stderr):
+                    search_index = prepare(Path(work), stage)
             receipt = {"pipelineSha256": key, "overlayOf": str(source), "overlayInputsSha256": inputs,
-                       "sourceIndexSha256": source_identity["indexSha256"], "structuredGuides": metadata}
+                       "sourceIndexSha256": source_identity["indexSha256"], "structuredGuides": metadata,
+                       "indexSha256": search_index["indexSha256"], "searchIndex": search_index}
             _replace(stage / "ingest.json", canonical_bytes(receipt))
             if cache_fingerprint(cache_dir) != fingerprint:
                 raise RuntimeError("Stage 3 cache changed before overlay publication.")
-            if input_key((Path(__file__).resolve(), ROOT / "scripts/structured_guides.py")) != inputs:
+            if input_key(input_paths) != inputs:
                 raise RuntimeError("Overlay pipeline inputs changed before publication.")
             completed_manifest(stage)
+            for name in ("index.json", "index.json.gz", "manifest.json"):
+                (stage / name).chmod(0o644)
             stage.chmod(0o755)
             stage.rename(release)
         finally:

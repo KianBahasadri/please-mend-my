@@ -8,11 +8,12 @@ const { performance } = require('node:perf_hooks');
 
 // Exercise the actual offline producer and browser worker together. No manually
 // duplicated postings fixture can hide a mismatch between Python and JavaScript.
-function prepare(index) {
+function prepare(index, guideRecords) {
   return JSON.parse(execFileSync(process.env.PMM_TEST_PYTHON || 'python3', ['-c',
     'import json,sys; sys.path.insert(0,sys.argv[1]); from prepare_search import prepare_index; '
-      + 'index=json.load(sys.stdin); index["search"]["inverted"]=prepare_index(index); json.dump(index,sys.stdout)',
-    __dirname], { input: JSON.stringify(index), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
+      + 'request=json.load(sys.stdin); index=request["index"]; '
+      + 'index["search"]["inverted"]=prepare_index(index,request.get("guideRecords")); json.dump(index,sys.stdout)',
+    __dirname], { input: JSON.stringify({ index, guideRecords }), encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 }));
 }
 
 async function workerFor(index, source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8')) {
@@ -81,6 +82,98 @@ test('prepared aliases combine with title terms, prefixes work, and exact titles
   assert.equal((await worker.search('fridge battery')).total, 0);
   assert.equal((await worker.search('MacBook Air Battery Replacement')).items[0][0], 'alias-laptop');
   assert.equal(worker.fetches(), 1, 'queries must not make additional requests');
+});
+
+function symptomFixture() {
+  const anaphylaxis = '00000000000000000001';
+  const other = '00000000000000000002';
+  const hinge = '00000000000000000003';
+  const index = { version: 1, revision: 'symptom-fixture', source: {},
+    categories: [{ id: 'health', name: 'Health & medicine' }, { id: 'household', name: 'Household' }],
+    items: [
+      [anaphylaxis, 'Anaphylaxis', 'health', 'article', ''],
+      [other, 'Allergy Care', 'health', 'article', ''],
+      [hinge, 'Door Hinge Repair', 'household', 'guide', 'Door'],
+    ],
+    search: { version: 1, groups: ['', 'allergy\nallergic'], itemGroups: [1, 1, 0] },
+  };
+  const guideRecords = {
+    [anaphylaxis]: { id: anaphylaxis, version: 2,
+      symptoms: ['Throat swelling', 'Hives', 'Impending doom', 'Shortness of breath'],
+      materials: ['Epinephrine autoinjector'] },
+    [hinge]: { id: hinge, version: 2,
+      symptoms: ['Squeaky door hinge'], materials: ['Mineral oil'] },
+  };
+  return { index, guideRecords, anaphylaxis, other, hinge };
+}
+
+test('AI symptoms and materials become browser-resident matches without guide fetches', async () => {
+  const { index, guideRecords, anaphylaxis, hinge } = symptomFixture();
+  const before = await workerFor(prepare(index));
+  assert.equal((await before.search('throat swelling')).total, 0);
+  assert.equal((await before.search('hives')).total, 0);
+  assert.equal((await before.search('mineral oil')).total, 0);
+  const prepared = prepare(index, guideRecords);
+  assert.deepEqual(prepared.items, index.items, 'new terms must not change the five-field public rows');
+  const worker = await workerFor(prepared);
+  for (const query of ['throat swelling', 'hives', 'impending doom', 'shortness of breath',
+    'epinephrine autoinjector', 'my throat is swelling']) {
+    assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), [anaphylaxis], query);
+  }
+  for (const query of ['mineral oil', 'squeaky door hinge']) {
+    assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), [hinge], query);
+  }
+  assert.equal(before.fetches(), 1);
+  assert.equal(worker.fetches(), 1, 'symptom/material queries use only the initial index, with no guide/API requests');
+});
+
+test('AI postings remain document-specific and retain stem, typo and alias intersections', async () => {
+  const { index, guideRecords, anaphylaxis, other, hinge } = symptomFixture();
+  const worker = await workerFor(prepare(index, guideRecords));
+  assert.deepEqual(new Set(Array.from((await worker.search('allergy')).items, row => row[0])),
+    new Set([anaphylaxis, other]));
+  for (const query of ['allergy throat swelling', 'throats swelling', 'throar swelling', 'autoinjecter']) {
+    assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), [anaphylaxis], query);
+  }
+  assert.deepEqual(Array.from((await worker.search('minerals oil')).items, row => row[0]), [hinge]);
+  assert.equal((await worker.search('allergy mineral oil')).total, 0, 'a material must not leak into unrelated alias groups');
+  assert.equal((await worker.search('hives mineral oil')).total, 0, 'terms from different guides cannot form one match');
+  assert.equal(worker.fetches(), 1);
+});
+
+test('symptom enrichment preserves exact title priority and literal model matching', async () => {
+  const { index, guideRecords, anaphylaxis } = symptomFixture();
+  const exact = '00000000000000000004';
+  index.items.push([exact, 'Hives', 'health', 'article', '']);
+  index.items.push(['s23', 'Samsung Galaxy S23 Screen Replacement', 'household', 'guide', 'Samsung Galaxy S23']);
+  index.items.push(['s24', 'Samsung Galaxy S24 Screen Replacement', 'household', 'guide', 'Samsung Galaxy S24']);
+  index.search.itemGroups.push(0, 0, 0);
+  const worker = await workerFor(prepare(index, guideRecords));
+  assert.deepEqual(Array.from((await worker.search('hives')).items, row => row[0]), [exact, anaphylaxis]);
+  assert.equal((await worker.search('Anaphylaxis')).items[0][0], anaphylaxis);
+  assert.deepEqual(Array.from((await worker.search('Galaxy S23')).items, row => row[0]), ['s23']);
+  assert.deepEqual(Array.from((await worker.search('Galaxy S24')).items, row => row[0]), ['s24']);
+  assert.equal((await worker.search('Galaxy S25')).total, 0);
+  assert.equal(worker.fetches(), 1);
+});
+
+test('numeric AI materials retain exact identifier and punctuation checks', async () => {
+  const { index, guideRecords, anaphylaxis, hinge } = symptomFixture();
+  guideRecords[anaphylaxis].materials.push('Antihistamines (H1 and H2)');
+  guideRecords[hinge].materials.push('Threadlocker 243', '3M 300LSE adhesive');
+  const prepared = prepare(index, guideRecords);
+  assert.deepEqual(prepared.search.inverted.guideLiterals.map(([doc]) => doc), [0, 2]);
+  const worker = await workerFor(prepared);
+  for (const query of ['antihistamines H1', 'antihistamines H2', 'H1']) {
+    assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), [anaphylaxis], query);
+  }
+  for (const query of ['threadlocker 243', '3M 300LSE adhesive']) {
+    assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), [hinge], query);
+  }
+  for (const query of ['antihistamines H3', 'antihistamines H1+', 'threadlocker 244', '3M 300LSE+', 'allergy 243']) {
+    assert.equal((await worker.search(query)).total, 0, query);
+  }
+  assert.equal(worker.fetches(), 1);
 });
 
 test('unprepared alias catalogs and legacy catalogs remain usable', async () => {
@@ -493,6 +586,24 @@ test('invalid alias references and damaged inverted metadata fail closed', async
   const badOffsets = prepare(fixture());
   badOffsets.search.inverted.offsets = [0];
   await assert.rejects(workerFor(badOffsets), /invalid|unsupported|format/i);
+});
+
+test('malformed sparse guide literals fail closed while older indexes remain valid', async () => {
+  const index = prepare(fixture());
+  const older = await workerFor(index);
+  assert.equal((await older.search('Galaxy S23')).items[0][0], 's23');
+  const malformed = [null, {}, 'h1', [null], [[0]], [[0, 'h1', 'extra']],
+    [[-1, 'h1']], [[index.items.length, 'h1']], [[true, 'h1']], [['0', 'h1']],
+    [[0.5, 'h1']], [[0, null]], [[0, '']], [[0, '   ']], [[0, 'H1']],
+    [[0, 'plain text']], [[0, 'h1'], [0, 'h2']], [[1, 'h1'], [0, 'h2']]];
+  for (const guideLiterals of malformed) {
+    const bad = structuredClone(index);
+    bad.search.inverted.guideLiterals = guideLiterals;
+    await assert.rejects(workerFor(bad), /prepared search inverted index is invalid/i, JSON.stringify(guideLiterals));
+  }
+  const empty = structuredClone(index);
+  empty.search.inverted.guideLiterals = [];
+  assert.equal((await (await workerFor(empty)).search('Galaxy S23')).items[0][0], 's23');
 });
 
 module.exports = { workerFor, prepare };

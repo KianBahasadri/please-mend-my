@@ -10,6 +10,9 @@ from unittest.mock import patch
 
 import prepare_search as search
 
+GUIDE_ID = "a" * 20
+OTHER_ID = "b" * 20
+
 
 def unpack(metadata, key=""):
     terms = metadata["stemTerms" if key else "terms"]
@@ -44,6 +47,21 @@ def fixture():
 
 
 class SearchPreparationTests(unittest.TestCase):
+    def write_runtime(self, directory, index=None, structured=None):
+        root = Path(directory)
+        runtime = root / "runtime"
+        runtime.mkdir()
+        original = fixture() if index is None else index
+        for row in original["items"]:
+            row[0] = {"one": GUIDE_ID, "two": OTHER_ID, "three": "c" * 20}.get(row[0], row[0])
+        (runtime / "index.json").write_text(json.dumps(original))
+        manifest = {"revision": "fixture", "runtimeComplete": True,
+                    "searchEnrichment": {"version": 1}}
+        if structured is not None:
+            manifest["structuredGuides"] = structured
+        (runtime / "manifest.json").write_text(json.dumps(manifest))
+        return root, runtime, original
+
     def test_original_porter_forms_and_strict_model_tokens(self):
         expected = {"batteries": "batteri", "battery": "batteri", "repairing": "repair",
                     "repairs": "repair", "caresses": "caress", "ponies": "poni", "ties": "ti",
@@ -83,6 +101,166 @@ class SearchPreparationTests(unittest.TestCase):
         index["items"][0][1] = "\U00010400 \ufff0 \u4e00"
         prepared = search.prepare_index(index)
         self.assertEqual(prepared["terms"], sorted(prepared["terms"], key=search.lexicographic))
+
+    def test_v2_symptoms_and_materials_are_document_postings_not_shared_aliases(self):
+        index = fixture()
+        index["items"][0][1] = "Anaphylaxis"
+        records = {"one": {"id": "one", "version": 2,
+                           "symptoms": ["throat swelling", "shortness of breath", "hives", "impending doom", "HIVES"],
+                           "materials": ["Mineral oil", "WH-1000XM4 battery", "mineral oil"],
+                           "html": "Do not index this arbitrary body text"}}
+        before_index, before_records = copy.deepcopy(index), copy.deepcopy(records)
+        prepared = search.prepare_index(index, records)
+        postings, stems = unpack(prepared), unpack(prepared, "stem")
+        for term in ("throat", "swelling", "shortness", "breath", "hives", "impending", "doom", "mineral", "oil"):
+            self.assertEqual(postings[term], [0], term)
+        self.assertEqual(postings["laptop"], [4], "An unchanged shared alias may still belong to both MacBooks")
+        self.assertEqual(postings["1000xm4"], [0])
+        self.assertEqual(postings["1000"], [0])
+        self.assertEqual(prepared["guideLiterals"], [[0, "wh-1000xm4 battery"]])
+        self.assertNotIn("1000xm4", stems, "Model identifiers must not be stemmed")
+        self.assertIn("swelling", [prepared["terms"][number] for number in stems["swell"]])
+        self.assertIn("hives", [prepared["terms"][number] for number in stems["hive"]])
+        self.assertNotIn("arbitrary", postings, "Only explicitly requested fields are indexed")
+        self.assertEqual(index, before_index)
+        self.assertEqual(records, before_records)
+        self.assertEqual(prepared, search.prepare_index(index, list(records.values())))
+        self.assertEqual(prepared, search.prepare_index(index, dict(reversed(list(records.items())))))
+
+    def test_sparse_numeric_literals_keep_punctuation_and_stay_on_their_guide(self):
+        records = {"three": {"id": "three", "version": 2, "symptoms": ["Buzzing sound"],
+                             "materials": ["3/32 inch Flathead Screwdriver", "Café Oil Ｈ１"]},
+                   "one": {"id": "one", "version": 2, "symptoms": ["Hives"], "materials": ["H1 antihistamine"]},
+                   "two": {"id": "two", "version": 2, "symptoms": ["Swelling"], "materials": ["Oil"]}}
+        prepared = search.prepare_index(fixture(), records)
+        self.assertEqual(prepared["guideLiterals"], [[0, "h1 antihistamine"],
+                         [2, "3/32 inch flathead screwdriver cafe oil h1"]])
+        postings = unpack(prepared)
+        self.assertEqual(postings["h1"], [0, 2])
+        self.assertEqual(postings["antihistamine"], [0])
+        self.assertEqual(postings["screwdriver"], [2])
+        self.assertEqual(postings["32"], [2])
+        self.assertEqual(prepared, search.prepare_index(fixture(), dict(reversed(list(records.items())))))
+
+    def test_numeric_literal_detection_follows_normalization_for_fractions(self):
+        record = {"id": "one", "version": 2,
+                  "materials": ["½ cup", "Ⅳ litres", "四 cups"], "symptoms": []}
+        prepared = search.prepare_index(fixture(), [record])
+        self.assertEqual(prepared["guideLiterals"], [[0, "1⁄2 cup"]])
+        postings = unpack(prepared)
+        self.assertEqual(postings["1"], [0])
+        self.assertEqual(postings["2"], [0])
+
+    def test_no_or_empty_structured_fields_leave_the_original_postings_unchanged(self):
+        index = fixture()
+        baseline = search.prepare_index(index)
+        self.assertEqual(search.prepare_index(index, {}), baseline)
+        self.assertEqual(search.prepare_index(index, []), baseline)
+        self.assertEqual(search.prepare_index(index, {"one": {"id": "one", "version": 2}}), baseline)
+        self.assertEqual(search.prepare_index(index, {"one": {"id": "one", "version": 2,
+                                                             "symptoms": [], "materials": []}}), baseline)
+
+    def test_malformed_unknown_or_duplicate_structured_records_are_rejected(self):
+        record = {"id": "one", "version": 2, "symptoms": ["hives"], "materials": []}
+        cases = [1, [None], {"one": "text"}, {"two": record},
+                 {"one": {**record, "version": 1}}, {"one": {**record, "version": 2.0}},
+                 {"one": {**record, "symptoms": "hives"}},
+                 {"one": {**record, "materials": [{"invented": "string coercion"}]}},
+                 {"one": {**record, "symptoms": [None]}},
+                 {"unknown": {**record, "id": "unknown"}}, [record, record]]
+        for records in cases:
+            with self.subTest(records=records), self.assertRaises(ValueError):
+                search.prepare_index(fixture(), records)
+        index = fixture()
+        index["items"][1][0] = "one"
+        with self.assertRaisesRegex(ValueError, "more than once"):
+            search.prepare_index(index, {"one": record})
+
+    def test_runtime_reads_only_validated_structured_ids_and_keeps_payloads_untouched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, runtime, original = self.write_runtime(directory, structured={
+                "processedItems": 1, "itemIds": [GUIDE_ID]})
+            guides = runtime / "guides"
+            guides.mkdir()
+            record = {"id": GUIDE_ID, "version": 2, "symptoms": ["hives", "throat swelling"],
+                      "materials": ["mineral oil"]}
+            source_body = json.dumps(record).encode()
+            (guides / (GUIDE_ID + ".json")).write_bytes(source_body)
+            (guides / (OTHER_ID + ".json")).write_bytes(b"Unselected raw payload must not be opened")
+            reads = []
+            read = Path.read_bytes
+            def traced(path):
+                if path.parent == guides:
+                    reads.append(path.name)
+                return read(path)
+            with patch.object(Path, "read_bytes", traced), patch.object(Path, "iterdir", side_effect=AssertionError("No guide scan")):
+                metadata = search.prepare(root)
+            self.assertEqual(reads, [GUIDE_ID + ".json"])
+            rebuilt = json.loads((runtime / "index.json").read_bytes())
+            postings = unpack(rebuilt["search"]["inverted"])
+            self.assertEqual(postings["hives"], [0])
+            self.assertEqual(postings["mineral"], [0])
+            self.assertEqual(rebuilt["items"], original["items"])
+            self.assertEqual((guides / (GUIDE_ID + ".json")).read_bytes(), source_body)
+            self.assertEqual(metadata["structuredDocuments"], 1)
+            self.assertEqual(metadata["guideFields"], ["symptoms", "materials"])
+            self.assertEqual(gzip.decompress((runtime / "index.json.gz").read_bytes()),
+                             (runtime / "index.json").read_bytes())
+            self.assertEqual(search.prepare(root), metadata)
+
+    def test_legacy_and_empty_processed_metadata_never_read_guide_files(self):
+        for structured in (None, {}, {"processedItems": 0}, {"processedItems": 0, "itemIds": []}):
+            with self.subTest(structured=structured), tempfile.TemporaryDirectory() as directory:
+                root, runtime, _ = self.write_runtime(directory, structured=structured)
+                read = Path.read_bytes
+                def traced(path):
+                    self.assertNotEqual(path.parent.name, "guides", "Legacy guides need no content reads")
+                    return read(path)
+                with patch.object(Path, "read_bytes", traced):
+                    metadata = search.prepare(root)
+                self.assertEqual(metadata["structuredDocuments"], 0)
+                self.assertFalse((runtime / "guides").exists())
+
+    def test_invalid_or_incomplete_structured_id_metadata_fails_before_writing(self):
+        cases = [{"processedItems": 1}, {"processedItems": 2, "itemIds": [GUIDE_ID]},
+                 {"processedItems": 2, "itemIds": [GUIDE_ID, GUIDE_ID]},
+                 {"processedItems": 1, "itemIds": ["f" * 20]},
+                 {"processedItems": 1, "itemIds": ["../outside"]},
+                 {"processedItems": 1, "itemIds": ["one"]},
+                 {"processedItems": True, "itemIds": [GUIDE_ID]},
+                 {"processedItems": -1, "itemIds": []}, {"processedItems": 1, "itemIds": GUIDE_ID}]
+        for structured in cases:
+            with self.subTest(structured=structured), tempfile.TemporaryDirectory() as directory:
+                root, runtime, _ = self.write_runtime(directory, structured=structured)
+                before_index = (runtime / "index.json").read_bytes()
+                before_manifest = (runtime / "manifest.json").read_bytes()
+                with self.assertRaises(ValueError):
+                    search.prepare(root)
+                self.assertEqual((runtime / "index.json").read_bytes(), before_index)
+                self.assertEqual((runtime / "manifest.json").read_bytes(), before_manifest)
+                self.assertFalse((runtime / "index.json.gz").exists())
+
+    def test_missing_malformed_or_symlink_structured_guide_cannot_publish(self):
+        for mode in ("missing", "wrong-id", "legacy-version", "non-string", "invalid-json", "symlink"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as directory:
+                root, runtime, _ = self.write_runtime(directory, structured={"processedItems": 1, "itemIds": [GUIDE_ID]})
+                guides = runtime / "guides"
+                guides.mkdir()
+                record = {"id": GUIDE_ID, "version": 2, "symptoms": ["hives"], "materials": []}
+                path = guides / (GUIDE_ID + ".json")
+                if mode == "wrong-id": record["id"] = OTHER_ID
+                elif mode == "legacy-version": record["version"] = 1
+                elif mode == "non-string": record["materials"] = [False]
+                if mode == "symlink":
+                    target = root / "elsewhere.json"
+                    target.write_text(json.dumps(record))
+                    path.symlink_to(target)
+                elif mode == "invalid-json": path.write_text("{truncated")
+                elif mode != "missing": path.write_text(json.dumps(record))
+                before = (runtime / "manifest.json").read_bytes()
+                with self.assertRaises((OSError, ValueError)):
+                    search.prepare(root)
+                self.assertEqual((runtime / "manifest.json").read_bytes(), before)
 
     def test_multibyte_delta_varints_decode_and_reject_invalid_identifiers(self):
         offsets, body = search.pack_postings([[0, 127, 128, 16384, 2**32 - 1], [1, 3, 900]])

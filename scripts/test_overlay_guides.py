@@ -1,6 +1,7 @@
 """Tiny publication fixtures exercise v2/v1 routing without reading the corpus."""
 from copy import deepcopy
 import gzip
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,9 @@ import unittest
 from unittest.mock import patch
 
 import overlay_guides as overlay
+import prepare_search as search
 from structured_guides import canonical_bytes, make_v2
+from test_prepare_search import unpack
 
 
 class OverlayTests(unittest.TestCase):
@@ -39,9 +42,14 @@ class OverlayTests(unittest.TestCase):
                         "steps": [{"title": "Disconnect power", "body": "Unplug the laptop.",
                                    "warnings": [], "images": [], "code": ""}]}
         self.detail = make_v2(self.raw, self.content, "qwen/qwen3.6-35b-a3b")
-        index = canonical_bytes({"version": 1, "revision": "fixture", "items": [
+        source_index = {"version": 1, "revision": "fixture", "categories": [
+            {"id": "technology", "name": "Technology"}],
+            "fields": ["id", "title", "category", "kind", "device"], "items": [
             [identifier, self.raw["title"], "technology", "guide", "Laptop"]
-            for identifier in (self.identifier, self.legacy_id)]})
+            for identifier in (self.identifier, self.legacy_id)],
+            "search": {"version": 1, "groups": ["", "notebook"], "itemGroups": [1, 1]}}
+        source_index["search"]["inverted"] = search.prepare_index(source_index)
+        index = canonical_bytes(source_index)
         (self.source / "index.json").write_bytes(index)
         packed = gzip.compress(index, mtime=0)
         (self.source / "index.json.gz").write_bytes(packed)
@@ -50,7 +58,8 @@ class OverlayTests(unittest.TestCase):
                     "indexedItems": 2, "uniqueMediaFiles": 1,
                     "indexBytes": len(index), "indexGzipBytes": len(packed),
                     "guideJsonBytes": sum(path.stat().st_size for path in (self.source / "guides").glob("*.json")),
-                    "searchIndex": {"version": 1}, "archiveChecksumVerified": True,
+                    "searchIndex": {"version": 1}, "searchEnrichment": {"version": 1},
+                    "archiveChecksumVerified": True,
                     "zimChecksumVerified": True, "archiveSha256": "f" * 64, "expectedSha256": "f" * 64}
         (self.source / "manifest.json").write_bytes(canonical_bytes(manifest))
 
@@ -81,6 +90,7 @@ class OverlayTests(unittest.TestCase):
         self.assertNotEqual(path.stat().st_ino, (self.source / "guides" / path.name).stat().st_ino)
         self.assertEqual((stage / "guides" / (self.legacy_id + ".json")).stat().st_ino, legacy_inode)
         self.assertEqual(metadata["processedItems"], 1)
+        self.assertEqual(metadata["itemIds"], [self.identifier])
         self.assertEqual(metadata["legacyItems"], 1)
         self.assertEqual(metadata["rejectedItems"], 0)
         self.assertEqual(path.stat().st_mode & 0o777, 0o644)
@@ -95,6 +105,7 @@ class OverlayTests(unittest.TestCase):
         with patch.object(overlay.os, "scandir", side_effect=AssertionError("missing cache needs no scan")):
             metadata = overlay.overlay_guides(stage, self.root / "missing-cache")
         self.assertEqual(metadata["processedItems"], 0)
+        self.assertEqual(metadata["itemIds"], [])
         self.assertEqual(metadata["legacyItems"], 2)
         for path in (stage / "guides").iterdir():
             self.assertEqual(path.read_bytes(), (self.source / "guides" / path.name).read_bytes())
@@ -111,6 +122,7 @@ class OverlayTests(unittest.TestCase):
                 stage = self.clone("stage" + str(number))
                 metadata = overlay.overlay_guides(stage, self.cache)
                 self.assertEqual(metadata["processedItems"], 0)
+                self.assertEqual(metadata["itemIds"], [])
                 self.assertEqual(metadata["rejectedItems"], 1)
                 for path in (stage / "guides").iterdir():
                     self.assertEqual(path.read_bytes(), (self.source / "guides" / path.name).read_bytes())
@@ -155,10 +167,28 @@ class OverlayTests(unittest.TestCase):
     def test_standalone_build_publishes_reuses_and_rebuilds_without_mutating_source(self):
         path = self.activate()
         releases = self.root / "releases"
+        original_index = (self.source / "index.json").read_bytes()
+        original_manifest = (self.source / "manifest.json").read_bytes()
         first = overlay.overlay_release(self.source, self.cache, releases)
         self.assertEqual(json.loads((first / "guides" / path.name).read_bytes())["version"], 2)
         self.assertEqual(first.stat().st_mode & 0o777, 0o755)
-        self.assertEqual((first / "index.json").stat().st_ino, (self.source / "index.json").stat().st_ino)
+        self.assertNotEqual((first / "index.json").stat().st_ino, (self.source / "index.json").stat().st_ino)
+        self.assertEqual((self.source / "index.json").read_bytes(), original_index)
+        self.assertEqual((self.source / "manifest.json").read_bytes(), original_manifest)
+        body = (first / "index.json").read_bytes()
+        self.assertEqual(gzip.decompress((first / "index.json.gz").read_bytes()), body)
+        index = json.loads(body)
+        postings = unpack(index["search"]["inverted"])
+        self.assertEqual(postings["charge"], [0], "Only the processed guide inherits symptoms")
+        self.assertEqual(postings["replacement"], [0], "Materials become document terms")
+        receipt = json.loads((first / "ingest.json").read_bytes())
+        manifest = json.loads((first / "manifest.json").read_bytes())
+        self.assertEqual(receipt["indexSha256"], hashlib.sha256(body).hexdigest())
+        self.assertEqual(receipt["searchIndex"], manifest["searchIndex"])
+        self.assertEqual(receipt["sourceIndexSha256"], hashlib.sha256(original_index).hexdigest())
+        self.assertNotEqual(receipt["indexSha256"], receipt["sourceIndexSha256"])
+        for name in ("index.json", "index.json.gz", "manifest.json"):
+            self.assertEqual((first / name).stat().st_mode & 0o777, 0o644)
         media_name = "c" * 64 + ".png"
         self.assertEqual((first / "media" / media_name).stat().st_ino, (self.source / "media" / media_name).stat().st_ino)
         with patch.object(overlay, "_link_directory", side_effect=AssertionError("reuse must not enumerate corpus")):
@@ -171,6 +201,36 @@ class OverlayTests(unittest.TestCase):
         self.assertEqual(json.loads((first / "guides" / path.name).read_bytes())["summary"], self.content["summary"])
         self.assertIn("html", json.loads((self.source / "guides" / path.name).read_bytes()))
         self.assertEqual(list(releases.glob(".overlay-*")), [])
+        self.assertEqual(list(releases.glob(".search-*")), [])
+
+    def test_search_preparation_failure_leaves_source_and_previous_release_untouched(self):
+        self.activate()
+        releases = self.root / "releases"
+        first = overlay.overlay_release(self.source, self.cache, releases)
+        original_index = (self.source / "index.json").read_bytes()
+        published_index = (first / "index.json").read_bytes()
+        changed = deepcopy(self.content)
+        changed["symptoms"].append("A newly extracted diagnostic symptom")
+        self.activate(make_v2(self.raw, changed, "qwen/qwen3.6-35b-a3b"))
+        with patch.object(search, "prepare", side_effect=OSError("index write failed")):
+            with self.assertRaisesRegex(OSError, "index write failed"):
+                overlay.overlay_release(self.source, self.cache, releases)
+        self.assertEqual((self.source / "index.json").read_bytes(), original_index)
+        self.assertEqual((first / "index.json").read_bytes(), published_index)
+        self.assertEqual(sorted(path.name for path in releases.iterdir()), [".overlay.lock", first.name])
+
+    def test_standalone_key_includes_search_preparation_code(self):
+        self.activate()
+        import build_catalog
+        captured = []
+        original_key = build_catalog.input_key
+        def record_inputs(paths):
+            captured.append(tuple(Path(path).name for path in paths))
+            return original_key(paths)
+        with patch.object(build_catalog, "input_key", side_effect=record_inputs):
+            overlay.overlay_release(self.source, self.cache, self.root / "releases")
+        self.assertGreaterEqual(len(captured), 2)
+        self.assertTrue(all("prepare_search.py" in paths for paths in captured))
 
     def test_standalone_empty_cache_returns_source_without_corpus_read_or_new_release(self):
         with patch.object(overlay, "_link_directory", side_effect=AssertionError("no active cache needs no corpus walk")):

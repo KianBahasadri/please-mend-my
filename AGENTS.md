@@ -20,6 +20,7 @@
 - Ingest via the same pinned Python pipeline locally/EC2; cloud downloads sources/builds its own catalog; never upload local corpus.
 - Prepare all enrichment/aliases/categories before publish; searches use our index/DB only; no external API calls.
 - Search: offline aliases+inverted postings+Porter stems; typo edits 1 for 5–7 letters, 2 for ≥8; numeric/model tokens strict; exact/model matches first; benchmark size/startup/memory/query before deploy.
+- Index v2 symptoms+materials per guide at build time; overlay must rebuild postings before publish. Read processed IDs only; no raw-corpus scan/runtime fetches.
 - General entries before niche guides; complete title words win even reordered ("arm broken"→"Broken arm"); exact/model intent wins.
 - Search ignores conversational filler/intensifiers ("it's", "fucking"); retain negation/symptoms/exact title+model intent; browser only.
 - Hero completion uses the same filler rules: "fucking dick"→"dick" for Enter/Tab/?.!/idle eligibility/question; keep typed text; symptom phrases still skip.
