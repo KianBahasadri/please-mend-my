@@ -1363,3 +1363,21 @@ test('subject category evidence preserves normalized Unicode word/brand boundari
     assert.equal(result[0], result[1], text);
   }
 });
+
+test('scopedSubjectSearch confines candidate results strictly to the subject category and prefers repair guides', async () => {
+  const worker = await workerFor(prepare(hierarchyFixture()));
+  let id = 100;
+  worker.send({ type: 'search', requestId: ++id, query: 'laptop screen', subject: 'laptop', specifics: 'screen', count: 6 });
+  const scopedRes = await worker.next('results');
+  assert.equal(scopedRes.requestId, id);
+  assert.ok(scopedRes.items.every(item => item[0] !== 'dog-choking' && item[0] !== 'wrong-domain'));
+  const ids = scopedRes.items.map(item => item[0]);
+  assert.ok(ids.includes('model'));
+  assert.ok(ids.includes('other-model'));
+  assert.ok(ids.indexOf('model') < ids.indexOf('laptop'), 'guide should outrank article in scoped search');
+
+  worker.send({ type: 'search', requestId: ++id, query: 'dog choking', subject: 'dog', specifics: 'choking', count: 6 });
+  const dogRes = await worker.next('results');
+  assert.equal(dogRes.requestId, id);
+  assert.deepEqual(Array.from(dogRes.items, row => row[0]), ['dog-choking']);
+});

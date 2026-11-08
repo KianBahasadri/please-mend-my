@@ -163,6 +163,16 @@
     return [suffix(first).trim(), open ? suffix(second).trim() : ""].filter(Boolean).join(" ");
   }
 
+  function context() {
+    return {
+      query: query(),
+      subject: open ? subject : "",
+      first: suffix(first).trim(),
+      specifics: open ? suffix(second).trim() : "",
+      awaiting: isAwaitingSpecifics()
+    };
+  }
+
   function syncTitle() {
     const title = first.value.trim();
     if (document.title !== title) document.title = title;
@@ -512,7 +522,7 @@
   fixedUnderline.textContent = prompt;
   promptArt = styles?.mount?.(first.closest(".hero-field"), fixedUnderline, theme);
   measure.textContent = `${prompt}relationship`;
-  window.mendHero = { query, focus: () => focus(), isAwaitingSpecifics, settleDelay, setVocabulary,
+  window.mendHero = { query, context, focus: () => focus(), isAwaitingSpecifics, settleDelay, setVocabulary,
     settle: () => finishSettle(true) };
   window.addEventListener("mend:specifiersready", () => {
     if ([...state.values()].some(item => item.composing)) { registryPending = true; return; }

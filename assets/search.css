@@ -285,6 +285,50 @@ a:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.guide-badge {
+  display: inline-block;
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  margin-bottom: 0.6rem;
+  width: fit-content;
+}
+
+.guide-badge-diagnostic {
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: color-mix(in srgb, var(--ink) 75%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 18%, transparent);
+}
+
+.guide-badge-guide {
+  background: color-mix(in srgb, #2d8a4e 12%, transparent);
+  color: color-mix(in srgb, #2d8a4e 85%, var(--ink));
+  border: 1px solid color-mix(in srgb, #2d8a4e 25%, transparent);
+}
+
+.guide-diagnostic-triage {
+  margin: 1.25rem 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-left: 3px solid color-mix(in srgb, var(--ink) 35%, transparent);
+  font-size: 0.95rem;
+  color: color-mix(in srgb, var(--ink) 80%, transparent);
+}
+
+.guide-diagnostic-triage p {
+  margin: 0;
+}
+
+.guide-diagnostic-triage p + p {
+  margin-top: 0.4rem;
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--ink) 60%, transparent);
+}
+
 .guide-panel h1 {
   margin-top: 0;
   font-size: clamp(1.9rem, 4.5vw, 3.6rem);

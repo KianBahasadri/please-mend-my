@@ -119,7 +119,16 @@
     // The worker still ranks the best 100. The inline UI needs only the first
     // answer and five alternatives, avoiding card layout/range round trips.
     results.hidden = false;
-    pendingSearch = { type: "search", requestId, query: text, count: 6 };
+    const heroCtx = hero?.context?.() || null;
+    pendingSearch = {
+      type: "search",
+      requestId,
+      query: text,
+      count: 6,
+      subject: heroCtx?.subject || "",
+      specifics: heroCtx?.specifics || "",
+      awaiting: Boolean(heroCtx?.awaiting)
+    };
     pendingInputAt = undefined;
     // Posting is independent of the rendering frame. The worker already
     // coalesces pending edits; an animation-frame wait adds visible input lag.
@@ -456,10 +465,22 @@
   function renderGuide(detail, focusHeading = false, scope) {
     body.removeAttribute("aria-busy");
     const fragment = document.createDocumentFragment();
-    const heading = node("h1", "guide-title", detail.title || "Repair guide");
+    const isDiagnostic = detail.kind === "article" || Boolean(hero?.isAwaitingSpecifics?.());
+    const badge = node("span", `guide-badge ${isDiagnostic ? "guide-badge-diagnostic" : "guide-badge-guide"}`,
+      isDiagnostic ? "Diagnostic Overview" : "Repair Guide");
+    fragment.append(badge);
+    const heading = node("h1", "guide-title", detail.title || (isDiagnostic ? "Diagnostic overview" : "Repair guide"));
     heading.tabIndex = -1;
     fragment.append(heading);
     if (scope) fragment.append(node("p", "guide-scope", `General guidance for ${scope.label}`));
+    if (isDiagnostic && hero?.isAwaitingSpecifics?.()) {
+      const triage = node("div", "guide-diagnostic-triage");
+      triage.append(
+        node("p", "", `Informational overview for ${scope?.label || detail.device || detail.title}.`),
+        node("p", "", "Type what is wrong above or select a component to find step-by-step repair guides.")
+      );
+      fragment.append(triage);
+    }
     if (typeof detail.summary === "string" && detail.summary) fragment.append(node("p", "guide-summary", detail.summary));
     fragment.append(renderProvenance(detail));
     const coverUrl = safeUrl(detail.images?.[0]);

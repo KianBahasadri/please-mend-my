@@ -1257,30 +1257,152 @@ function literalTitles(query) {
   return matches.sort((a, b) => Number(entries[b].row[3] === "guide") - Number(entries[a].row[3] === "guide") || a - b);
 }
 
+function scopedSubjectSearch(subjectText, specificsText) {
+  if (!hierarchy || !inverted) return null;
+  const rawSubject = clean(subjectText).trim();
+  const rawSpecifics = clean(specificsText).trim();
+  if (!rawSubject || !rawSpecifics) return null;
+
+  const normalized = normalizeSubject(rawSubject);
+  const node = hierarchy.models.get(rawSubject) ?? hierarchy.aliases.get(normalized);
+  if (node === undefined) return null;
+
+  const domain = hierarchy.domain(node);
+  const conflictingDomains = { artifact: 6, animal: 5, person: 3 }[domain] || 0;
+  const ancestors = new Map([[node, hierarchy.models.has(rawSubject) ? 1 : 0]]);
+  let frontier = [node];
+  for (let step = 0; step < 16 && frontier.length && ancestors.size < 64; step++) {
+    const next = [];
+    for (const n of frontier) for (const parent of hierarchy.parents[n]) {
+      if (ancestors.has(parent) || hierarchy.domain(parent) !== domain) continue;
+      ancestors.set(parent, ancestors.get(n) + 1);
+      next.push(parent);
+      if (ancestors.size === 64) break;
+    }
+    frontier = next;
+  }
+  const subjectPatterns = new Map([...ancestors.keys()].map(n =>
+    [n, canonicalSubjectPattern(hierarchy.nodes[n][1])]));
+  const scope = hierarchyScope({ node, subject: rawSubject }, ancestors, subjectPatterns, domain, conflictingDomains);
+  if (!scope || !scope.length) return null;
+
+  const specificQuery = searchPhrase(rawSpecifics);
+  const tokens = [...new Set(words(specificQuery))];
+  if (!tokens.length) return null;
+
+  const stems = tokens.map(porter);
+  const tokenSet = new Set(tokens);
+  const exactPhrase = " " + tokens.join(" ") + " ";
+  const subjectWords = words(rawSubject);
+  const subjectStemSet = new Set(subjectWords.map(porter));
+
+  const best = shortlist();
+  const scopes = new Map();
+
+  for (const doc of scope) {
+    const entry = entries[doc];
+    if (!actionable(entry)) continue;
+
+    const titleWords = words(entry.title);
+    const titleStems = titleWords.map(porter);
+    const structured = inverted.structuredTerms.get(doc);
+    const titleText = " " + titleWords.join(" ") + " ";
+
+    let exactPhraseMatch = titleText.includes(exactPhrase);
+    let matchedWords = 0;
+    let matchedStems = 0;
+    let matchedStructured = 0;
+
+    for (let i = 0; i < tokens.length; i++) {
+      const token = tokens[i];
+      const stem = stems[i];
+      if (titleWords.includes(token)) matchedWords++;
+      else if (titleStems.includes(stem)) matchedStems++;
+      if (structured && (structured.has(token) || structured.has(stem))) matchedStructured++;
+    }
+
+    if (!exactPhraseMatch && matchedWords === 0 && matchedStems === 0 && matchedStructured === 0) {
+      continue;
+    }
+
+    let score = 5000;
+
+    // 1. Repair guides are preferred over non-guide articles when searching specific ailments:
+    if (entry.row[3] === "guide") score += 3000;
+
+    // 2. Exact phrase in title:
+    if (exactPhraseMatch) score += 3500;
+
+    // 3. Matched tokens:
+    score += matchedWords * 1000;
+    score += matchedStems * 500;
+    score += matchedStructured * 800;
+
+    // Full coverage bonus (all query tokens represented):
+    if (matchedWords + matchedStems + matchedStructured >= tokens.length) {
+      score += 2000;
+    }
+
+    // Direct device match (e.g. device is "Bicycle" or matches the subject):
+    if (entry.device && words(clean(entry.device)).some(w => tokenSet.has(w) || subjectStemSet.has(porter(w)))) {
+      score += 400;
+    }
+
+    // Direct part match: if title contains specific query tokens:
+    if (titleWords.some(w => tokenSet.has(w))) {
+      score += 500;
+    }
+
+    // Brevity bonus: concise, focused titles score slightly higher:
+    score += Math.max(0, 60 - entry.title.length) * 5;
+
+    best.add(doc, score);
+    scopes.set(doc, { id: entry.row[0], subject: rawSubject, label: hierarchy.nodes[node][1], distance: 0 });
+  }
+
+  const results = best.sorted();
+  if (!results.length) return null;
+
+  for (const doc of results) {
+    if (scopes.has(doc)) inheritedMatches.set(doc, scopes.get(doc));
+  }
+
+  return results.slice(0, RESULT_LIMIT);
+}
+
 function search(request) {
   const started = performance.now(), literal = clean(request.query).trim(), query = searchPhrase(literal);
   const exact = query === literal ? "" : literal;
-  if (queryCache.has(literal)) {
-    const cached = queryCache.get(literal);
+  const subjectText = typeof request.subject === "string" ? clean(request.subject).trim() : "";
+  const specificsText = typeof request.specifics === "string" ? clean(request.specifics).trim() : "";
+  const scopedKey = (subjectText && specificsText) ? `scoped:${subjectText}:${specificsText}` : literal;
+
+  if (queryCache.has(scopedKey)) {
+    const cached = queryCache.get(scopedKey);
     ranked = cached.documents;
     inheritedMatches = new Map(cached.inheritance);
-    queryCache.delete(literal);
-    queryCache.set(literal, cached);
+    queryCache.delete(scopedKey);
+    queryCache.set(scopedKey, cached);
   } else {
-    ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
     inheritedMatches = new Map();
-    if (inverted && hierarchy) ranked = inheritSearch(query, ranked);
-    if (inverted && exact) {
-      const titles = literalTitles(literal);
-      if (titles.length) {
-        const seen = new Set(titles);
-        ranked = [...titles, ...ranked.filter(doc => !seen.has(doc))].slice(0, RESULT_LIMIT);
+    const scoped = (subjectText && specificsText) ? scopedSubjectSearch(subjectText, specificsText) : null;
+    if (scoped && scoped.length) {
+      ranked = scoped;
+    } else {
+      ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
+      if (inverted && hierarchy) ranked = inheritSearch(query, ranked);
+      if (inverted && exact) {
+        const titles = literalTitles(literal);
+        if (titles.length) {
+          const seen = new Set(titles);
+          ranked = [...titles, ...ranked.filter(doc => !seen.has(doc))].slice(0, RESULT_LIMIT);
+        }
       }
     }
     // Immutable catalog: revisiting an input (Backspace, guide return, repeated
     // searches) can reuse its ranked IDs. Bound both key size and entry count.
-    if (literal.length <= 512) {
-      queryCache.set(literal, { documents: ranked, inheritance: [...inheritedMatches] });
+    if (scopedKey.length <= 512) {
+      queryCache.set(scopedKey, { documents: ranked, inheritance: [...inheritedMatches] });
       if (queryCache.size > 96) queryCache.delete(queryCache.keys().next().value);
     }
   }

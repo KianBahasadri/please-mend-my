@@ -565,3 +565,20 @@ test('malformed registry transport falls back to a cached object or ordinary sea
     }
   }
 });
+
+test('hero search conveys subject scope, specifics, and diagnostic state to the worker and UI', async () => {
+  const ui = await searchUI(); ui.ready();
+  ui.change('bike');
+  const search1 = ui.searches().at(-1);
+  assert.equal(search1.query, 'bike');
+  assert.equal(search1.subject, 'bike');
+  assert.equal(search1.specifics, '');
+  assert.equal(search1.awaiting, true);
+
+  ui.clickPart('chain');
+  const search2 = ui.searches().at(-1);
+  assert.equal(search2.query, 'bike chain');
+  assert.equal(search2.subject, 'bike');
+  assert.equal(search2.specifics, 'chain');
+  assert.equal(search2.awaiting, false);
+});
