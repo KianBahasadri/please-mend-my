@@ -12,6 +12,7 @@ from collections.abc import Mapping
 from collections import defaultdict
 import gzip
 import hashlib
+import heapq
 import json
 from pathlib import Path
 import re
@@ -248,6 +249,56 @@ def noun_terms(index, database):
     return expanded
 
 
+def prepare_short_prefixes(items, groups, references, postings):
+    """Exact top-100 single-letter rankings, computed offline from real postings.
+
+    Letters retain the worker's original direct/alias quality and tie ordering;
+    numeric queries keep the runtime model-literal gate. No candidate truncation.
+    """
+    count = len(items)
+    group_docs = [[] for _ in groups]
+    for doc, group in enumerate(references):
+        group_docs[group].append(doc)
+    by_letter = defaultdict(list)
+    for term in postings:
+        if term[0].isalpha() and ord(term[0]) <= 0xffff:
+            by_letter[term[0]].append(term)
+    titles = [clean(row[1]) for row in items]
+    queries = []
+    for letter in sorted(by_letter, key=lexicographic):
+        quality, group_quality = {}, {}
+        for term in by_letter[letter]:
+            cost = 1 if term == letter else 2
+            for value in postings[term]:
+                if value < count:
+                    quality[value] = min(quality.get(value, cost), cost)
+                else:
+                    group = value - count
+                    group_quality[group] = min(group_quality.get(group, cost + 16), cost + 16)
+        for group, cost in group_quality.items():
+            for doc in group_docs[group]:
+                quality[doc] = min(quality.get(doc, cost), cost)
+        best = []
+        for doc, cost in quality.items():
+            row, title = items[doc], titles[doc]
+            if row[3] not in {'guide', 'article'}:
+                continue
+            score = 15 if row[3] == 'guide' else 0
+            if cost <= 2:
+                position = title.find(letter)
+                if position == 0:
+                    score += (1000 if len(title) == 1 else 500) + 35
+                elif position > 0:
+                    score += 250 + (35 if ' ' + letter in title else 10)
+            rank = (score - (cost - 1) * 100, -doc)
+            if len(best) < 100:
+                heapq.heappush(best, rank)
+            elif rank > best[0]:
+                heapq.heapreplace(best, rank)
+        queries.append([letter, [-doc for _, doc in sorted(best, reverse=True)]])
+    return {'version': 1, 'limit': 100, 'queries': queries}
+
+
 def prepare_index(index, guide_records=None, noun_records=None):
     """Return deterministic postings, optionally including v2 symptoms/materials."""
     items, categories, search = index.get("items"), index.get("categories"), index.get("search")
@@ -302,6 +353,7 @@ def prepare_index(index, guide_records=None, noun_records=None):
               "stemmer": "porter1980", "documents": count, "groups": len(groups), "terms": terms,
               "offsets": offsets, "postings": body, "stemTerms": stem_terms,
               "stemOffsets": stem_offsets, "stemPostings": stem_body}
+    result['shortPrefixes'] = prepare_short_prefixes(items, groups, references, postings)
     if guide_literals:
         # Numeric/model queries retain the worker's strict literal gate. Only
         # these few source fields need text beside the compact token postings.

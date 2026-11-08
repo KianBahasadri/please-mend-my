@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = "==3.12.*"
-# dependencies = ["libzim==4.1.0", "lxml==6.1.3"]
+# dependencies = ["libzim==4.1.0", "lxml==6.1.3", "langid==1.1.6", "numpy==2.2.6"]
 # ///
 """Stream a checksum-pinned English Appropedia ZIM without duplicating raw HTML."""
 from __future__ import annotations
@@ -29,6 +29,25 @@ ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(__file__).with_name("appropedia-source.json")
 ORIGIN = "https://www.appropedia.org/"
 HOSTS = {"www.appropedia.org", "appropedia.org", "offline.invalid"}
+_LANGUAGE_IDENTIFIER = None
+
+
+def foreign_body(tree):
+    """Quarantine confident foreign prose, never classify a brand/title alone."""
+    global _LANGUAGE_IDENTIFIER
+    content = first(tree, "//*[@id='mw-content-text']")
+    if content is None:
+        content = tree
+    prose = ' '.join(text(node) for node in content.xpath('.//p|.//li'))[:6000]
+    pieces = re.findall(r'[^\W\d_]+', prose)
+    if (len(pieces) < 12 or sum(map(len, pieces)) < 60 or
+            sum(word[0].isupper() for word in pieces) > len(pieces) * .65):
+        return None
+    if _LANGUAGE_IDENTIFIER is None:
+        from langid.langid import LanguageIdentifier, model
+        _LANGUAGE_IDENTIFIER = LanguageIdentifier.from_modelstring(model, norm_probs=True)
+    language, confidence = _LANGUAGE_IDENTIFIER.classify(prose)
+    return (language, float(confidence)) if language != 'en' and confidence >= .99 else None
 
 
 def configuration():
@@ -174,6 +193,7 @@ def build(data_dir, archive, config=None):
     articles, aliases, redirects, titles = {}, defaultdict(set), {}, {}
     exclusions = Counter()
     with CatalogWriter(data_dir, config, key_for(config)) as writer:
+        writer.db.execute('CREATE TABLE language_quarantine(path TEXT PRIMARY KEY,language TEXT,confidence REAL)')
         media = {}
         for entry in zim.iter_by_path():
             path, item = entry.path, entry.get_item()
@@ -190,6 +210,12 @@ def build(data_dir, archive, config=None):
                     lang = re.search(br'<html\b[^>]*\blang=[\"\x27]([^\"\x27]+)', prefix, re.I)
                     if lang and not lang[1].lower().startswith(b'en'):
                         exclusions["explicit-non-English"] += 1
+                        continue
+                    tree = html.fromstring(bytes(item.content), parser=html.HTMLParser(encoding='utf-8', recover=True))
+                    if foreign := foreign_body(tree):
+                        language, confidence = foreign
+                        exclusions['detected-' + language] += 1
+                        writer.db.execute('INSERT INTO language_quarantine VALUES(?,?,?)', (path, language, confidence))
                         continue
                     articles[path] = short_id(config["id"], path)
                     titles[path] = entry.title
@@ -241,7 +267,10 @@ def build(data_dir, archive, config=None):
         metadata = {key: bytes(zim.get_metadata(key)).decode(errors="replace") for key in zim.metadata_keys if not key.startswith("Illustration_")}
         return writer.finish({"excludedPages": dict(exclusions), "archiveMetadata": metadata,
                               "archiveArticleCount": zim.article_count, "archiveMediaCount": zim.media_count,
-                              "licenseNotice": config["licenseNotice"]})
+                              "licenseNotice": config["licenseNotice"],
+                              "languageFilter": {"engine": "langid 1.1.6 / numpy 2.2.6", "confidence": .99,
+                                                 "scope": "New Appropedia import only; prose, not titles or brands. Short/uncertain text retained; raw ZIM preserved.",
+                                                 "quarantine": "catalog.sqlite language_quarantine (build-only)"}})
 
 
 def main():

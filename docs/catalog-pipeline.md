@@ -51,7 +51,7 @@ Verification:
 
 ```sh
 python3 scripts/run_bounded.py -- go test ./...
-python3 scripts/run_bounded.py -- uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==1.28.2 --with wordfreq==3.1.1 python -W error::ResourceWarning -m unittest discover -s scripts -p 'test_*.py'
+python3 scripts/run_bounded.py -- uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==1.28.2 --with wordfreq==3.1.1 --with langid==1.1.6 --with numpy==2.2.6 python -W error::ResourceWarning -m unittest discover -s scripts -p 'test_*.py'
 python3 scripts/run_bounded.py -- node --test --test-concurrency=1 scripts/test_*.cjs
 python3 scripts/run_bounded.py -- node --expose-gc scripts/bench_search.cjs
 ```
@@ -80,6 +80,11 @@ official Kiwix English 2026-02 archive, 581,641,351 bytes, verified against its
 Metalink SHA-256 and internal ZIM checksum. Explicit page licenses override the
 default text license; original media attribution stays separate. Executable SVG
 media remains in the raw archive rather than entering the image serving path.
+The English-labelled archive contains foreign-language prose: pinned langid
+1.1.6 / NumPy 2.2.6 checks article body paragraphs at import. Confident foreign
+prose (>=0.99, enough ordinary words) goes to build-only language_quarantine in
+the source SQLite. Names/titles alone are not classified; short or uncertain text
+is retained. This filter does not audit the existing three-source catalog.
 
 wikiHow uses the immutable Hugging Face commit `5e44fed0…`, 619,172,672 bytes.
 The CSV contains original title, headline and text; each guide records its source
@@ -108,6 +113,11 @@ The benchmark's default input is the locally selected release (or `CATALOG_DIR`)
 It reports resident bytes, preparation time, memory, synchronous registry lookup,
 and actual worker search time. It makes one catalog request and no requests per
 search. These measurements exclude browser layout, painting, and internet transfer.
+The build also prepares exact top-100 single-letter rankings from all postings,
+with direct/alias quality and stable ties, so short input does not expand a
+large candidate set at runtime. Numeric queries keep their existing strict
+model gate. A 96-entry ranked-query LRU speeds revisiting an immutable query;
+benchmarks report cold first-pass and repeated-query times separately.
 
 ## Local verification receipt
 

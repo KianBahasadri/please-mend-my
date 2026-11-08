@@ -57,6 +57,8 @@
 - Publish runtime dirs 0755; verify unprivileged read before swapping live binary/catalog.
 - Ingest full wikihowAll.csv (Lajvi/HF; UCSB mirror) + Appropedia English 2026-02 ZIM (requested 2024-05 URL404); stream, pin SHA/license, same local/EC2 pipeline. Proposed: PD textile/garment + procedural datasets.
 - CSV malformed-width rows→build-only quarantine+counts; retain raw bytes. On restart clean private incomplete stages; never replace served release on import failure.
+- Appropedia English label includes foreign text: body-only langid1.1.6/NumPy2.2.6 quarantine≥.99; never infer language from names; raw retained. Legacy filtering pending.
+- Prefix1-letter top100 prepared offline; browser96-query LRU; numeric gate unchanged. Benchmark cold+cached separately; never hide cold regressions in warm averages.
 - Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms) using Qwen 3.6 35B A3B with structured output. Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.

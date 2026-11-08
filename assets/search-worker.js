@@ -128,6 +128,7 @@ let trie;
 let maximumWordLength = 0;
 let broadBonuses;
 let rootTopics;
+let shortPrefixes;
 const subjectAnchors = new Map();
 // Exact source concept names point to explicit anchor devices. Whole aliases
 // count here (bike -> Bicycle); a word inside "pedal cycle" is not a subject.
@@ -141,6 +142,7 @@ const motorIntent = new Set(["dirt", "motorcycle", "motorbike", "motor", "motori
 const RESULT_LIMIT = 100;
 const tokenCache = new Map();
 let tokenCacheBytes = 0;
+const queryCache = new Map();
 
 function schedule(request) {
   pending = request;
@@ -241,6 +243,21 @@ function prepareInverted(metadata) {
   // Empty group zero has no postings; accepting it could associate aliases with
   // unrelated documents and is therefore an invalid catalog, not a search miss.
   const stems = unpackLists(metadata.stemPostings, metadata.stemOffsets, metadata.stemTerms.length, metadata.terms.length - 1);
+  if (metadata.shortPrefixes !== undefined) {
+    const prepared = metadata.shortPrefixes;
+    if (!prepared || prepared.version !== 1 || prepared.limit !== 100 || !Array.isArray(prepared.queries) ||
+        prepared.queries.length > metadata.terms.length) invalidIndex();
+    shortPrefixes = new Map();
+    for (const row of prepared.queries) {
+      if (!Array.isArray(row) || row.length !== 2) invalidIndex();
+      const [query, documents] = row;
+      if (typeof query !== 'string' || query.length !== 1 || !/^\p{L}$/u.test(query) || clean(query) !== query ||
+          shortPrefixes.has(query) || !Array.isArray(documents) || documents.length > prepared.limit ||
+          new Set(documents).size !== documents.length || documents.some(doc => !Number.isInteger(doc) ||
+            doc < 0 || doc >= entries.length || !actionable(entries[doc]))) invalidIndex();
+      shortPrefixes.set(query, documents);
+    }
+  }
   if (metadata.guideLiterals !== undefined) {
     if (!Array.isArray(metadata.guideLiterals)) invalidIndex();
     let previous = -1;
@@ -516,6 +533,9 @@ function broadSearch(query, list) {
 
 function indexedSearch(query, tokens) {
   if (!tokens.length) return query ? [] : firstActionable();
+  if (RESULT_LIMIT === 100 && tokens.length === 1 && tokens[0] === query && shortPrefixes?.has(query)) {
+    return shortPrefixes.get(query);
+  }
   const wordPrefixes = tokens.map(token => " " + token);
   const singleWord = tokens.length === 1 && tokens[0] === query;
   // A one-letter prefix is not yet a subject; keep its cheap original ranking.
@@ -652,12 +672,24 @@ function literalTitles(query) {
 function search(request) {
   const started = performance.now(), literal = clean(request.query).trim(), query = searchPhrase(literal);
   const exact = query === literal ? "" : literal;
-  ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
-  if (inverted && exact) {
-    const titles = literalTitles(literal);
-    if (titles.length) {
-      const seen = new Set(titles);
-      ranked = [...titles, ...ranked.filter(doc => !seen.has(doc))].slice(0, RESULT_LIMIT);
+  if (queryCache.has(literal)) {
+    ranked = queryCache.get(literal);
+    queryCache.delete(literal);
+    queryCache.set(literal, ranked);
+  } else {
+    ranked = inverted ? indexedSearch(query, [...new Set(words(query))]) : legacySearch(query, exact);
+    if (inverted && exact) {
+      const titles = literalTitles(literal);
+      if (titles.length) {
+        const seen = new Set(titles);
+        ranked = [...titles, ...ranked.filter(doc => !seen.has(doc))].slice(0, RESULT_LIMIT);
+      }
+    }
+    // Immutable catalog: revisiting an input (Backspace, guide return, repeated
+    // searches) can reuse its ranked IDs. Bound both key size and entry count.
+    if (literal.length <= 512) {
+      queryCache.set(literal, ranked);
+      if (queryCache.size > 96) queryCache.delete(queryCache.keys().next().value);
     }
   }
   activeRequest = request.requestId;

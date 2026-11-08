@@ -89,6 +89,27 @@ class AppropediaTests(unittest.TestCase):
               patch('sys.argv', ['ingest_appropedia', '--data-dir', str(self.data)])):
             ingest.main()
 
+    def test_body_filter_ignores_brand_titles_and_quarantines_foreign_prose(self):
+        english = html.fromstring('<div><h1>Düsseldorf Acer Lenovo Samsung</h1><p>This guide explains how to repair your computer. Disconnect the battery before you remove the cover and keep all of the screws in a safe place.</p></div>')
+        self.assertIsNone(ingest.foreign_body(english))
+        self.assertIsNone(ingest.foreign_body(html.fromstring('<div><h1>Düsseldorf</h1><p>Lenovo Acer Samsung</p></div>')))
+        spanish = html.fromstring('<html lang="en"><body><p>Esta página explica cómo hacer un acabado casero como una laca transparente. Primero hay que preparar los materiales y después seguir los pasos con mucho cuidado.</p></body></html>')
+        self.assertEqual(ingest.foreign_body(spanish)[0], 'es')
+
+    def test_false_english_header_does_not_publish_foreign_body(self):
+        creator = Creator(self.root / 'mixed.zim').config_indexing(False, 'eng').config_nbworkers(1)
+        with creator:
+            creator.set_mainpath('English')
+            creator.add_item(FixtureItem('English', 'English', '<html lang="en"><body><p>This is a useful repair article. Disconnect the battery before replacing the damaged component and preserve the source safety warnings.</p></body></html>'))
+            creator.add_item(FixtureItem('Spanish', 'Spanish', '<html lang="en"><body><p>Esta página explica cómo hacer un acabado casero como una laca transparente. Primero hay que preparar los materiales y después seguir los pasos con mucho cuidado.</p></body></html>'))
+        archive = self.root / 'mixed.zim'
+        pin = dict(self.config, bytes=archive.stat().st_size, sha256=digest_file(archive))
+        result = ingest.build(self.data, archive, pin)
+        self.assertEqual(result['indexedItems'], 1)
+        self.assertEqual(result['excludedPages']['detected-es'], 1)
+        with sqlite3.connect(self.data / 'catalog.sqlite') as db:
+            self.assertEqual(db.execute('SELECT path,language FROM language_quarantine').fetchall(), [('Spanish', 'es')])
+
 
 if __name__ == '__main__':
     unittest.main()

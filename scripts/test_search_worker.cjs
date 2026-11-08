@@ -555,6 +555,41 @@ test('generality-aware bounded ranking matches exhaustive scoring without prunin
   }
 });
 
+test('prepared single-letter results exactly match live scoring across titles, aliases and kinds', async () => {
+  const index = fixture();
+  index.items = [];
+  index.search = { version: 1, groups: ['', 'alpha repair', 'battery\nλ'], itemGroups: [] };
+  for (let at = 0; at < 520; at++) {
+    const kind = ['guide', 'article', 'topic'][at % 3];
+    const title = ['Artery', 'Repair Battery', 'Solar panel', 'Lambda λ', '猫 repair', 'X repair'][at % 6] + (at % 13 ? ' ' + at : '');
+    index.items.push(['letter-' + at, title, 'technology', kind, at % 4 ? '' : 'Alpha Model A23']);
+    index.search.itemGroups.push(at % 3);
+  }
+  index.items.push(['exact-a', 'A', 'technology', 'article', '']);
+  index.search.itemGroups.push(0);
+  const prepared = prepare(index), live = structuredClone(prepared);
+  assert.ok(prepared.search.inverted.shortPrefixes.queries.length);
+  delete live.search.inverted.shortPrefixes;
+  const fastWorker = await workerFor(prepared), liveWorker = await workerFor(live);
+  for (const query of ['a', 'r', 'b', 's', 'λ', '猫', '1', 'A23']) {
+    const fast = await fastWorker.search(query), full = await liveWorker.search(query);
+    fastWorker.send({ type: 'range', requestId: fast.requestId, rangeId: 1, start: 60, count: 40 });
+    liveWorker.send({ type: 'range', requestId: full.requestId, rangeId: 1, start: 60, count: 40 });
+    const fastTail = await fastWorker.next('range'), liveTail = await liveWorker.next('range');
+    assert.equal(fast.total, full.total, query);
+    assert.deepEqual(Array.from([...fast.items, ...fastTail.items], r => r[0]), Array.from([...full.items, ...liveTail.items], r => r[0]), query);
+  }
+  const first = await fastWorker.search('a'), again = await fastWorker.search('a');
+  assert.notEqual(first.requestId, again.requestId);
+  assert.deepEqual(Array.from(first.items, r => r[0]), Array.from(again.items, r => r[0]));
+});
+
+test('invalid prepared short-prefix documents fail startup', async () => {
+  const prepared = prepare(fixture());
+  prepared.search.inverted.shortPrefixes.queries = [['a', [999999]]];
+  await assert.rejects(workerFor(prepared), /inverted index is invalid/);
+});
+
 test('published topic anchors stay resident while only actionable source matches become cards', async () => {
   const index = fixture();
   index.items = [
