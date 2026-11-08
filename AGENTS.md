@@ -71,3 +71,4 @@
 - Local25477e31…: 57566 seeded/17092 filled,12310 models,2 approved art; 412075/435213 linked; 100 cachedv2. New App13229+WikiHow214293; CSV1 malformed+1071 empty, App9107 foreign quarantined; raw kept.
 - Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.
 - Multiword search: selective-first, scoped posting probes/streaming; partial maps never cached as full. Local coldp95~9ms/cachedp95~.03ms; cold alias outlier59ms; startup~1.9s/19MB gzip. Go+186Py+134JS pass.
+- Sense bugs: bike≠motorcycle; arm≠weapon; phone≠phoneme; MacBook Air≠tune. Keep alias ranks+model/category ancestry.
