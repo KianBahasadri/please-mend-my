@@ -55,6 +55,30 @@
     return svg;
   }
 
+  function hammer() {
+    return drawing("repair-tool repair-hammer", [
+      ["path", {
+        d: "M0 3h10V0h-8Z M10 2h22c6 0 11 4 11 12s-5 12-11 12H18v-8h12c3 0 5-2 5-4s-2-4-5-4H10Z M32 2c8 0 13 6 12 16-1-3-5-6-10-6Z",
+        "fill-rule": "evenodd",
+        fill: "currentColor"
+      }],
+      ["path", {
+        d: "M7 10h11v70H7Z M6 52h13v28H6Z",
+        fill: "currentColor"
+      }],
+      ["path", {
+        class: "repair-tool-hole",
+        d: "M5.5 56h14v2.5h-14Z M5.5 61h14v2.5h-14Z M5.5 66h14v2.5h-14Z M5.5 71h14v2.5h-14Z"
+      }],
+      ["circle", {
+        class: "repair-tool-hole",
+        cx: "12.5",
+        cy: "76",
+        r: "2"
+      }],
+    ], "0 0 44 82");
+  }
+
   function wrench() {
     return drawing("repair-tool repair-wrench", [
       ["path", {
@@ -78,6 +102,20 @@
     ], "0 0 32 100");
   }
 
+  function clamp() {
+    return drawing("repair-tool repair-clamp", [
+      ["path", {
+        d: "M4 0h30c3 0 5 2 5 5v7H15c-3 0-3 4-3 4h26v8H12s0 12 3 12h24v8c0 3-2 4-5 4H4C1 48 0 46 0 43V5C0 2 1 0 4 0Z",
+        "fill-rule": "evenodd",
+        fill: "currentColor"
+      }],
+      ["path", {
+        class: "repair-tool-hole",
+        d: "M16 19h20v2H16Z M36 16.5h2.5v7H36Z"
+      }],
+    ], "0 0 40 48");
+  }
+
   function nail() {
     return drawing("repair-tool repair-nail", [
       ["path", {
@@ -93,6 +131,54 @@
         fill: "currentColor"
       }],
     ], "0 0 24 45");
+  }
+
+  function ruler() {
+    return drawing("repair-tool repair-ruler", [
+      ["path", {
+        d: "M0 0h13v48H0Z M11 0h5l19 44-5 4Z M30 48l-5-4 19-44h5Z M47 0h13v48H47Z",
+        fill: "currentColor"
+      }],
+      ["circle", { cx: "6.5", cy: "4", r: "3", class: "repair-tool-hole" }],
+      ["circle", { cx: "6.5", cy: "4", r: "1.5", fill: "currentColor" }],
+      ["circle", { cx: "30", cy: "44", r: "3", class: "repair-tool-hole" }],
+      ["circle", { cx: "30", cy: "44", r: "1.5", fill: "currentColor" }],
+      ["circle", { cx: "53.5", cy: "4", r: "3", class: "repair-tool-hole" }],
+      ["circle", { cx: "53.5", cy: "4", r: "1.5", fill: "currentColor" }],
+      ["path", {
+        class: "repair-tool-hole",
+        d: "M0 12h4v1.5H0Z M0 20h6v1.5H0Z M0 28h4v1.5H0Z M0 36h6v1.5H0Z M56 12h4v1.5h-4Z M54 20h6v1.5h-6Z M56 28h4v1.5h-4Z M54 36h6v1.5h-6Z"
+      }],
+    ], "0 0 60 48");
+  }
+
+  function level() {
+    return drawing("repair-tool repair-level", [
+      ["path", {
+        d: "M26 0h14v64H26Z M26 16H12C5 16 0 21 0 28v24c0 7 5 12 12 12h14v-9H12c-4 0-6-2-6-6V31c0-4 2-6 6-6h14Z",
+        "fill-rule": "evenodd",
+        fill: "currentColor"
+      }],
+      ["rect", {
+        x: "7",
+        y: "36",
+        width: "18",
+        height: "8",
+        rx: "4",
+        class: "repair-tool-hole"
+      }],
+      ["circle", {
+        cx: "16",
+        cy: "40",
+        r: "2.5",
+        fill: "currentColor"
+      }],
+      ["path", {
+        d: "M12 36v8 M20 36v8",
+        stroke: "currentColor",
+        "stroke-width": "0.8"
+      }],
+    ], "0 0 40 64");
   }
 
   function mechanicalPart() {
@@ -120,14 +206,24 @@
     };
 
     if (theme === "tooltype" || theme === "cutpaper") {
+      const toolMap = {
+        0: hammer,
+        1: wrench,
+        2: clamp,
+        5: clamp,
+        6: nail,
+        8: ruler,
+        9: clamp,
+        11: level,
+      };
       for (let at = 0; at < text.length; at++) {
         const glyph = add(at, at + 1, `repair-letter repair-letter-${at}`);
         if (text[at] === " ") glyph.classList.add("repair-space");
-        if (theme === "tooltype" && (at === 1 || at === 6)) {
+        if (theme === "tooltype" && toolMap[at]) {
           glyph.classList.add("repair-replaced-letter");
           const original = span("repair-original-letter", text[at]);
           glyph.textContent = "";
-          glyph.append(original, at === 1 ? wrench() : nail());
+          glyph.append(original, toolMap[at]());
         }
         if (theme === "cutpaper" && text[at] !== " ") {
           // The measured box keeps the native font's advance. The clipped letter

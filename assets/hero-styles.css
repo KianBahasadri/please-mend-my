@@ -211,6 +211,14 @@
   color: var(--ink);
 }
 
+.repair-hammer {
+  top: 0.14em;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0.58em;
+  height: 1.08em;
+}
+
 .repair-wrench {
   top: 0.14em;
   left: 50%;
@@ -219,12 +227,36 @@
   height: 0.84em;
 }
 
+.repair-clamp {
+  top: 0.35em;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0.52em;
+  height: 0.63em;
+}
+
 .repair-nail {
   top: 0.67em;
   left: 50%;
   transform: translateX(-50%);
   width: 0.22em;
   height: 0.42em;
+}
+
+.repair-ruler {
+  top: 0.35em;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0.78em;
+  height: 0.63em;
+}
+
+.repair-level {
+  top: 0.14em;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0.52em;
+  height: 0.84em;
 }
 
 .repair-tool-hole {
