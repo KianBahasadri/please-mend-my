@@ -100,5 +100,5 @@
 - Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps.
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
 - Stale first-letter article fixed: guide generation publishes only when the replacement worker swaps; a rejected persistent guide falls back to the network so the article follows the current alternatives. JS 216 pass.
-- Prod 0ceed55 binary live with catalog 090b21f9: 435213 items, 713438 media, 21101940B gzip. Apex/www gzip ETag 922c38b5…; origin identity ETag is index SHA 29507cd5…. Home TTFB median ~0.12s; catalog gzip ~1.6s. Ingest succeeded, 9.3GiB free. Demo a0c1e8e search/hero changes are not in the running binary.
+- Prod 4d28722 binary live with catalog 090b21f9: 435213 items, 713438 media, 21101940B gzip. Apex/www/origin hero.js 27e027b4, search.js 8aa1ab69, search-worker.js c0ef8755. Catalog reused, no reingest. Shell version 5fbbb2e70c3b…. Reload to replace a cached shell.
 - Two-tier search wired: hero second line strictly scopes candidate results to active subject category (zero cross-category leakage, guides beat articles); bare nouns render as diagnostic triage overviews with badges. 139 JS + Go pass.
