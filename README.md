@@ -68,18 +68,19 @@ controller contract and local performance results.
 Run locally with Go 1.25+:
 
 ```sh
-CATALOG_DIR="$(cat catalog-data/local-catalog.path)" &&
-  CATALOG_DIR="${CATALOG_DIR:?Select a completed catalog release}" ADDR=127.0.0.1:8080 go run .
+ADDR=127.0.0.1:8080 go run .
 # http://127.0.0.1:8080
 ```
 
-`catalog-data/local-catalog.path` remembers this checkout's selected complete
-release. After a first build, use the release directory printed by
-`scripts/build_catalog.py` as `CATALOG_DIR` and save that path for later launches.
-Set `ADDR` to change the listening address.
+Without `CATALOG_DIR`, startup reads the selected complete release from
+`catalog-data/local-catalog.path`. After a first build, set `CATALOG_DIR` to the
+release directory printed by `scripts/build_catalog.py`, or save that path in
+the ignored selection file for later launches. Explicit `CATALOG_DIR` always
+wins; deployment continues to set it. Set `ADDR` to change the listening address.
 
-Always set `CATALOG_DIR`: a plain launch serves the hero but returns 503 for the
-repair library. Check `GET /api/catalog` as well as `/healthz` after restarting.
+Missing, empty, invalid, or unfinished catalog selections stop startup before
+listening, so the hero cannot appear healthy while the library returns 503.
+Check `GET /api/catalog` as well as `/healthz` after restarting.
 Build that snapshot with the commands in [scripts/README.md](scripts/README.md).
 `GET /api/catalog` supplies the complete compact browser-search index;
 `GET /api/guides/{id}` supplies full guide/topic content, and `/media/{filename}`
@@ -104,7 +105,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o /tm
 go test ./...
 ```
 
-The binary embeds the HTML, background/search modules, WOFF2 fonts, and their required OFL notices. Rebuild it after site edits. The landing page needs no working directory; repair content is loaded from `CATALOG_DIR`. There are no third-party Go dependencies.
+The binary embeds the HTML, background/search modules, WOFF2 fonts, and their required OFL notices. Rebuild it after site edits. With an explicit `CATALOG_DIR`, startup needs no particular working directory; the saved local selection is relative to the working directory. There are no third-party Go dependencies.
 
 Embedded assets are prepared once at startup and served from memory. Text responses use precomputed gzip when accepted, with representation-specific ETags, conditional 304 responses, HEAD, and byte ranges. WOFF2 fonts retain their existing compression and cache for one day; HTML/CSS/JS revalidate so updates appear promptly. Embedded-asset requests perform no filesystem reads, hashing, compression, or per-request logging.
 

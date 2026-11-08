@@ -45,7 +45,7 @@ type siteHandler struct {
 	catalog *catalogHandler
 }
 
-func newHandler() (*siteHandler, error) {
+func newHandler(catalogDirectory string) (*siteHandler, error) {
 	handler := &siteHandler{assets: make(map[string]*staticAsset)}
 	err := fs.WalkDir(siteFiles, ".", func(name string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -96,8 +96,8 @@ func newHandler() (*siteHandler, error) {
 		}
 		return nil
 	})
-	if err == nil && os.Getenv("CATALOG_DIR") != "" {
-		handler.catalog, err = openCatalog(os.Getenv("CATALOG_DIR"))
+	if err == nil && catalogDirectory != "" {
+		handler.catalog, err = openCatalog(catalogDirectory)
 	}
 	return handler, err
 }
@@ -214,6 +214,24 @@ func run() error {
 	return serve(ctx)
 }
 
+// Local launches reuse one explicitly selected release. Resolve it only at
+// startup; never scan releases or inspect the filesystem on search requests.
+func configuredCatalogDirectory() (string, error) {
+	if directory := os.Getenv("CATALOG_DIR"); directory != "" {
+		return directory, nil
+	}
+	const selection = "catalog-data/local-catalog.path"
+	body, err := os.ReadFile(selection)
+	if err != nil {
+		return "", fmt.Errorf("set CATALOG_DIR to a completed catalog release or save its path in %s: %w", selection, err)
+	}
+	directory := strings.TrimSpace(string(body))
+	if directory == "" || strings.ContainsAny(directory, "\r\n\x00") {
+		return "", fmt.Errorf("%s must contain one completed catalog release path", selection)
+	}
+	return directory, nil
+}
+
 func serve(ctx context.Context) error {
 	certificateFile, keyFile := os.Getenv("TLS_CERT"), os.Getenv("TLS_KEY")
 	if (certificateFile == "") != (keyFile == "") {
@@ -232,7 +250,11 @@ func serve(ctx context.Context) error {
 			Certificates:     []tls.Certificate{certificate},
 		}
 	}
-	handler, err := newHandler()
+	catalogDirectory, err := configuredCatalogDirectory()
+	if err != nil {
+		return err
+	}
+	handler, err := newHandler(catalogDirectory)
 	if err != nil {
 		return fmt.Errorf("prepare static assets: %w", err)
 	}

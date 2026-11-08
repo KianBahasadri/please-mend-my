@@ -615,6 +615,8 @@
     worker.onmessage = ({ data }) => {
       if (data.type === "ready") {
         ready = true;
+        setStatus("");
+        count.textContent = "";
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
         for (const item of data.categories) categoryNames.set(item.id, item.name);

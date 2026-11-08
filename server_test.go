@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,7 +15,7 @@ import (
 
 func testHandler(t *testing.T) *siteHandler {
 	t.Helper()
-	handler, err := newHandler()
+	handler, err := newHandler(os.Getenv("CATALOG_DIR"))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -175,6 +175,30 @@ test('startup dictionary updates preserve elapsed timing and never bypass the sh
   assert.equal(pending.searches().at(-1).query, 'broken laptop', 'an already-settled query runs as soon as its index is ready');
 });
 
+test('catalog recovery clears the stale error and preserves the current hero state', async () => {
+  for (const text of ['', 'bike', 'broken laptop']) {
+    const ui = await searchUI();
+    if (text) { ui.change(text); ui.advance(380); }
+    const value = ui.response.value;
+    const focused = ui.document.activeElement;
+    ui.workers[0].emit({ type: 'error', message: 'The repair library is unavailable (503).' });
+    assert.equal(ui.elements['catalog-status'].hidden, false);
+    assert.match(ui.elements['catalog-status'].textContent, /503/);
+    ui.ready();
+    assert.equal(ui.elements['catalog-status'].hidden, true, text);
+    assert.equal(ui.elements['catalog-status'].textContent, '', text);
+    assert.equal(ui.elements['result-count'].textContent, '', 'failed startup notice must disappear too');
+    assert.equal(ui.response.value, value, 'recovery preserves the native field');
+    assert.equal(ui.document.activeElement, focused, 'recovery preserves focus');
+    if (text === 'broken laptop') {
+      assert.equal(ui.searches().at(-1).query, text, 'the settled query resumes when the catalog recovers');
+    } else {
+      assert.equal(ui.searches().length, 0, 'empty input and unanswered specifics stay blank');
+      assert.equal(ui.elements['search-results'].hidden, true);
+    }
+  }
+});
+
 test('full-phrase Enter/Tab and noun punctuation settle immediately without rewriting native text', async () => {
   for (const key of ['Enter', 'Tab']) {
     const ui = await searchUI(); ui.ready(); ui.change('broken laptop');

@@ -670,12 +670,33 @@ self.onmessage = ({ data }) => {
   else if (data.type === "range") sendRange(data);
 };
 
+async function loadCatalog() {
+  const delays = [250, 500, 1000, 2000, 4000];
+  for (let attempt = 0; ; attempt += 1) {
+    let response, failure;
+    try {
+      response = await fetch("/api/catalog", { credentials: "same-origin", mode: "same-origin",
+        ...(attempt ? { cache: "no-store" } : {}) });
+    } catch (error) {
+      failure = error;
+    }
+    if (response) {
+      // JSON/schema failures are permanent. Retry only the request itself,
+      // preserving normal ETag caching and making no requests after startup.
+      if (response.ok) return response.json();
+      failure = new Error(`The repair library is unavailable (${response.status}).`);
+      try { await response.body?.cancel(); } catch {}
+      if (![429, 500, 502, 503, 504].includes(response.status)) throw failure;
+    }
+    if (attempt === delays.length) throw failure;
+    await new Promise(resolve => setTimeout(resolve, delays[attempt]));
+  }
+}
+
 (async () => {
   try {
     const started = performance.now();
-    const response = await fetch("/api/catalog", { credentials: "same-origin", mode: "same-origin" });
-    if (!response.ok) throw new Error(`The repair library is unavailable (${response.status}).`);
-    catalog = await response.json();
+    catalog = await loadCatalog();
     if (!Array.isArray(catalog.items) || !Array.isArray(catalog.categories)) throw new Error("The repair library format is invalid.");
     const categories = new Map(catalog.categories.map((category) => [category.id, clean(category.name)]));
     const devices = new Map();

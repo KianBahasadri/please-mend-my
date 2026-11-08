@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -46,6 +47,82 @@ func catalogFixture(t *testing.T) (string, []byte) {
 		}
 	}
 	return directory, files["index.json"]
+}
+
+func writeLocalCatalogSelection(t *testing.T, value string) {
+	t.Helper()
+	if err := os.MkdirAll("catalog-data", 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("catalog-data/local-catalog.path", []byte(value), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRememberedCatalogServesLibraryWithoutEnvironment(t *testing.T) {
+	directory, index := catalogFixture(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("CATALOG_DIR", "")
+	writeLocalCatalogSelection(t, directory+"\n")
+	selected, err := configuredCatalogDirectory()
+	if err != nil || selected != directory {
+		t.Fatalf("local startup must reuse the selected catalog: directory=%q error=%v", selected, err)
+	}
+	handler, err := newHandler(selected)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer handler.Close()
+	for _, target := range []string{"/healthz", "/api/catalog", "/api/guides/guide-123"} {
+		response := requestSite(handler, http.MethodGet, target, "", "")
+		if response.Code != http.StatusOK {
+			t.Fatalf("remembered catalog must serve %s: status=%d", target, response.Code)
+		}
+		if target == "/api/catalog" && !bytes.Equal(response.Body.Bytes(), index) {
+			t.Fatal("remembered selection must serve the complete selected index")
+		}
+	}
+}
+
+func TestExplicitCatalogOverridesLocalSelection(t *testing.T) {
+	directory, _ := catalogFixture(t)
+	t.Chdir(t.TempDir())
+	t.Setenv("CATALOG_DIR", directory)
+	writeLocalCatalogSelection(t, "invalid\nselection\n")
+	selected, err := configuredCatalogDirectory()
+	if err != nil || selected != directory {
+		t.Fatalf("explicit deployment catalog must win: directory=%q error=%v", selected, err)
+	}
+}
+
+func TestCatalogSelectionFailsBeforeListening(t *testing.T) {
+	for _, selection := range []string{"missing", "empty", "multiline", "invalid", "unfinished"} {
+		t.Run(selection, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("CATALOG_DIR", "")
+			t.Setenv("TLS_CERT", "")
+			t.Setenv("TLS_KEY", "")
+			t.Setenv("ADDR", "invalid listening address")
+			switch selection {
+			case "empty":
+				writeLocalCatalogSelection(t, " \n")
+			case "multiline":
+				writeLocalCatalogSelection(t, "one\ntwo\n")
+			case "invalid":
+				writeLocalCatalogSelection(t, "/missing/catalog/release\n")
+			case "unfinished":
+				directory, _ := catalogFixture(t)
+				if err := os.Remove(filepath.Join(directory, "manifest.json")); err != nil {
+					t.Fatal(err)
+				}
+				writeLocalCatalogSelection(t, directory+"\n")
+			}
+			err := serve(context.Background())
+			if err == nil || strings.Contains(err.Error(), "listen on") {
+				t.Fatalf("bad catalog selection must fail before binding a healthy-looking server: %v", err)
+			}
+		})
+	}
 }
 
 func TestCatalogResponsesCachingAndRanges(t *testing.T) {

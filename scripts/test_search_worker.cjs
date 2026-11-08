@@ -722,4 +722,117 @@ test('malformed sparse guide literals fail closed while older indexes remain val
   assert.equal((await (await workerFor(empty)).search('Galaxy S23')).items[0][0], 's23');
 });
 
+// Startup recovery uses a synthetic clock so retry limits/timing do not depend
+// on wall time, and cannot silently leave a polling loop running after success.
+async function startupWorker(outcomes) {
+  let now = 0, timerId = 0;
+  const timers = new Map(), requests = [], messages = [], canceled = [];
+  const context = vm.createContext({ self: {}, performance: { now: () => now },
+    atob: value => Buffer.from(value, 'base64').toString('binary'),
+    setTimeout(callback, delay) { const id = ++timerId; timers.set(id, { callback, at: now + delay }); return id; },
+    clearTimeout(id) { timers.delete(id); },
+    fetch: async (url, options) => {
+      assert.equal(url, '/api/catalog');
+      assert.equal(options.credentials, 'same-origin');
+      assert.equal(options.mode, 'same-origin');
+      const outcome = outcomes[Math.min(requests.length, outcomes.length - 1)];
+      requests.push({ url, options: { ...options }, at: now });
+      if (outcome instanceof Error) throw outcome;
+      if (typeof outcome === 'number') return { ok: false, status: outcome,
+        body: { cancel: async () => { canceled.push(outcome); } } };
+      return { ok: true, json: async () => typeof outcome === 'function' ? outcome() : structuredClone(outcome) };
+    },
+    postMessage(message) { messages.push(structuredClone(message)); },
+  });
+  async function flush() { for (let at = 0; at < 16; at++) await Promise.resolve(); }
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8'), context);
+  await flush();
+  return { requests, messages, timers, canceled,
+    send(data) { context.self.onmessage({ data }); },
+    async advance(duration) {
+      const end = now + duration;
+      while (true) {
+        const next = [...timers].sort((a, b) => a[1].at - b[1].at || a[0] - b[0])[0];
+        if (!next || next[1].at > end) break;
+        now = next[1].at;
+        timers.delete(next[0]);
+        next[1].callback();
+        await flush();
+      }
+      now = end;
+      await flush();
+    },
+  };
+}
+
+test('startup503 recovers silently and runs only the latest queued query without further fetches', async () => {
+  const worker = await startupWorker([503, fixture()]);
+  assert.equal(worker.requests.length, 1);
+  assert.equal(worker.requests[0].options.cache, undefined, 'healthy loads retain normal ETag caching');
+  assert.deepEqual(worker.messages, [], 'transient failures never flash an error or loading message');
+  worker.send({ type: 'search', requestId: 1, query: 'fridge' });
+  worker.send({ type: 'search', requestId: 2, query: 'laptop battery' });
+  await worker.advance(249);
+  assert.equal(worker.requests.length, 1);
+  await worker.advance(1);
+  assert.equal(worker.requests.length, 2);
+  assert.equal(worker.requests[1].options.cache, 'no-store');
+  assert.deepEqual(worker.canceled, [503], 'discard the failed response body before retrying');
+  assert.deepEqual(worker.messages.map(message => message.type), ['ready', 'results']);
+  assert.equal(worker.messages[1].requestId, 2);
+  assert.equal(worker.messages[1].total, 2);
+  assert.equal(worker.timers.size, 0, 'recovery stops its retry timer');
+  worker.send({ type: 'search', requestId: 3, query: 'fridge' });
+  await worker.advance(0);
+  worker.send({ type: 'range', requestId: 3, rangeId: 1, start: 0, count: 60 });
+  await worker.advance(100000);
+  assert.equal(worker.messages.at(-2).type, 'results');
+  assert.equal(worker.messages.at(-1).type, 'range');
+  assert.equal(worker.requests.length, 2, 'search/ranges never request the catalog again');
+});
+
+test('startup retries temporary network and server failures, then stops on success', async () => {
+  for (const failure of [new TypeError('Failed to fetch'), 429, 500, 502, 504]) {
+    const worker = await startupWorker([failure, fixture()]);
+    assert.deepEqual(worker.messages, []);
+    await worker.advance(250);
+    assert.deepEqual(worker.messages.map(message => message.type), ['ready']);
+    assert.equal(worker.requests.length, 2);
+    assert.equal(worker.timers.size, 0);
+  }
+});
+
+test('startup retry budget is finite and reports one error only after backoff is exhausted', async () => {
+  const worker = await startupWorker([503]);
+  for (const delay of [250, 500, 1000, 2000, 4000]) {
+    const before = worker.requests.length;
+    await worker.advance(delay - 1);
+    assert.equal(worker.requests.length, before);
+    assert.deepEqual(worker.messages, []);
+    await worker.advance(1);
+    assert.equal(worker.requests.length, before + 1);
+  }
+  assert.deepEqual(worker.requests.map(request => request.at), [0, 250, 750, 1750, 3750, 7750]);
+  assert.equal(worker.messages.length, 1);
+  assert.equal(worker.messages[0].type, 'error');
+  assert.match(worker.messages[0].message, /unavailable \(503\)/);
+  assert.equal(worker.timers.size, 0);
+  await worker.advance(100000);
+  assert.equal(worker.requests.length, 6);
+  assert.equal(worker.messages.length, 1);
+});
+
+test('permanent HTTP failures and invalid catalog payloads are never retried', async () => {
+  for (const outcome of [400, 401, 403, 404, { items: [], categories: null },
+    () => { throw new SyntaxError('Invalid JSON'); }]) {
+    const worker = await startupWorker([outcome]);
+    assert.equal(worker.messages.length, 1);
+    assert.equal(worker.messages[0].type, 'error');
+    assert.equal(worker.requests.length, 1);
+    assert.equal(worker.timers.size, 0);
+    await worker.advance(100000);
+    assert.equal(worker.requests.length, 1);
+  }
+});
+
 module.exports = { workerFor, prepare };
