@@ -250,8 +250,41 @@ test('a newer top answer cancels obsolete active prefetches instead of waiting f
   assert.equal(ui.document.activeElement, ui.response);
 });
 
+test('a stale persistent guide cache cannot keep the prefix article after alternatives move', async () => {
+  let reads = 0;
+  const ui = answerUI({ cache: {
+    fetchGuide() { reads++; throw Error('Stale catalog generation'); },
+  } });
+  ui.ready();
+  ui.change('a'); ui.result(['prefix', 'side']); await settle();
+  assert.equal(ui.title(), 'Answer prefix');
+  assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['side']);
+  ui.change('complete'); ui.result(['complete', 'alternative']); await settle();
+  assert.equal(ui.title(), 'Answer complete');
+  assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['alternative']);
+  assert.ok(reads >= 2);
+  assert.ok(ui.requests.includes('complete'));
+  assert.equal(ui.document.activeElement, ui.response);
+});
+
+test('a rejected guide cache followed by a network failure keeps the prior article', async () => {
+  const ui = answerUI({ deferred: ['bad'], cache: {
+    fetchGuide() { throw Error('Catalog changed.'); },
+  } });
+  ui.ready(); ui.change('first'); ui.result(['good', 'other']); await settle();
+  assert.equal(ui.title(), 'Answer good');
+  ui.change('next'); ui.result(['bad', 'alt']); ui.release('bad', { error: true }); await settle();
+  assert.equal(ui.title(), 'Answer good');
+  assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['alt']);
+  assert.equal(ui.elements['guide-nav-error'].hidden, true);
+  assert.equal(ui.elements['catalog-status'].textContent, '');
+});
+
 test('a prepared replacement waits through typing and IME, then replays the latest query without blanking its answer', async () => {
-  const accepted = [], cache = { async acceptCatalog(value) { accepted.push(value); return true; } };
+  const accepted = [], published = [], cache = {
+    async acceptCatalog(value) { accepted.push(value); return true; },
+    async publishCatalog(etag) { published.push(etag); return true; },
+  };
   const ui = answerUI({ cache }); ui.ready({ catalogETag: 'old', cacheSource: 'cache', cacheTimings: { readMs: 2, parseMs: 4 }, prepareDuration: 9 });
   ui.change('old query'); ui.result(['one']); await settle();
   ui.workers[0].emit({ type: 'catalog-update', etag: 'new', candidateKey: 'new-key' });
@@ -263,11 +296,14 @@ test('a prepared replacement waits through typing and IME, then replays the late
   replacement.emit({ type: 'ready', catalogETag: 'new', candidateKey: 'new-key', categories: [], source: {}, terms: [], loadDuration: 10 });
   ui.event(ui.response, 'compositionstart'); ui.advance(1000); await settle();
   assert.equal(accepted.length, 0, 'composition blocks the swap');
+  assert.equal(published.length, 0, 'composition does not publish the next guide generation');
   assert.equal(ui.workers[0].terminated, undefined);
   ui.event(ui.response, 'compositionend'); ui.advance(379); await settle();
   assert.equal(accepted.length, 0);
+  assert.equal(published.length, 0);
   ui.advance(1); await settle(); ui.flushFrames();
-  assert.deepEqual(JSON.parse(JSON.stringify(accepted)), [{ etag: 'new', candidateKey: 'new-key' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(accepted)), [{ etag: 'new', candidateKey: 'new-key', deferGuides: true }]);
+  assert.deepEqual(published, ['new']);
   assert.equal(ui.workers[0].terminated, true);
   assert.equal(replacement.posts.at(-1).query, 'latest query');
   assert.equal(ui.title(), 'Answer one', 'the current answer remains until new result payload is ready');

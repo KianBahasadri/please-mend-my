@@ -187,10 +187,19 @@
       timing("guideQueueMs", transportAt - record.queuedAt);
       const generation = catalogETag;
       const signal = record.controller?.signal;
+      const requestGuide = (reload) => fetch(`/api/guides/${encodeURIComponent(record.id)}`, {
+        credentials: "same-origin", mode: "same-origin",
+        ...(reload ? { cache: "no-store" } : {}),
+        ...(signal ? { signal } : {}),
+      });
+      // A rejected persistent guide must not freeze the previous article while
+      // the current alternatives are already visible. Abort stays abort.
       const response = clientCache?.fetchGuide
-        ? clientCache.fetchGuide(record.id, { etag: generation, signal })
-        : fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin", mode: "same-origin",
-          ...(signal ? { signal } : {}) });
+        ? Promise.resolve().then(() => clientCache.fetchGuide(record.id, { etag: generation, signal })).catch(error => {
+          if (signal?.aborted || error?.name === "AbortError") throw error;
+          return requestGuide(true);
+        })
+        : requestGuide(false);
       response
         .then(async (response) => {
           timing("detailTransportMs", performance.now() - transportAt);
@@ -675,12 +684,18 @@
     record.accepting = true;
     try {
       if (!record.accepted) {
-        record.accepted = await clientCache.acceptCatalog({ etag: record.etag, candidateKey: record.key });
+        record.accepted = await clientCache.acceptCatalog({ etag: record.etag, candidateKey: record.key, deferGuides: true });
         if (!record.accepted) { discardReplacement(record); return; }
       }
       if (replacement !== record) return;
       // Accepting Cache Storage is asynchronous. An IME composition or a new
       // keystroke can begin meanwhile, so recheck the idle boundary afterwards.
+      if (composingInputs.size || document.visibilityState === "hidden" || performance.now() - lastEditAt < 380) return;
+      if (!record.published && clientCache.publishCatalog) {
+        record.published = await clientCache.publishCatalog(record.etag);
+        if (!record.published) { discardReplacement(record); return; }
+      }
+      if (replacement !== record) return;
       if (composingInputs.size || document.visibilityState === "hidden" || performance.now() - lastEditAt < 380) return;
       const previous = worker;
       catalogETag = record.etag;

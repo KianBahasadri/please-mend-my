@@ -21,8 +21,10 @@ response needs no replacement body; a changed release is downloaded into a
 candidate entry. A replacement worker validates and prepares it while the active
 worker continues searching. Reconnecting an offline tab triggers a coalesced
 freshness check too. Only a ready candidate can replace the active
-catalog, invalidate guide caches, and become the persisted default. Failed or
-malformed candidates preserve the last good catalog.
+catalog and become the persisted default. Guide caches stay on the generation
+the visible worker is searching until that replacement is committed, so typing
+during validation cannot pair a new generation marker with the previous index.
+Failed or malformed candidates preserve the last good catalog.
 
 Guide responses are fenced by catalog generation, including late in-flight
 requests. Native Web Locks serialize publication and guide eviction across tabs

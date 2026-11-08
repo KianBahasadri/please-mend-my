@@ -179,13 +179,45 @@
           if (await activeEtag() !== etag) return false;
         } catch { storageFailure(); return false; }
       } else if (entry.source !== "network" && previous !== etag) return false;
+      // The validated index can be stored before the visible worker swaps.
+      // Guide reads keep the previous generation until that swap commits.
+      if (entry.deferGuides) return true;
+      const marker = await storedGuideEtag(store);
       currentEtag = etag;
       await saveGuideGeneration(store, etag);
-      if (previous && etag && previous !== etag) {
-        guideState = null;
-        try { await scope.caches?.delete?.(GUIDES); } catch { storageFailure(); }
-        emit({ type: "catalog-changed", etag });
+      if ((previous && etag && previous !== etag) || (marker && etag && marker !== etag)) {
+        await retireGuides(etag);
       }
+      return true;
+    });
+  }
+
+  async function storedGuideEtag(store) {
+    if (!store) return "";
+    try {
+      const response = await store.match(CATALOG_GENERATION);
+      const etag = etagOf(response);
+      discard(response);
+      return validEtag(etag) ? etag : "";
+    } catch { storageFailure(); return ""; }
+  }
+
+  async function retireGuides(etag) {
+    guideState = null;
+    try { await scope.caches?.delete?.(GUIDES); } catch { storageFailure(); }
+    emit({ type: "catalog-changed", etag });
+  }
+
+  async function publishCatalog(etag) {
+    if (!validEtag(etag)) return false;
+    return exclusiveCatalog(async () => {
+      const store = await cache(CATALOG);
+      const active = await activeEtag();
+      if (active && active !== etag) return false;
+      const marker = await storedGuideEtag(store);
+      currentEtag = etag;
+      await saveGuideGeneration(store, etag);
+      if (marker !== etag) await retireGuides(etag);
       return true;
     });
   }
@@ -382,7 +414,7 @@
     } catch { return null; }
   }
 
-  scope.mendClientCache = Object.freeze({ loadCatalog, probeCatalog, acceptCatalog, rejectCatalog, fetchGuide,
+  scope.mendClientCache = Object.freeze({ loadCatalog, probeCatalog, acceptCatalog, publishCatalog, rejectCatalog, fetchGuide,
     registerShell, subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     idle: () => guideSerial, stats });
 })();

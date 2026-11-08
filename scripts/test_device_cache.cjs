@@ -98,6 +98,31 @@ test('changed catalog stages without replacing the good response until validatio
   assert.equal(ui.caches.stores.has('pmm-guides-v1'), false, 'a changed catalog purges persisted guides');
 });
 
+test('deferred catalog acceptance keeps guide reads on the active generation until publication', async () => {
+  const ui = helper({ transport: async (url, options) => options?.method === 'HEAD'
+    ? new Response(null, { status: 200, headers: { ETag: '"two"' } })
+    : url === '/api/catalog' ? json(catalog('two'), '"two"')
+    : json({ id: 'one', title: 'Current', html: '<p>Current</p>' }, '"guide"', { 'X-PMM-Catalog-ETag': '"two"' }) });
+  await activate(ui);
+  const guides = await ui.caches.open('pmm-guides-v1');
+  await guides.put('/api/guides/one?catalog=%22one%22', json({ id: 'one', title: 'Old', html: '<p>Old</p>' }, '"body"',
+    { 'X-PMM-Catalog-ETag': '"one"' }));
+  const candidate = await ui.cache.probeCatalog('"one"');
+  const prepared = await ui.cache.loadCatalog({ candidateKey: candidate.candidateKey });
+  assert.equal(await ui.cache.acceptCatalog({ ...prepared, deferGuides: true }), true);
+  assert.equal((await ui.cache.loadCatalog()).catalog.revision, 'two');
+  assert.equal(ui.caches.stores.has('pmm-guides-v1'), true, 'guide storage survives until the visible swap commits');
+  const before = ui.requests.length;
+  assert.equal((await (await ui.cache.fetchGuide('one', { etag: '"one"' })).json()).title, 'Old');
+  assert.equal(ui.requests.length, before);
+  const changes = [];
+  ui.cache.subscribe(change => changes.push(change));
+  assert.equal(await ui.cache.publishCatalog('"two"'), true);
+  assert.equal(ui.caches.stores.has('pmm-guides-v1'), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(changes)), [{ type: 'catalog-changed', etag: '"two"' }]);
+  await assert.rejects(ui.cache.fetchGuide('one', { etag: '"one"' }), /Catalog changed/);
+});
+
 test('invalid staged updates preserve the last good catalog and missing candidates cannot activate', async () => {
   const ui = helper({ transport: async (_url, options) => options.method === 'HEAD'
     ? new Response(null, { status: 200, headers: { ETag: '"two"' } }) : json({ version: 99 }, '"two"') });

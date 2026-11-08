@@ -100,4 +100,4 @@
 - Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps. Cloud a49d8bc3:435213 prepared, unpromoted; live4084210 still207691.
 - Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloud refresh finished (5GiB/CPU2), no active jobs; prepared-release.path awaits validation/promotion. Keep live207k unchanged for local-demo work.
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
-- Stale first-letter article remains: persistent catalog/guide cache can show an old article while alternatives are current. Direct-data bypass removed; persistent-cache recovery still pending.
+- Stale first-letter article fixed: guide generation publishes only when the replacement worker swaps; a rejected persistent guide falls back to the network so the article follows the current alternatives. JS 216 pass.
