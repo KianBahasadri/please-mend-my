@@ -13,11 +13,11 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
-import re
 import sqlite3
-import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
+
+from ingest_common import TEXT_HELPERS, normalize_noun as normalize
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(__file__).with_name("nouns-source.json")
@@ -30,11 +30,6 @@ def file_digest(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def normalize(value: str) -> str:
-    value = "".join(c for c in unicodedata.normalize("NFKD", value) if not unicodedata.combining(c)).casefold()
-    return " ".join(re.findall(r"[^\W_]+", value, re.UNICODE))
 
 
 def configuration() -> dict:
@@ -167,7 +162,7 @@ def seed_nouns(data_dir: Path, *, offline: bool = False) -> Path:
     data_dir = Path(data_dir)
     source = source_file(data_dir, offline=offline)
     destination = data_dir / "nouns" / "seed.sqlite"
-    fingerprint = hashlib.sha256(Path(__file__).read_bytes() + CONFIG.read_bytes() + file_digest(source).encode()).hexdigest()
+    fingerprint = hashlib.sha256(Path(__file__).read_bytes() + TEXT_HELPERS.read_bytes() + CONFIG.read_bytes() + file_digest(source).encode()).hexdigest()
     receipt_path = destination.with_suffix(".json")
     try:
         receipt = json.loads(receipt_path.read_bytes())

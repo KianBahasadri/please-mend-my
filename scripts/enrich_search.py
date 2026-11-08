@@ -15,18 +15,14 @@ from pathlib import Path
 import re
 import sqlite3
 import time
-import unicodedata
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+from ingest_common import clean
 
 ROOT = Path(__file__).resolve().parent.parent
 VOCABULARY = ROOT / "scripts/search-vocabulary.json"
 USER_AGENT = "PleaseMendMyIngest/1.0 (+https://github.com/KianBahasadri/please-mend-my)"
-
-
-def clean(value):
-    return "".join(char for char in unicodedata.normalize("NFKD", value)
-                   if not unicodedata.category(char).startswith("M")).lower()
 
 
 def atomic_write(path, body):

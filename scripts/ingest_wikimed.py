@@ -30,13 +30,14 @@ import sqlite3
 import subprocess
 import sys
 import time
-import unicodedata
 from urllib.parse import quote, unquote, urljoin, urlsplit
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
 from libzim.reader import Archive
 from lxml import etree, html
+
+from ingest_common import TEXT_HELPERS, clean
 
 ROOT = Path(__file__).resolve().parent.parent
 REVISION = "wikipedia_en_medicine_maxi_2026-10"
@@ -82,12 +83,8 @@ def digest_file(path):
 
 
 def ingestion_key():
-    return hashlib.sha256(Path(__file__).read_bytes() + b"\0" + ARCHIVE_SHA256.encode()).hexdigest()
-
-
-def clean(value):
-    return "".join(char for char in unicodedata.normalize("NFKD", value)
-                   if not unicodedata.category(char).startswith("M")).lower()
+    return hashlib.sha256(Path(__file__).read_bytes() + b"\0" + TEXT_HELPERS.read_bytes()
+                          + b"\0" + ARCHIVE_SHA256.encode()).hexdigest()
 
 
 def normalized_path(value):

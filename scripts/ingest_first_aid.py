@@ -23,10 +23,11 @@ import subprocess
 import sys
 import tempfile
 import time
-import unicodedata
 import urllib.request
 
 import pymupdf
+
+from ingest_common import TEXT_HELPERS, normalize
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ID = "first-aid"
@@ -77,6 +78,7 @@ def source_descriptor():
 
 def script_fingerprint():
     digest = hashlib.sha256(Path(__file__).read_bytes())
+    digest.update(b"\0" + TEXT_HELPERS.read_bytes() + b"\0")
     digest.update((PYMUPDF_VERSION + "\0" + str(RENDER_DPI)).encode())
     return digest.hexdigest()
 
@@ -169,11 +171,6 @@ def chapter_ranges(outline, page_count):
     return [{"heading": starts[page], "startPage": page,
              "endPage": ordered[position + 1] - 1 if position + 1 < len(ordered) else page_count}
             for position, page in enumerate(ordered)]
-
-
-def normalize(value):
-    return " ".join("".join(character for character in unicodedata.normalize("NFKD", value)
-                            if not unicodedata.category(character).startswith("M")).lower().split())
 
 
 def section_aliases(section, outline):

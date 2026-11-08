@@ -170,6 +170,20 @@ class WikiMedTests(unittest.TestCase):
                   patch("sys.argv", ["ingest_wikimed.py", "--data-dir", str(data)])):
                 ingest.main()
 
+    def test_shared_text_change_invalidates_completed_source(self):
+        archive = self.root / "fixture.zim"
+        make_zim(archive)
+        checksum = ingest.digest_file(archive)
+        data = self.root / "data"
+        data.mkdir()
+        helpers = self.root / "text_helpers.py"
+        helpers.write_text("initial text routines")
+        with patch.object(ingest, "ARCHIVE_SHA256", checksum), patch.object(ingest, "TEXT_HELPERS", helpers):
+            ingest.build(data, archive, {"sha256": checksum}, checksum)
+            self.assertIsNotNone(ingest.completed(data))
+            helpers.write_text("updated text routines")
+            self.assertIsNone(ingest.completed(data))
+
     def test_literal_title_punctuation_and_percent_encoding_never_merge_articles(self):
         archive = self.root / "punctuation.zim"
         creator = Creator(archive).config_indexing(False, "eng").config_nbworkers(1)

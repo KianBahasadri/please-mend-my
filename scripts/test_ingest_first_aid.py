@@ -116,6 +116,15 @@ class FirstAidTests(unittest.TestCase):
         with patch.object(ingest, "script_fingerprint", return_value="changed"):
             self.assertIsNone(ingest.cached_runtime(self.data))
 
+    def test_shared_text_change_invalidates_completion_receipt(self):
+        helpers = self.root / "text_helpers.py"
+        helpers.write_text("initial text routines")
+        with patch.object(ingest, "TEXT_HELPERS", helpers):
+            self.build()
+            self.assertIsNotNone(ingest.cached_runtime(self.data))
+            helpers.write_text("updated text routines")
+            self.assertIsNone(ingest.cached_runtime(self.data))
+
     def test_changed_bytes_fail_pinned_verification_before_publication(self):
         self.pdf.write_bytes(self.pdf_bytes[:-1] + b"x")
         with self.assertRaisesRegex(ValueError, "pinned size/checksums"):

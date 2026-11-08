@@ -3,6 +3,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from xml.sax.saxutils import escape
 
 from link_nouns import alias_ranks, link_catalog
@@ -139,6 +140,21 @@ class NounPipelineTests(unittest.TestCase):
         connection = self.connection(database)
         self.assertEqual(connection.execute('SELECT id FROM items').fetchall(), [('two',)])
         self.assertEqual(connection.execute("SELECT guide_count FROM nouns WHERE id='laptop'").fetchone(), (0,))
+
+    def test_shared_text_change_invalidates_unchanged_noun_link_cache(self):
+        index = self.write_index([['one', 'Laptop', 'technology', 'guide', 'Laptop']])
+        database = self.root / 'catalog.sqlite'
+        helpers = self.root / 'shared_text.py'
+        helpers.write_text('initial text implementation')
+        with patch('link_nouns.TEXT_HELPERS', helpers):
+            first = link_catalog(index, database, self.seed)
+            self.assertTrue(link_catalog(index, database, self.seed)['reused'])
+            helpers.write_text('updated text implementation')
+            rebuilt = link_catalog(index, database, self.seed)
+        self.assertFalse(rebuilt['reused'])
+        self.assertNotEqual(first['fingerprint'], rebuilt['fingerprint'])
+        connection = self.connection(database)
+        self.assertEqual(connection.execute('SELECT id FROM items').fetchall(), [('one',)])
 
     def test_generic_model_ancestry_beats_unrelated_model_name_words(self):
         context = self.source_context()

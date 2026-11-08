@@ -13,7 +13,8 @@ import re
 import shutil
 import sqlite3
 
-from seed_nouns import CONFIG, ROOT, configuration, file_digest, normalize
+from ingest_common import TEXT_HELPERS, normalize_noun as normalize
+from seed_nouns import CONFIG, ROOT, configuration, file_digest
 
 LINK_VERSION = 1
 ACTIONABLE = {'guide', 'article'}
@@ -218,7 +219,7 @@ def _index_rows(document: dict):
 
 def _fingerprint(index_path, seed_database, ifixit_database, source_databases=()):
     digest = hashlib.sha256()
-    for path in (Path(__file__), CONFIG, index_path, seed_database):
+    for path in (Path(__file__), TEXT_HELPERS, CONFIG, index_path, seed_database):
         digest.update(str(path.name).encode() + b'\0' + file_digest(path).encode() + b'\0')
     # Source graph databases are immutable ingestion products. Include their
     # stat identity without hashing gigabytes of raw/source columns.

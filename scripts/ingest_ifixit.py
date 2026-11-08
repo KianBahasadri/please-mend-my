@@ -36,6 +36,8 @@ import xml.etree.ElementTree as ET
 from libzim.reader import Archive
 from lxml import etree, html
 
+from ingest_common import normalize_ascii_words as tokens
+
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "catalog-data"
 RAW = DATA / "raw"
@@ -157,10 +159,6 @@ def resolve_reference(base, reference):
 
 def short_id(path):
     return hashlib.sha256(path.encode()).hexdigest()[:20]
-
-
-def tokens(value):
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
 
 
 def kind_for(path):

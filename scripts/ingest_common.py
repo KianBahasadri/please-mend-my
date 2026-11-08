@@ -1,4 +1,4 @@
-"""Bounded source downloads and atomic, alias-enriched catalog snapshots."""
+"""Shared build-time text routines, bounded downloads, and catalog snapshots."""
 from __future__ import annotations
 
 from collections import Counter
@@ -16,6 +16,7 @@ import unicodedata
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
+TEXT_HELPERS = Path(__file__).resolve()
 FIELDS = ["id", "title", "category", "kind", "device"]
 CATEGORIES = [
     {"id": "technology", "name": "Technology"},
@@ -48,9 +49,139 @@ def atomic_write(path, body):
     temporary.replace(path)
 
 
+def clean(value):
+    return "".join(char for char in unicodedata.normalize("NFKD", str(value or ""))
+                   if not unicodedata.category(char).startswith("M")).lower()
+
+
+def tokens(value):
+    # Unicode letters/numbers; underscore and punctuation separate tokens.
+    words = re.findall(r"[^\W_]+", clean(value))
+    # Preserve number-only searches such as 1708 for the model token A1708.
+    return words + [number for word in words if any(char.isalpha() for char in word)
+                    for number in re.findall(r"\d+", word)]
+
+
+def porter(word):
+    """Original Porter (1980) suffix stripping; ASCII lowercase words only.
+
+    Rules: https://tartarus.org/martin/PorterStemmer/def.txt
+    In particular this uses ABLI -> ABLE, not later BLI/LOGI modifications.
+    Numeric identifiers and non-ASCII words are intentionally never stemmed.
+    """
+    if len(word) <= 2 or not re.fullmatch("[a-z]+", word):
+        return word
+
+    def vowels(part):
+        flags = []
+        for char in part:
+            flags.append(char in "aeiou" or char == "y" and bool(flags) and not flags[-1])
+        return flags
+
+    def measure(part):
+        flags = vowels(part)
+        return sum(flags[index - 1] and not flags[index] for index in range(1, len(flags)))
+
+    def contains_vowel(part):
+        return any(vowels(part))
+
+    def cvc(part):
+        flags = vowels(part)
+        return (len(flags) >= 3 and not flags[-3] and flags[-2] and not flags[-1]
+                and part[-1] not in "wxy")
+
+    def replace(part, rules, minimum):
+        for suffix, replacement in rules:
+            if part.endswith(suffix):
+                stem = part[:-len(suffix)]
+                return stem + replacement if measure(stem) > minimum else part
+        return part
+
+    # 1a: longest matching suffix wins.
+    if word.endswith("sses"):
+        word = word[:-2]
+    elif word.endswith("ies"):
+        word = word[:-2]
+    elif word.endswith("s") and not word.endswith("ss"):
+        word = word[:-1]
+    # 1b.
+    if word.endswith("eed"):
+        if measure(word[:-3]) > 0:
+            word = word[:-1]
+    else:
+        for suffix in ("ed", "ing"):
+            if word.endswith(suffix) and contains_vowel(word[:-len(suffix)]):
+                word = word[:-len(suffix)]
+                if word.endswith(("at", "bl", "iz")):
+                    word += "e"
+                elif (len(word) >= 2 and word[-1] == word[-2] and not vowels(word)[-1]
+                      and word[-1] not in "lsz"):
+                    word = word[:-1]
+                elif measure(word) == 1 and cvc(word):
+                    word += "e"
+                break
+    # 1c.
+    if word.endswith("y") and contains_vowel(word[:-1]):
+        word = word[:-1] + "i"
+    # 2. Sort by suffix length so TIONAL/ATION cannot hide ATIONAL/IZATION.
+    step2 = {"ational": "ate", "tional": "tion", "enci": "ence", "anci": "ance",
+             "izer": "ize", "abli": "able", "alli": "al", "entli": "ent", "eli": "e",
+             "ousli": "ous", "ization": "ize", "ation": "ate", "ator": "ate", "alism": "al",
+             "iveness": "ive", "fulness": "ful", "ousness": "ous", "aliti": "al",
+             "iviti": "ive", "biliti": "ble"}
+    word = replace(word, sorted(step2.items(), key=lambda item: -len(item[0])), 0)
+    # 3.
+    step3 = {"icate": "ic", "ative": "", "alize": "al", "iciti": "ic", "ical": "ic",
+             "ful": "", "ness": ""}
+    word = replace(word, sorted(step3.items(), key=lambda item: -len(item[0])), 0)
+    # 4; ION additionally requires the stem to end in S/T.
+    for suffix in sorted(("al", "ance", "ence", "er", "ic", "able", "ible", "ant", "ement",
+                          "ment", "ent", "ion", "ou", "ism", "ate", "iti", "ous", "ive", "ize"),
+                         key=lambda value: -len(value)):
+        if word.endswith(suffix):
+            part = word[:-len(suffix)]
+            if measure(part) > 1 and (suffix != "ion" or part.endswith(("s", "t"))):
+                word = part
+            break
+    # 5a / 5b.
+    if word.endswith("e"):
+        part = word[:-1]
+        count = measure(part)
+        if count > 1 or count == 1 and not cvc(part):
+            word = part
+    if word.endswith("ll") and measure(word) > 1:
+        word = word[:-1]
+    return word
+
+
 def normalize(value):
-    return " ".join("".join(char for char in unicodedata.normalize("NFKD", value)
-                            if not unicodedata.category(char).startswith("M")).lower().split())
+    """Fold source aliases and collapse whitespace, preserving punctuation."""
+    return " ".join(clean(value).split())
+
+
+def normalize_words(value):
+    """Search folding with punctuation-separated words; no model-number extras."""
+    return " ".join(re.findall(r"[^\W_]+", clean(value)))
+
+
+def normalize_tokens(value):
+    """Join search tokens, retaining the numeric aliases used by query matching."""
+    return " ".join(tokens(value))
+
+
+def normalize_ascii_words(value):
+    """Legacy source-category keys, intentionally ASCII-only without NFKD."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", value.lower()).split())
+
+
+def normalize_noun(value: str) -> str:
+    """OEWN alias keys: retain the existing casefold/combining-mark contract.
+
+    Unlike search lowercasing this intentionally folds sharp-s to ss. These keys
+    are lexical lookup labels, never literal source paths or strict model IDs.
+    """
+    value = "".join(c for c in unicodedata.normalize("NFKD", value) if not unicodedata.combining(c)).casefold()
+    return " ".join(re.findall(r"[^\W_]+", value, re.UNICODE))
 
 
 def classify(title, categories=(), default="other"):
