@@ -38,7 +38,7 @@
 - v2: build-only validated stage3_cache/<id>.json overlay+gzip, else v1; static Go unchanged; client dispatches steps/legacy HTML. No runtime AI/router I/O.
 - Offline stage2 clean→async OpenRouter qwen/qwen3.6-35b-a3b strict-schema, 40 parallel; SHA cache covers raw/model/prompt/config/schema; preserve provenance/safety. Pilot 25 each first aid/software/handyman/hardware; report source gaps.
 - Cache complete schema-valid responses before postprocessing; drop unsupported optional links/images; never activate partial/invalid output. Retry cached responses offline.
-- Local v2: 100/25 each; overlay 9104e9fe… (base f55559d2…); repeat 0 calls/2.8s, gzip -78%, same index. Gaps: PipeWire/Wi-Fi drops/Windows boot/leaking pipes.
+- Local v2: 100/25 each; overlay ac9690ea… (raw f55559d2…); cache 0 calls/2.8s; guides gzip -78%; symptom index +7KB. Gaps: PipeWire/Wi-Fi drops/Windows boot/leaking pipes.
 - Attribution: credits only, no formatting/sanitizing notices; license separate.
 - No "No matches yet" line; empty results stay blank.
 - ZIM paths are literal IDs; decode link URLs only. Never collapse ?/#/% titles.

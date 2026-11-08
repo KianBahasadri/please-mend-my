@@ -151,7 +151,7 @@ prose remains pilot material, with original source dates and attribution.
 The local server uses this immutable overlay:
 
 ```text
-catalog-data/releases/9104e9fe31ef28bba495b721b5cda0b7e534977d8f7ce49764681d5bce296874
+catalog-data/releases/ac9690ea345a3db059df79616f8eb4bcc4204299193eb24a3e275dbf87d34faf
 ```
 
 It serves 100 structured guides and 207,591 legacy entries. The original
@@ -177,10 +177,57 @@ Measured sizes and local HTTP timings:
 Each sampled guide had one first request and ten warm requests. Timings include
 local HTTP through receipt of the complete compressed body; they exclude browser
 parse, layout, and paint. They show similar warm response time, not a demonstrated
-runtime speedup. The full 207,691-entry search index stays at 9,965,255 gzip bytes,
-SHA-256 `806b19edc9f55c34750f63bcca949fcf3457b614a58286e8ad5aaccfa6f0048d`.
-Search behavior and its memory/startup work are unchanged.
+runtime speedup. These initial guide-only measurements used the original
+9,965,255-byte gzip index, SHA-256
+`806b19edc9f55c34750f63bcca949fcf3457b614a58286e8ad5aaccfa6f0048d`.
+The symptom/material index below replaces that index.
 
 Validation passed: 107 Python tests, 61 Node hero/search/renderer tests, and
 `go test ./...`. Detailed receipts and benchmark JSON are local under
 `catalog-data/build/` and `catalog-data/benchmarks/structured/`.
+
+## Symptom and material search
+
+The current local snapshot indexes `symptoms` and `materials` from all 100
+validated v2 guides. Both the canonical builder and standalone overlay run the
+same prepared-index stage before immutable publication. The overlay records its
+processed IDs and the new index checksum, and includes the indexer source in its
+release fingerprint. Raw and previous snapshots remain unchanged.
+
+Checks against the actual browser worker and locally served index confirm:
+
+- `throat swelling` returns Anaphylaxis first; previously it returned no matches.
+- `hives`, `impending doom`, and `shortness of breath` include Anaphylaxis.
+- `mineral oil` and `mineral oils` include the squeaky-door-hinge guide.
+- `antihistamines H1` and `antihistamines H2` include Anaphylaxis; `H3` and `H1+`
+  do not turn into those literal material identifiers.
+- Galaxy S23/S24 result IDs and ordering match the prior index.
+
+The worker fetched the index once, then made no requests while searching.
+The new index has SHA-256
+`d08fca7fe28df791f928593b1068688ac9fcc030836b43f9161f31ad1b64459f`.
+It retains 207,691 rows and 52,398 alias groups, with 190,709 terms and 55,947 stem
+entries. Only the 100 processed guide JSON files were read for keyword enrichment;
+unprocessed guide content was not scanned.
+
+| Probe | Before | With symptoms/materials |
+| --- | ---: | ---: |
+| Index JSON | 33,169,530 bytes | 33,184,073 bytes |
+| Index gzip | 9,965,255 bytes | 9,972,214 bytes |
+| Worker preparation | 528.8 ms | 511.5 ms |
+| Prepared JS heap growth | 108.634 MiB | 108.663 MiB |
+| Prepared external memory growth | 16.182 MiB | 16.196 MiB |
+| 27-query suite, warm p95 | 3.176 ms | 3.163 ms |
+| Common repair subset, warm p95 | 3.278 ms | 3.461 ms |
+
+The compressed index grew by 6,959 bytes (0.07%). These isolated Node worker
+measurements use the existing multisource benchmark, with three warmup rounds
+and ten measured rounds; they exclude network and browser paint. Startup varies
+between runs, so the preparation difference is not a demonstrated speedup.
+The tested symptom/material examples had warm worker p95 at most 0.143 ms.
+Detailed comparison and served-index query receipts are under
+`catalog-data/benchmarks/symptoms/`.
+
+Validation after this change: 118 Python tests, 66 Node tests, and
+`go test ./...` pass. Rebuild and restart the local server after worker edits;
+refresh existing browser tabs to load the new worker and resident index.
