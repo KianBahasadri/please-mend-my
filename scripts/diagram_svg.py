@@ -296,7 +296,11 @@ def structural_digest(path, expected_sha, workdir):
     return public, leaves
 
 
-def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts=()):
+def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts=(), minimum_parts=3):
+    # A primary drawing must still identify three assemblies. A secondary view
+    # may add two previously hidden assemblies; its caller verifies novelty.
+    if type(minimum_parts) is not int or minimum_parts not in {2, 3}:
+        raise ValueError("A diagram requires two or three independent physical parts")
     if mapping.get("selectedSource") != source["id"]:
         raise ValueError("Mapping selects a different source")
     parts = {part["id"] for part in subject["parts"]}
@@ -320,8 +324,8 @@ def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts
         if selected in omit_geometry_parts:
             selected = "context"
         (context if selected == "context" else buckets.setdefault(selected, [])).append(leaf["ast"])
-    if len(buckets) < 3:
-        raise ValueError("Diagram maps fewer than three independent repairable assemblies")
+    if len(buckets) < minimum_parts:
+        raise ValueError("Diagram maps fewer than " + str(minimum_parts) + " independent repairable assemblies")
     attribution = {key: source[key] for key in ("title", "author", "source", "license", "licenseUrl")}
     attribution["changes"] = ("Adapted for interactive parts: labels and unsupported decorative elements omitted; "
                               "local references expanded, source geometry regrouped, and paints adapted to monochrome light/dark themes.")

@@ -59,6 +59,13 @@ class DiagramSVGTests(unittest.TestCase):
         self.assertRaises(ValueError, svg.compile_art, subject, source, unknown, digest, leaves)
         incomplete = deepcopy(mapping); incomplete["groupMap"].pop()
         self.assertRaises(ValueError, svg.compile_art, subject, source, incomplete, digest, leaves)
+        secondary = svg.compile_art(subject, source, incomplete, digest, leaves, minimum_parts=2)
+        self.assertEqual(set(secondary["parts"]), {'a', 'b'})
+        self.assertRaises(ValueError, svg.compile_art, subject, source, incomplete, digest, leaves,
+                          minimum_parts=1)
+        single = deepcopy(incomplete); single['groupMap'].pop()
+        self.assertRaises(ValueError, svg.compile_art, subject, source, single, digest, leaves,
+                          minimum_parts=2)
 
     def test_absolute_dimensions_and_simple_css_are_resolved(self):
         self.assertEqual(svg.length('72pt'), 96)
