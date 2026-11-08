@@ -19,7 +19,7 @@
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - RAM: prod c8g.xlarge=8GiB; local jobs may use up to 8GiB (user-authorized). One heavy cgroup job/CPU2; leave ≥8GiB available; serial tests/builds; no uncapped jobs.
-- Qwen SVG batch300 authorized; maximize remote parallelism (128), geometry≤2; 8GiB cap+8GiB reserve. Other large AI runs need authorization.
+- Qwen paused by user; no AI calls/restarts until reauthorized. Keep paid caches+OpenRouter $10 cap. Prod may use full RAM; local reserve still8GiB.
 - Art target: physical/symptom parts; ≤3 views, nonphysical list-only; primary→secondary if coverage<75%+≥2missing clustered parts. Quality/coverage reviews diagnostic; candidates need no visual approval/minimum part coverage to appear. Lazy views, physical match switches, symptoms don't; shape bounds heuristic.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
 - BG: preserve docs/references/approved-spotlight.css; mix wall-floor variants. Visible white beam in dark/BLACK in light, receding seam, static/fast. Ref: docs/references/spotlight-wall-floor.png.
@@ -95,5 +95,8 @@
 - Both startup+per-edit lag confirmed. Per-edit: immediate post, reuse unchanged article DOM, early alternatives, tiny generation marker+nonblocking LRU;204JS pass. Prefix100 exact-rank parity;numeric-prefix scan narrowed. Startup split prototype2.68→1.94s/280→240MiB;pending safe background enrichment wiring.
 - Priority: loaded keypress→visible result, not network/startup. Startup split deferred. Fixes must be generic; repro words are tests only.
 - Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.
-- Demo hardcoding only on demo branch; shared workdir now demo, main deploys from isolated worktree. Prodmain+allphysicalSVGs+≤10karticles Qwen authorized; reuse caches first.
+- Demo-only hardcoding on demo; shared workdir demo, main deploys isolated. Manual local work now; bulk Qwen stopped by user, "resume" must not restart it.
 - HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.
+- Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps. Cloud a49d8bc3:435213 prepared, unpromoted; live4084210 still207691.
+- Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloud refresh finished (5GiB/CPU2), no active jobs; prepared-release.path awaits validation/promotion. Keep live207k unchanged for local-demo work.
+- FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.

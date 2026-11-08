@@ -254,6 +254,21 @@ class ProcessorTests(unittest.TestCase):
         self.assertEqual(list((self.cache / "objects").glob("*.json")), [])
         self.assertEqual(list((self.cache / "responses").glob("*.json")), [])
 
+    def test_account_rejections_stop_queued_calls_but_allow_valid_cache_reuse(self):
+        entries = [self.store(raw_guide(i)) for i in (1, 2, 3)]
+        self.batch(entries[2:], api_key="test-key", transport=lambda *_: (generated(), {}))
+        for code in (401, 402, 403):
+            calls = []
+            def transport(*_):
+                calls.append(1)
+                raise processor.APIError("OpenRouter HTTP " + str(code), status_code=code)
+            result = self.batch(entries, concurrency=1, api_key="test-key", transport=transport)
+            self.assertEqual(result["counts"], {"failed": 1, "deferred": 1, "cached": 1})
+            self.assertEqual(result["apiCalls"], 1)
+            self.assertEqual(len(calls), 1)
+            self.assertIn(str(code), result["entries"][1]["error"])
+            self.assertEqual(result["entries"][1]["apiCalls"], 0)
+
     def test_invalid_generation_does_not_retry_or_cache_and_other_entries_continue(self):
         entries = [self.store(raw_guide(i)) for i in (1, 2)]
         calls = []
@@ -462,6 +477,7 @@ class ProcessorTests(unittest.TestCase):
             self.assertNotIn("secret", str(caught.exception))
             self.assertNotIn("private", str(caught.exception))
             self.assertEqual(caught.exception.retryable, retryable)
+            self.assertEqual(caught.exception.status_code, code)
             self.assertTrue(stream.closed)
 
     def test_malformed_environment_credentials_fail_without_network_or_secret_receipts(self):
