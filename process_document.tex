@@ -74,21 +74,18 @@ Today people use Google, AI, or manual source hunting. AI suits open-ended probl
 \newpage
 \section{Initial Mockups and Prototypes}
 
-Initially, my goal was an autonomous system that mends things \textit{for you} rather than a knowledge database. In practice, everyday questions rarely need an agent, just immediate access to accurate, easy-to-read instructions. Early prototypes tested that:
-\begin{enumerate}
-    \item \textbf{Minimal landing:} A full-screen ``\textit{please, mend my }'' input rotating basic fonts over soft lighting.
-    \item \textbf{Directory iFixit search:} Local iFixit search with ``Browse library,'' category filters, a 100-card grid, and a ``Back to results'' view.
-    \item \textbf{Hero wordplay:} CSS and SVG prototypes replacing font swaps with physical textures, including riveted metal, stitched thread, blueprint lines, and tool-shaped letters.
-\end{enumerate}
+To test real typing speed, I skipped static wireframes and prototyped directly in browser code. The project started as an idea for an autonomous agent that resolves problems \textit{for you}, inspiring the prompt ``\textit{please, mend my \underline{\hspace{1.4em}}}''. Real scenarios quickly exposed the flaw: for a burn, a leaking pipe, or a slipped chain, an agent cannot step in for you and only slows things down when you need clear human instructions.
+
+Keeping that sentence prompt, the first prototype searched an offline iFixit archive locally above category filters and result cards. Local search felt instant, but visitors hesitated at the blank prompt, hardware repair felt too narrow, and scanning cards still felt like a search engine.
 
 \section{Iterations and Feedback}
 
-Advice from four mentors guided key iterations alongside the repository's evolution:
+Feedback from four mentors helped address those early flaws:
 \begin{itemize}
-    \item \textbf{Mentor-guided atmosphere and onboarding:} Drew helped shape the spotlight background, and Professor Ridwan suggested animating example words typing into the idle landing prompt so visitors immediately understand they are supposed to type too.
+    \item \textbf{Atmosphere, wordplay, and onboarding:} Drew helped replace the early backdrop with a spotlight, and Professor Ridwan suggested animating example words into the idle prompt so visitors immediately see they should type too. Font swaps also evolved into physical mending textures (stitched thread, blueprints, and tool-shaped letters).
     \item \textbf{Repair tool to general encyclopedia:} Building on mentor discussions, the iFixit prototype expanded to WikiMed, U.S. Army First Aid, Appropedia, and wikiHow (435,213 items), using offline postings, stems, and aliases for fast browser search.
-    \item \textbf{Cards to inline answer and triage:} The riveted-metal style, category filters, and 100-card grid were cut; bare nouns gained follow-up prompts with clickable part diagrams, and the top guide moved inline.
-    \item \textbf{Offline restructuring:} Because HTML varies across five sources, a build-time pipeline ran an offline model on a 100-guide pilot to reorganize articles into uniform tools, warnings, and steps without query-time AI.
+    \item \textbf{Cards to inline answer and triage:} Category filters and result cards were cut; bare nouns gained follow-up prompts with clickable part diagrams, and the top guide moved inline.
+    \item \textbf{Offline restructuring:} Because HTML varies across sources, a build pipeline ran an offline model on a 100-guide pilot to reorganize articles into uniform tools, warnings, and steps without runtime AI.
 \end{itemize}
 
 \section{Final Product and Outcomes}
@@ -96,7 +93,7 @@ Advice from four mentors guided key iterations alongside the repository's evolut
 \begin{itemize}
     \item \textbf{Everyday language and part lookup:} Users rarely know part names (a bicycle \textit{derailleur}) and type symptoms (\textit{``it's not turning on''}). The prompt strips filler, keeps negation, asks \textit{``What's wrong with your [noun]?''} for bare nouns, and lets users click parts on available diagrams or lists.
     \item \textbf{Immediate inline guides:} Search ranks locally as you type, showing the top match inline with five side alternatives. Pilot guides show safety notices, tools, materials, and steps; others render cleaned source HTML with attribution and source links.
-    \item \textbf{Private, low-request lookup:} Local search keeps queries private on-device with no profiling. Once loaded, the site makes almost no repeat requests, never re-fetches index data or guides already grabbed, keeps opened guides working offline, and minimizes server bandwidth and compute.
+    \item \textbf{Private, low-request lookup:} Local search keeps queries private on-device with no profiling. Once loaded, the site makes almost no repeat requests, never refetches cached index data or guides, keeps opened guides working offline, and minimizes server bandwidth and compute.
 \end{itemize}
 
 \section{Figma}
@@ -116,8 +113,8 @@ No AI was used to create visuals. Diagrams, SVGs, and images come from Wikimedia
 
 \subsection{AI Use}
 \begin{itemize}
-    \item \textbf{Code and writing:} All code was written by LLM agents.
-    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} was used in batch processing articles into a strict schema, and to parse and map open-source SVGs.
+    \item \textbf{Code and writing:} All code was written by LLM agents, which also helped edit this document.
+    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} batch-processed pilot articles into a strict schema and mapped open-source SVGs.
 \end{itemize}
 
 \end{document}
