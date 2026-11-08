@@ -20,7 +20,7 @@ import sqlite3
 import stat
 import unicodedata
 
-from ingest_common import clean, porter, tokens
+from ingest_common import clean, json_bytes, porter, tokens
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -256,10 +256,6 @@ def prepare_index(index, guide_records=None, noun_records=None):
         # these few source fields need text beside the compact token postings.
         result["guideLiterals"] = guide_literals
     return result
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def atomic_write(path, body):

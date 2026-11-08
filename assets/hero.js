@@ -46,7 +46,6 @@
   const curatedWords = new Set([...symptomPredicates, ...conversational,
     ...pronouns, ...determiners, ...contractions,
     ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
-  for (const name of [...curatedWords]) for (const word of name.split(/\s+/)) curatedWords.add(word);
   const completionPunctuation = new Set(["?", ".", "!"]);
 
   function completesSubject(input, text) {
@@ -182,11 +181,11 @@
     promptArt?.sync?.();
   }
 
-  function setPrefix(input, prefix, editable = "") {
+  function setPrefix(input, prefix) {
     const item = state.get(input);
     item.prefix = prefix;
     input.dataset.promptLength = String(prefix.length);
-    input.value = prefix + editable;
+    input.value = prefix;
     item.previous = input.value;
     clampSelection(input);
   }
@@ -223,11 +222,10 @@
   function updateLine(name, remount = false) {
     const wasOpen = open;
     const changedSubject = name.toLocaleLowerCase("en") !== subject.toLocaleLowerCase("en");
-    const symptom = changedSubject || !name ? "" : suffix(second);
     subject = name;
     open = Boolean(name);
     if (open) {
-      if (changedSubject) setPrefix(second, "", symptom);
+      if (changedSubject) setPrefix(second, "");
       question.textContent = `What's wrong with your ${name}?`;
       second.setAttribute("aria-label", question.textContent);
     } else {

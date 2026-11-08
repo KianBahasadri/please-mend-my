@@ -97,14 +97,15 @@ func (catalog *catalogHandler) loadArchetypes(embedded json.RawMessage, revision
 	if err := json.Compact(&resident, embedded); err != nil || !bytes.Equal(compact.Bytes(), resident.Bytes()) {
 		return errors.New("catalog archetypes do not match the browser index")
 	}
-	if err := json.Unmarshal(body, &catalog.registry); err != nil || catalog.registry.Version != 1 || catalog.registry.Revision != revision {
+	var registry archetypeRegistry
+	if err := json.Unmarshal(body, &registry); err != nil || registry.Version != 1 || registry.Revision != revision {
 		return errors.New("catalog archetypes must match the release revision")
 	}
-	if manifest == nil || manifest.Version != 1 || manifest.Bytes != len(body) || manifest.Count != len(catalog.registry.Archetypes) || manifest.Models != len(catalog.registry.Models) || manifest.SHA256 != fmt.Sprintf("%x", sha256.Sum256(body)) {
+	if manifest == nil || manifest.Version != 1 || manifest.Bytes != len(body) || manifest.Count != len(registry.Archetypes) || manifest.Models != len(registry.Models) || manifest.SHA256 != fmt.Sprintf("%x", sha256.Sum256(body)) {
 		return errors.New("catalog manifest must match the published archetypes")
 	}
 	catalog.artHashes = make(map[string]bool)
-	for _, entry := range catalog.registry.Archetypes {
+	for _, entry := range registry.Archetypes {
 		if entry.ArtURL == "" {
 			continue
 		}

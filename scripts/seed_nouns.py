@@ -17,19 +17,11 @@ import sqlite3
 import urllib.request
 import xml.etree.ElementTree as ET
 
-from ingest_common import TEXT_HELPERS, normalize_noun as normalize
+from ingest_common import TEXT_HELPERS, digest_file as file_digest, normalize_noun as normalize
 
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG = Path(__file__).with_name("nouns-source.json")
 SCHEMA_VERSION = 1
-
-
-def file_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with Path(path).open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def configuration() -> dict:
@@ -107,7 +99,7 @@ def parse_wordnet(source: Path, domains: set[str]) -> tuple[dict, dict, list]:
     return synsets, aliases, sorted(edges)
 
 
-def _canonical(identifier: str, members: list[str], choices: list[tuple[str, int]]) -> str:
+def _canonical(members: list[str], choices: list[tuple[str, int]]) -> str:
     if members:
         encoded = members[0].removeprefix("oewn-").removesuffix("-n").replace("_", " ")
         for alias, _ in choices:
@@ -139,7 +131,7 @@ def build_seed(source: Path, destination: Path, frequency=None, config: dict | N
             choices = list(dict.fromkeys(aliases.get(identifier, [])))
             if not choices:
                 continue
-            label = _canonical(identifier, members, choices)
+            label = _canonical(members, choices)
             # Proper names are distributed separately by OEWN. Retain capitalized
             # common acronyms, but not lexical entries lacking a common form.
             if not any(form[0].islower() or form.isupper() for form, _ in choices):

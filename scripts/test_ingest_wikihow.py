@@ -1,7 +1,6 @@
 """CSV ingestion uses tiny quoted/multiline fixtures, never the public corpus."""
 import csv
 import gzip
-import hashlib
 import json
 from pathlib import Path
 import sqlite3

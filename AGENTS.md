@@ -77,3 +77,4 @@
 - SVG300:418calls/128peak,$.311516;231pins/18numeric-passviews→17visualreject+1held,0newapproved. Badnoun/model senses+wronggeometry keptlist-only; preserve existing2art. Batchpeak241MiB.
 - Reload local user service after finished frontend changes; verify /api/catalog+served asset hashes; never auto-open browser.
 - Cleanup gate:216Py/143JS/Go pass;2art runtimeSHA unchanged; offline0network. Newcandidate set→newmappingcachekey/list-only offline; never silently reuse mismatched evidence.
+- Further cleanup wrapped: dead topic ranking/huge-scroll/queue Set removed; startup registry local; shared JSON/SHA; obsolete validator retired. Preserve compatibility/provenance;216Py/143JS+60query exact-rank comparison pass.

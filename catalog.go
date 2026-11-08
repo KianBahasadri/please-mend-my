@@ -33,7 +33,6 @@ type catalogHandler struct {
 	root       *os.Root
 	index      *staticAsset
 	archetypes *staticAsset
-	registry   archetypeRegistry
 	credits    []byte
 	artHashes  map[string]bool
 	cacheMu    sync.Mutex

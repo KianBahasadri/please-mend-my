@@ -27,7 +27,7 @@ import urllib.request
 
 import pymupdf
 
-from ingest_common import TEXT_HELPERS, normalize
+from ingest_common import TEXT_HELPERS, json_bytes, normalize
 
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE_ID = "first-aid"
@@ -55,10 +55,6 @@ FIELDS = ["id", "title", "category", "kind", "device"]
 
 def log(message):
     print(message, file=sys.stderr, flush=True)
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def atomic_write(path, payload):

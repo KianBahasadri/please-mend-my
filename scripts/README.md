@@ -143,10 +143,10 @@ serves this catalog locally and on apex/www, with the same index checksum and
 successful representative page/image checks for all three sources.
 
 Use `CATALOG_DIR=<printed release path> go run .` to serve a completed snapshot.
-`scripts/validate_catalog.py` is an explicit, optional full audit; deployment and
-the build wrapper never invoke it. It currently describes the older iFixit-only
-catalog. Actual English-content filtering remains pending. Never rebuild a source
-runtime while a server serves it; serve an immutable release instead.
+The obsolete iFixit-only audit script has been retired; its historical summary
+remains below. It depended on a removed scratch database and an old directory
+layout. Catalog-wide English-content filtering remains pending. Never rebuild a
+source runtime while a server serves it; serve an immutable release instead.
 
 The iFixit stage runs `enrich_search.py` before merging. It downloads
 21 explicitly mapped Wikidata object classes at pinned revisions, caches their

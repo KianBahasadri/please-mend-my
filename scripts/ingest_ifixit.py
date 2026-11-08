@@ -18,7 +18,6 @@ from collections import Counter, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 import gzip
 import hashlib
-import html as html_escape
 import json
 import mimetypes
 from pathlib import Path
@@ -27,7 +26,6 @@ import re
 import shutil
 import sqlite3
 import subprocess
-import sys
 import time
 from urllib.parse import parse_qs, unquote, urljoin, urlsplit
 from urllib.request import urlopen
@@ -36,7 +34,7 @@ import xml.etree.ElementTree as ET
 from libzim.reader import Archive
 from lxml import etree, html
 
-from ingest_common import normalize_ascii_words as tokens
+from ingest_common import json_bytes, normalize_ascii_words as tokens
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "catalog-data"
@@ -87,10 +85,6 @@ def atomic_write(path: Path, payload: bytes):
     temp = path.with_name(path.name + ".tmp")
     temp.write_bytes(payload)
     temp.replace(path)
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def digest_file(path):

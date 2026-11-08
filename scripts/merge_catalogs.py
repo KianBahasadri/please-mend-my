@@ -19,13 +19,11 @@ import shutil
 import stat
 import tempfile
 
+from ingest_common import json_bytes
+
 FIELDS = ["id", "title", "category", "kind", "device"]
 GUIDE_NAME = re.compile(r"([0-9a-f]{20})\.json(\.gz)?\Z")
 MEDIA_NAME = re.compile(r"[0-9a-f]{64}(?:\.[a-zA-Z0-9]{1,12})?\Z")
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def regular_file(path):

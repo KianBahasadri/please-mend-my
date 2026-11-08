@@ -18,7 +18,7 @@ import time
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from ingest_common import clean
+from ingest_common import clean, json_bytes
 
 ROOT = Path(__file__).resolve().parent.parent
 VOCABULARY = ROOT / "scripts/search-vocabulary.json"
@@ -30,10 +30,6 @@ def atomic_write(path, body):
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_bytes(body)
     temporary.replace(path)
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def wikidata_entity(concept, cache):

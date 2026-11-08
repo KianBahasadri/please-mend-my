@@ -6,7 +6,6 @@ bounds (including path curves/transforms); its labels are hints, never approval.
 from __future__ import annotations
 
 from collections import Counter, OrderedDict
-from copy import deepcopy
 import hashlib
 import json
 import math

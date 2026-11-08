@@ -14,7 +14,6 @@
   const details = new Map();
   const prefetchedImages = new Set();
   const queue = [];
-  const queued = new Set();
   const stats = { indexLoadMs: null, searchMs: [], inputToResultsMs: [], cachedOpenMs: [], detailRequests: 0 };
   window.mendSearchStats = stats;
   let worker;
@@ -47,26 +46,22 @@
     const gap = parseFloat(css.columnGap) || 13.6;
     const height = parseFloat(css.getPropertyValue("--card-height")) || 208;
     const step = height + gap;
-    const logicalHeight = Math.max(0, Math.ceil(resultTotal / columns) * step - gap);
-    // Browsers cap element heights. Scale only very long scroll tracks, keeping
-    // actual cards full size and every result reachable even on narrow screens.
-    const physicalHeight = Math.min(logicalHeight, 8000000);
-    const scale = logicalHeight > physicalHeight
-      ? (logicalHeight - innerHeight) / Math.max(1, physicalHeight - innerHeight) : 1;
+    // The worker ranks at most 100 matches; ordinary-height scroll tracks keep
+    // every result reachable without the former catalog-sized scaling layer.
+    const totalHeight = Math.max(0, Math.ceil(resultTotal / columns) * step - gap);
     const top = cards.getBoundingClientRect().top + scrollY;
-    const physicalOffset = Math.max(0, Math.min(scrollY - top, Math.max(0, physicalHeight - innerHeight)));
-    return { columns, gap, height, step, logicalHeight, physicalHeight, scale, top,
-      physicalOffset, logicalOffset: physicalOffset * scale,
+    const offset = Math.max(0, Math.min(scrollY - top, Math.max(0, totalHeight - innerHeight)));
+    return { columns, gap, step, totalHeight, top, offset,
       width: (cards.clientWidth - gap * (columns - 1)) / columns };
   }
 
   function positionCards(layout = geometry()) {
-    cards.style.height = `${layout.physicalHeight}px`;
+    cards.style.height = `${layout.totalHeight}px`;
     for (const card of cards.children) {
       const index = Number(card.dataset.resultIndex);
       card.style.width = `${layout.width}px`;
       card.style.left = `${index % layout.columns * (layout.width + layout.gap)}px`;
-      card.style.top = `${Math.floor(index / layout.columns) * layout.step - layout.logicalOffset + layout.physicalOffset}px`;
+      card.style.top = `${Math.floor(index / layout.columns) * layout.step}px`;
     }
   }
 
@@ -81,7 +76,6 @@
       const record = queue[index];
       if (visible.has(record.id) || record.id === currentGuide || record.id === pendingGuide) continue;
       queue.splice(index, 1);
-      queued.delete(record.id);
       details.delete(record.id);
       record.reject(new Error("This result is no longer visible."));
     }
@@ -92,7 +86,7 @@
     scrollFrame = 0;
     if (!resultTotal || results.hidden || currentGuide !== null) return;
     const layout = geometry();
-    const firstRow = Math.max(0, Math.floor(layout.logicalOffset / layout.step) - 3);
+    const firstRow = Math.max(0, Math.floor(layout.offset / layout.step) - 3);
     const start = firstRow * layout.columns;
     const amount = Math.min(60, (Math.ceil(innerHeight / layout.step) + 6) * layout.columns);
     positionCards(layout);
@@ -200,7 +194,6 @@
     promise.catch(() => {});
     record = { id, promise, resolve, reject, data: null, state: "queued" };
     details.set(id, record);
-    queued.add(id);
     queue.push(record);
     pump();
     return record;
@@ -209,7 +202,6 @@
   function pump() {
     while (activeFetches < 4 && queue.length) {
       const record = queue.shift();
-      queued.delete(record.id);
       record.state = "loading";
       activeFetches += 1;
       stats.detailRequests += 1;
@@ -294,7 +286,7 @@
     event.preventDefault();
     pendingFocus = next;
     const layout = geometry();
-    window.scrollTo(0, layout.top + Math.floor(next / layout.columns) * layout.step / layout.scale);
+    window.scrollTo(0, layout.top + Math.floor(next / layout.columns) * layout.step);
     scheduleWindow();
   });
 
@@ -521,7 +513,7 @@
       return;
     }
     // Prioritize a clicked page over other cards still waiting for a fetch slot.
-    if (queued.has(id)) {
+    if (record.state === "queued") {
       const index = queue.indexOf(record);
       if (index > 0) { queue.splice(index, 1); queue.unshift(record); }
     }

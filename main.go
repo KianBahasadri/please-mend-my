@@ -58,23 +58,23 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 		if err != nil {
 			return err
 		}
-		asset := &staticAsset{name: name, cacheControl: "no-cache", plain: newRepresentation(body)}
+		contentType, cacheControl := "", "no-cache"
 		switch path.Ext(name) {
 		case ".html":
-			asset.contentType = "text/html; charset=utf-8"
+			contentType = "text/html; charset=utf-8"
 		case ".css":
-			asset.contentType = "text/css; charset=utf-8"
+			contentType = "text/css; charset=utf-8"
 		case ".js":
-			asset.contentType = "text/javascript; charset=utf-8"
+			contentType = "text/javascript; charset=utf-8"
 		case ".woff2":
-			asset.contentType = "font/woff2"
-			asset.cacheControl = "public, max-age=86400"
+			contentType = "font/woff2"
+			cacheControl = "public, max-age=86400"
 		case ".txt":
-			asset.contentType = "text/plain; charset=utf-8"
+			contentType = "text/plain; charset=utf-8"
 		default:
 			return fmt.Errorf("unexpected embedded asset: %s", name)
 		}
-		asset, err = prepareStaticAsset(name, asset.contentType, asset.cacheControl, body)
+		asset, err := prepareStaticAsset(name, contentType, cacheControl, body)
 		if err != nil {
 			return err
 		}

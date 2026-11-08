@@ -127,9 +127,7 @@ let groupDocuments;
 let trie;
 let maximumWordLength = 0;
 let broadBonuses;
-let rootTopics;
 let shortPrefixes;
-const subjectAnchors = new Map();
 // Exact source concept names point to explicit anchor devices. Whole aliases
 // count here (bike -> Bicycle); a word inside "pedal cycle" is not a subject.
 const primarySubjects = new Map();
@@ -516,16 +514,6 @@ function resolveToken(token, widen = false, strict = false, plan = undefined) {
   return result;
 }
 
-function subjectPriority(doc, entry, wordPrefix, anchors) {
-  // Published Wikidata aliases already point to explicit source topic anchors.
-  // A general source root also beats detailed procedures when its first whole
-  // word matches: "Car and Truck", not an acronym/partial word such as "CAR-NK".
-  // Exact requested titles score above both priorities; models and full phrases
-  // never enter this broad-subject branch.
-  if (anchors?.has(doc)) return 850;
-  return rootTopics[doc] && entry.title.startsWith(wordPrefix) ? 750 : -Infinity;
-}
-
 function titleScore(entry, query, tokens, wordPrefixes, bonus) {
   let score = entry.title === query ? 1000 : entry.title.startsWith(query) ? 500 : entry.title.includes(query) ? 250 : 0;
   // A complete title such as "Broken arm" is closer to "arm broken" than a
@@ -599,18 +587,17 @@ function shortlist() {
 function broadSearch(query, list) {
   // A bare subject has one posting list: avoid the multi-term intersection and
   // numeric-identifier loops while applying its source-aware ranking.
-  const best = shortlist(), anchors = subjectAnchors.get(query);
-  const wordPrefix = " " + query, subjectPrefix = query + " ";
+  const best = shortlist();
+  const wordPrefix = " " + query;
   for (const doc of list.documents) {
     const entry = entries[doc];
     if (!actionable(entry)) continue;
     const quality = list.quality[doc], penalty = (quality - 1) * 100;
     const bonus = broadBonuses[doc];
-    const subject = subjectPriority(doc, entry, subjectPrefix, anchors);
     const upper = (quality <= 2 ? (entry.title.length === query.length ? 1035 : 535) : 0) + bonus - penalty;
-    if (!best.canBeat(subject > upper ? subject : upper)) continue;
+    if (!best.canBeat(upper)) continue;
     const score = (quality <= 2 ? singleWordTitleScore(entry, query, wordPrefix, bonus) : bonus) - penalty;
-    best.add(doc, subject > score ? subject : score);
+    best.add(doc, score);
   }
   return best.sorted();
 }
@@ -702,8 +689,6 @@ function legacySearch(query, literalQuery = "") {
   const wordPrefixes = tokens.map(token => " " + token);
   const negations = tokens.map(token => token === "not" ? /\bnot\b/ : token === "no" ? /\bno\b/ : null);
   const broad = tokens.length === 1 && query.length > 1 && /^\p{L}+$/u.test(query);
-  const anchors = broad ? subjectAnchors.get(query) : null;
-  const subjectPrefix = query + " ";
   // Transitional compatibility while an old catalog is still cached. Published
   // builds have prepared postings; their searches never take this scan path.
   const compact = tokens.length <= 31;
@@ -734,8 +719,7 @@ function legacySearch(query, literalQuery = "") {
     if (!matches) continue;
     const bonus = broad ? broadBonuses[index] : entry.row[3] === "guide" ? 15 : 0;
     const score = titleScore(entry, query, tokens, wordPrefixes, bonus);
-    const subject = broad ? subjectPriority(index, entry, subjectPrefix, anchors) : -Infinity;
-    best.add(index, subject > score ? subject : score);
+    best.add(index, score);
   }
   return best.sorted();
 }
@@ -836,35 +820,24 @@ async function loadCatalog() {
       itemGroups = Uint32Array.from(metadata.itemGroups);
       delete metadata.itemGroups;
     }
-    // Resolve explicit source paths against their exact normalized topic titles.
-    // This is the same published source vocabulary, not runtime entity guessing.
-    const anchorNames = new Map();
+    // Whole source aliases identify their explicit device names. Topic pages
+    // remain in the catalog for direct links, but never enter result rankings.
     for (const source of catalog.search?.sources || []) {
       if (!Array.isArray(source.ifixitPaths)) continue;
       const names = [source.label, ...(source.aliases || []), ...(source.curated || [])]
         .filter(name => typeof name === "string").map(clean);
       for (const path of source.ifixitPaths) {
         const title = clean(path.slice(path.lastIndexOf("/") + 1).replaceAll("_", " "));
-        if (!anchorNames.has(title)) anchorNames.set(title, new Set());
         for (const name of names) {
-          anchorNames.get(title).add(name);
           if (!primarySubjects.has(name)) primarySubjects.set(name, new Set());
           primarySubjects.get(name).add(title);
         }
       }
     }
     broadBonuses = new Uint8Array(catalog.items.length);
-    rootTopics = new Uint8Array(catalog.items.length);
     entries = catalog.items.map((row, doc) => {
       const title = clean(row[1]);
-      broadBonuses[doc] = Math.max(0, 60 - title.length) + (row[3] === "topic" ? 30 : row[3] === "article" ? 18 : 0);
-      if (row[3] === "topic") {
-        rootTopics[doc] = itemGroups[doc] === 0 ? 1 : 0;
-        for (const name of anchorNames.get(title) || []) {
-          if (!subjectAnchors.has(name)) subjectAnchors.set(name, new Set());
-          subjectAnchors.get(name).add(doc);
-        }
-      }
+      broadBonuses[doc] = Math.max(0, 60 - title.length) + (row[3] === "article" ? 18 : 0);
       if (!devices.has(row[4])) devices.set(row[4], clean(row[4]));
       const device = devices.get(row[4]);
       return { row, title, device, text: `${title} ${device} ${categories.get(row[2]) || ""}` };

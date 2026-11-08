@@ -1,5 +1,4 @@
 """Offline regression checks for generic bounded SVG batch orchestration."""
-import asyncio
 from copy import deepcopy
 import json
 from pathlib import Path

@@ -261,3 +261,14 @@ after; JSON/gzip bytes stayed 65,966,782 / 19,111,027. Cold-query p95 measured
 1.93 → 1.87 s. These single local Node runs show no material change; they exclude
 browser layout, paint and network transfer. The three hero styles add about
 3.45 KB compressed assets, with Matrix drawing constrained independently.
+
+A further cleanup removed topic-only ranking state (topics cannot become cards),
+obsolete large-catalog scroll scaling (results are bounded at 100), a redundant
+queued-ID set, unused imports and identical JSON/SHA helper implementations. The
+Go server now releases its decoded validation registry after startup and avoids
+a discarded static-asset construction. The scratch-dependent legacy iFixit
+audit CLI was retired; its historical summary remains. Existing protocol and
+source-format compatibility paths were retained. All 216 Python and 143
+JavaScript tests pass; a separate comparison found identical ranked IDs for all
+60 selected queries against the real resident index. Receipts are under
+`catalog-data/benchmarks/dead-code-cleanup/`.

@@ -127,7 +127,6 @@ for ((attempt = 0; attempt < 30; attempt++)); do
 done
 if [[ "$ssh_ready" != true ]]; then cat "$deploy_tmp/ssh.err" >&2; exit 1; fi
 ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'sudo timeout 180 cloud-init status --wait && test -f /etc/systemd/system/please-mend-my.service'
-catalog_snapshot=''
 catalog_snapshot=$(PMM_ORIGIN_IP="$server_ip" PMM_DEPLOY_COMMIT="$deploy_commit" bash "$deploy_tmp/source/deploy/catalog.sh")
 remote_upload=$(ssh "${ssh_options[@]}" "ec2-user@$server_ip" 'mktemp /home/ec2-user/please-mend-my.XXXXXX')
 scp "${ssh_options[@]}" "$deploy_tmp/server" "ec2-user@$server_ip:$remote_upload"

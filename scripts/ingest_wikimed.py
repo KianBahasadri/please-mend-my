@@ -37,7 +37,7 @@ import xml.etree.ElementTree as ET
 from libzim.reader import Archive
 from lxml import etree, html
 
-from ingest_common import TEXT_HELPERS, clean
+from ingest_common import TEXT_HELPERS, clean, json_bytes
 
 ROOT = Path(__file__).resolve().parent.parent
 REVISION = "wikipedia_en_medicine_maxi_2026-10"
@@ -61,10 +61,6 @@ IMAGE_EXT = {"image/webp": ".webp", "image/jpeg": ".jpg", "image/png": ".png", "
 
 def log(message):
     print(f"[{time.strftime('%H:%M:%S')}] {message}", flush=True)
-
-
-def json_bytes(value):
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":")).encode()
 
 
 def atomic_write(path, body):
