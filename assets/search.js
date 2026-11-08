@@ -36,7 +36,10 @@
   let scrollFrame = 0;
   let pendingFocus = null;
   let resultsScrollY = 0;
-  const TYPING_PAUSE_MS = 180;
+  const sharedSettle = typeof hero?.settle === "function";
+  let settledQuery = null;
+  // Only an older cached page without the shared hero controller uses this
+  // compatibility timer. Current pages have exactly one settle timer in hero.js.
   let searchTimer = null;
 
   function cancelSearchTimer() {
@@ -139,27 +142,40 @@
     status.textContent = message || "";
   }
 
+  function invalidateSearch() {
+    requestId += 1;
+    pendingSearch = null;
+    if (searchFrame) cancelAnimationFrame(searchFrame);
+    searchFrame = 0;
+  }
+
+  function hideResults() {
+    document.body.classList.remove("searching");
+    results.hidden = true;
+    cards.replaceChildren();
+    resultTotal = 0;
+    cards.style.height = "0px";
+    requestedStart = -1;
+  }
+
   function runSearch(immediate = false) {
     cancelSearchTimer();
     const text = query();
-    const active = Boolean(text);
-    if (!active) {
-      document.body.classList.remove("searching");
-      results.hidden = true;
-      cards.replaceChildren();
-      resultTotal = 0;
-      cards.style.height = "0px";
-      if (searchFrame) cancelAnimationFrame(searchFrame);
-      searchFrame = 0;
+    if (!text || hero?.isAwaitingSpecifics?.()) {
+      settledQuery = text;
+      invalidateSearch();
+      hideResults();
       return;
     }
     if (!immediate) {
       searchTimer = setTimeout(() => {
         searchTimer = null;
+        settledQuery = text;
         executeSearch(text);
-      }, TYPING_PAUSE_MS);
+      }, hero?.settleDelay?.() || 1000);
       return;
     }
+    settledQuery = text;
     executeSearch(text);
   }
 
@@ -243,6 +259,7 @@
     const fragment = document.createDocumentFragment();
     items.forEach((row, offset) => {
       const [id, title, categoryId, kind, device] = row;
+      if (kind !== "guide" && kind !== "article") return;
       const card = node("a", "repair-card");
       card.href = guideHref(id);
       card.title = title;
@@ -251,7 +268,7 @@
       card.setAttribute("role", "listitem");
       card.setAttribute("aria-posinset", start + offset + 1);
       card.setAttribute("aria-setsize", resultTotal);
-      const label = kind === "guide" ? "Repair guide" : kind === "topic" ? "Device & topic" : "Repair article";
+      const label = kind === "guide" ? "Repair guide" : "Repair article";
       card.append(node("p", "card-meta", `${categoryNames.get(categoryId) || categoryId} · ${label}`), node("h2", "", title));
       if (device && device !== title) card.append(node("p", "card-device", device));
       fragment.append(card);
@@ -550,11 +567,12 @@
     body.removeAttribute("aria-busy");
     window.dispatchEvent(new Event("mend:layout"));
     if (addHistory) history.pushState({}, "", location.pathname);
-    runSearch(true);
-    window.scrollTo(0, resultsScrollY);
-    scheduleWindow();
     if (hero) hero.focus();
     else input.focus({ preventScroll: true });
+    if (sharedSettle) hero.settle();
+    else runSearch(true);
+    window.scrollTo(0, resultsScrollY);
+    scheduleWindow();
   }
 
   document.addEventListener("click", (event) => {
@@ -566,9 +584,16 @@
     showGuide(url.searchParams.get("guide"));
   });
 
-  const queryChanged = () => { cancelPendingGuide(); runSearch(); };
+  const queryChanged = () => {
+    cancelPendingGuide();
+    settledQuery = null;
+    invalidateSearch();
+    if (!query() || hero?.isAwaitingSpecifics?.()) hideResults();
+    if (!sharedSettle) runSearch();
+  };
   if (hero) window.addEventListener("mend:querychange", queryChanged);
   else input.addEventListener("input", queryChanged);
+  if (sharedSettle) window.addEventListener("mend:settle", () => runSearch(true));
   document.getElementById("close-guide").addEventListener("click", () => closeGuide());
   window.addEventListener("popstate", () => {
     const id = new URL(location.href).searchParams.get("guide");
@@ -593,7 +618,9 @@
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
         for (const item of data.categories) categoryNames.set(item.id, item.name);
-        runSearch(true);
+        hero?.setVocabulary?.(data.terms || []);
+        if (!sharedSettle || settledQuery !== null && settledQuery === query()) runSearch(true);
+        else if (!query() || hero?.isAwaitingSpecifics?.()) hideResults();
       } else if (data.type === "results") renderCards(data);
       else if (data.type === "range" && data.requestId === requestId && data.rangeId === rangeSerial) {
         renderWindow(data.items, data.start);

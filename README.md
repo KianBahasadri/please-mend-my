@@ -9,18 +9,34 @@ parts, blueprint marks, and cut-paper lettering. The new treatments decorate onl
 the protected prompt; the editable text and caret stay native. The idle typing
 floaters share the same styles. Artwork uses local fonts, CSS, and inline vectors
 in the system light/dark palette; backgrounds keep their three-load rotation.
-The added HTML/controller/art assets total about 5.5 KB compressed. Prefix
-measurements run during fitting and font changes, never during ordinary typing.
+Prefix measurements run during fitting and font changes, never during ordinary
+typing.
 
 Both typing areas are underlined, matching the little idle typing animations.
-After 2.5 seconds without typing, bare subjects such as `arm` reveal the hero
-question `What's wrong with your arm?` and focus a blank answer field beneath it.
-Enter, Tab, or a noun-ending `?`, `.`, or `!` opens it immediately; punctuation
-remains in your typed text, including when it opens the question. Backspace on an
-empty answer returns to the end of the first line. The prompt and question stay
-protected, and only the focused native textbox has a caret. Full phrases such as `broken arm` use the
-first line alone. Search combines the two editable answers locally, excluding
-the fixed prompt and question.
+Hero clarification and results share one settle timer: 380 ms after a recognized
+trailing word of at least two letters, or 1000 ms for an unfamiliar token, typo,
+or model number. The worker supplies its resident dictionary once at startup;
+word checks then run synchronously in the page. Enter, Tab, or a noun-ending
+`?`, `.`, or `!` settles immediately; typed punctuation remains intact. Clearing
+an input cancels pending work and hides the corresponding UI immediately.
+
+Settled bare subjects such as `bike` reveal `What's wrong with your bike?` and
+focus the blank native answer beneath it. Cards stay hidden until that answer
+has content. The first line and question retain the full container width; a
+workspace below pairs the answer with a bicycle diagram and a scrollable parts
+list. Diagram and list highlights follow hover, focus, selection, and matching
+typed answers. Selecting a part fills the answer and searches immediately;
+selecting that unchanged part again clears it. Arm, laptop, phone, car, stove,
+toilet, refrigerator, and jeans have list-only specifiers. On smaller screens,
+the specifier moves beneath the answer, with its diagram and list still paired.
+
+Backspace on an already-empty answer returns to the end of the first line and
+suppresses reopening. The protected prompt/question and single native caret are
+preserved. Full phrases such as `broken arm` use the first line alone. Search
+combines only the editable answers locally. Returning from a guide settles
+immediately. Only guides and articles appear as cards; topic files and direct
+`?guide=<id>` links remain available. Bicycle component matches favor actual
+bicycle procedures over shared alias collisions and unrelated dirt-bike guides.
 Each font keeps its size when the full question fits; otherwise the hero scales
 down to keep the question on one line. Long editable answers still wrap.
 Broad queries favor general entries over niche model guides; exact model searches
@@ -37,11 +53,13 @@ The tab title follows the first hero line immediately, including its typed text.
 Check the hero and search interactions without opening a browser:
 
 ```sh
-node --test scripts/test_hero.cjs scripts/test_hero_styles.cjs scripts/test_hero_search.cjs scripts/test_search_worker.cjs
+node --test scripts/test_hero.cjs scripts/test_hero_styles.cjs scripts/test_hero_search.cjs scripts/test_specifiers.cjs scripts/test_search_worker.cjs scripts/test_structured_guides.cjs
 ```
 
 These controller tests cover timers, keyboard/selection behavior, focus, query
 wiring, and ranking; they do not render CSS or measure actual font layout.
+See [specifier integration and measurements](docs/specifiers.md) for the shared
+controller contract and local performance results.
 
 Run locally with Go 1.25+:
 

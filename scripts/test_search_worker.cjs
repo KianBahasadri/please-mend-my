@@ -458,7 +458,7 @@ test('the cap keeps higher-ranked late documents and stable ties in prepared and
   for (let at = 0; at < 130; at++) add('prefix-' + at, 'Laptop Battery Repair ' + at, 'guide');
   add('exact-topic', 'Laptop', 'topic');
   add('exact-guide', 'Laptop', 'guide');
-  const expected = ['exact-topic', 'exact-guide', ...Array.from({ length: 98 }, (_, at) => 'prefix-' + at)];
+  const expected = ['exact-guide', ...Array.from({ length: 99 }, (_, at) => 'prefix-' + at)];
   for (const catalog of [index, prepare(index)]) {
     const worker = await workerFor(catalog);
     const result = await worker.search('laptop');
@@ -466,7 +466,7 @@ test('the cap keeps higher-ranked late documents and stable ties in prepared and
     const tail = await worker.next('range');
     assert.equal(result.total, 100);
     assert.deepEqual(Array.from([...result.items, ...tail.items], row => row[0]), expected);
-    assert.equal((await worker.search('laptop')).items[0][0], 'exact-topic', 'repeat queries retain the same ranking');
+    assert.equal((await worker.search('laptop')).items[0][0], 'exact-guide', 'repeat queries retain the same ranking');
     assert.equal(worker.fetches(), 1);
   }
 });
@@ -478,9 +478,9 @@ test('bare subjects prefer general concise entries over long niche repair titles
     ['general-dick', 'Dick problems', 'technology', 'article', ''],
     ['prefix-dick', 'Dickey', 'technology', 'article', ''],
     ['niche-car', 'Car audio KDC-BT44U firmware update', 'technology', 'guide', ''],
-    ['general-car', 'Car and Truck', 'technology', 'topic', ''],
+    ['general-car', 'Car care', 'technology', 'article', ''],
     ['niche-laptop', 'Laptop Cooling Pad Airflow Improvement and Performance Optimization Technique', 'technology', 'guide', ''],
-    ['general-laptop', 'Laptop Cooling Pad', 'technology', 'topic', ''],
+    ['general-laptop', 'Laptop care', 'technology', 'article', ''],
     ['model-topic', 'S23', 'technology', 'topic', ''],
     ['model-guide', 'S23', 'technology', 'guide', ''],
   ];
@@ -537,7 +537,7 @@ test('generality-aware bounded ranking matches exhaustive scoring without prunin
   }
 });
 
-test('published subject anchors and source roots beat components and unrelated short acronyms', async () => {
+test('published topic anchors stay resident while only actionable source matches become cards', async () => {
   const index = fixture();
   index.items = [
     ['car-acronym', 'CAR-NK', 'technology', 'article', ''],
@@ -548,21 +548,137 @@ test('published subject anchors and source roots beat components and unrelated s
     ['laptop-root', 'PC Laptop', 'technology', 'topic', 'PC Laptop'],
     ['laptop-mac', 'Mac Laptop', 'technology', 'topic', 'Mac Laptop'],
     ['laptop-exact', 'Laptop', 'technology', 'article', ''],
+    ['laptop-action', 'Laptop Battery Replacement', 'technology', 'guide', 'PC Laptop'],
   ];
   index.search = { version: 1, groups: ['', 'laptop\nnotebook\nlaptops', 'electronics'],
-    itemGroups: [0, 2, 0, 2, 2, 1, 1, 0],
+    itemGroups: [0, 2, 0, 2, 2, 1, 1, 0, 1],
     sources: [{ label: 'laptop', aliases: ['notebook'], curated: ['laptops'],
       ifixitPaths: ['Device/PC_Laptop', 'Device/Mac_Laptop'] }] };
   for (const catalog of [index, prepare(index)]) {
     const worker = await workerFor(catalog);
-    assert.equal((await worker.search('car')).items[0][0], 'car-root');
-    const laptop = (await worker.search('laptop')).items.map(row => row[0]);
+    assert.equal((await worker.search('car')).items[0][0], 'car-acronym');
+    const laptopRows = (await worker.search('laptop')).items;
+    const laptop = laptopRows.map(row => row[0]);
     assert.equal(laptop[0], 'laptop-exact', 'exact title stays ahead of canonical aliases');
-    assert.ok(laptop.indexOf('laptop-root') < laptop.indexOf('laptop-component'));
-    assert.ok(laptop.indexOf('laptop-mac') < laptop.indexOf('laptop-specific'));
-    assert.equal((await worker.search('notebook')).items[0][0], 'laptop-root');
+    assert.ok(laptopRows.every(row => row[3] === 'guide' || row[3] === 'article'));
+    assert.ok(!laptop.some(id => ['laptop-root', 'laptop-mac', 'laptop-component'].includes(id)));
+    assert.equal((await worker.search('notebook')).items[0][0], 'laptop-action');
     assert.equal((await worker.search('Laptop Lenovo G510 Keyboard Replacement')).items[0][0], 'laptop-specific');
   }
+});
+
+test('topic rows are excluded from all card paths without changing catalog document positions', async () => {
+  const index = { version: 1, revision: 'mixed-kind-fixture', source: {},
+    categories: [{ id: 'technology', name: 'Technology' }],
+    items: [
+      ['00000000000000000001', 'Laptop Battery', 'technology', 'topic', 'Laptop'],
+      ['00000000000000000002', 'Laptop Battery Care', 'technology', 'article', 'Laptop'],
+      ['00000000000000000003', "Laptop Isn't Working", 'technology', 'topic', 'Laptop'],
+      ['00000000000000000004', 'Laptop Battery Replacement', 'technology', 'guide', 'Laptop'],
+      ['00000000000000000005', "Laptop Isn't Working", 'technology', 'guide', 'Laptop'],
+      ['00000000000000000006', 'Laptop hidden metadata', 'technology', 'metadata', 'Laptop'],
+    ],
+    search: { version: 1, groups: ['', 'laptop\nnotebook'], itemGroups: [1, 1, 1, 1, 1, 1] },
+  };
+  const enriched = { [index.items[3][0]]: { id: index.items[3][0], version: 2,
+    symptoms: ['Charging stops'], materials: ['Threadlocker 243'] } };
+  const prepared = prepare(index, enriched);
+  assert.deepEqual(prepared.items, index.items);
+  assert.equal(prepared.search.inverted.documents, index.items.length);
+  assert.deepEqual(prepared.search.inverted.guideLiterals.map(([doc]) => doc), [3], 'sparse literals retain original row positions');
+  for (const catalog of [index, prepared]) {
+    const worker = await workerFor(catalog);
+    assert.equal(worker.ready.total, index.items.length, 'topic files/row identities are still part of the catalog');
+    for (const query of ['', 'laptop', 'lap', 'laptop battery', "Laptop Isn't Working", 'notebook battery']) {
+      const result = await worker.search(query, 1);
+      worker.send({ type: 'range', requestId: result.requestId, rangeId: 1, start: 1, count: 60 });
+      const range = await worker.next('range');
+      const rows = [...result.items, ...range.items];
+      assert.ok(rows.length > 0, query);
+      assert.ok(rows.every(row => row[3] === 'guide' || row[3] === 'article'), query);
+      assert.ok(rows.every(row => index.items.some(original => original[0] === row[0])), 'IDs were not renumbered');
+      assert.equal(result.total, rows.length);
+    }
+    assert.equal((await worker.search("Laptop Isn't Working")).items[0][0], index.items[4][0],
+      'literal title rescue never restores a topic card');
+    if (catalog.search.inverted) {
+      assert.deepEqual(Array.from((await worker.search('threadlocker 243')).items, row => row[0]), [index.items[3][0]]);
+    }
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+test('ready supplies the exact normalized resident dictionary once, including symptom and material words', async () => {
+  const { index, guideRecords } = symptomFixture();
+  const prepared = prepare(index, guideRecords);
+  const worker = await workerFor(prepared);
+  assert.deepEqual(Array.from(worker.ready.terms), prepared.search.inverted.terms);
+  assert.equal(worker.ready.termCount, worker.ready.terms.length);
+  assert.ok(worker.ready.terms.includes('swelling'));
+  assert.ok(worker.ready.terms.includes('mineral'));
+  assert.ok(worker.ready.terms.every((term, at, terms) => at === 0 || terms[at - 1] < term));
+  await worker.search('hives');
+  assert.equal(worker.messages.some(message => message.type === 'ready'), false);
+  assert.equal(worker.fetches(), 1);
+  const legacy = await workerFor(index);
+  assert.deepEqual(Array.from(legacy.ready.terms), []);
+});
+
+function bicycleFixture() {
+  const items = [
+    ['bicycle-topic', 'Bicycle', 'transport', 'topic', 'Bicycle'],
+    ['bicycle-light', 'How To Fix A Rear Bike Light', 'transport', 'guide', 'Bicycle'],
+    ['bicycle-pedal', 'How To Fix A Loose Bicycle Pedal', 'transport', 'guide', 'Bicycle'],
+    ['dirt-tire', 'Dirt Bike Tire Replacement', 'transport', 'guide', 'Motorcycle'],
+    ['bicycle-tire', 'Bicycle Tire and Tube Replacement', 'transport', 'guide', 'Bicycle'],
+    ['bicycle-brake', 'Bicycle Brake Adjustment', 'transport', 'guide', 'Bicycle'],
+    ['bicycle-wheel', 'Bicycle Wheel and Spoke Repair', 'transport', 'guide', 'Bicycle'],
+    ['bicycle-seat', 'Bicycle Seat Height Adjustment', 'transport', 'guide', 'Bicycle'],
+    ['bicycle-handlebar', 'Bicycle Handlebar Replacement', 'transport', 'guide', 'Bicycle'],
+    ['dirt-pedal', 'Dirt Bike Pedal Replacement', 'transport', 'guide', 'Motorcycle'],
+    ['motorcycle-prefix', 'Bike Tire Replacement', 'transport', 'guide', 'Motorcycle'],
+  ];
+  return { version: 1, revision: 'bicycle-fixture', source: {},
+    categories: [{ id: 'transport', name: 'Vehicles & transport' }], items,
+    search: { version: 1, groups: ['', 'bike\nbicycle\npedal cycle', 'bike\nmotorbike\nmotorcycle'],
+      itemGroups: items.map(row => row[4] === 'Bicycle' ? 1 : 2),
+      sources: [
+        { label: 'bicycle', aliases: ['bike', 'pedal cycle'], curated: [], ifixitPaths: ['Device/Bicycle'] },
+        { label: 'motorcycle', aliases: ['bike', 'motorbike'], curated: [], ifixitPaths: ['Device/Motorcycle'] },
+      ] },
+  };
+}
+
+test('primary bicycle synonyms and direct part postings outrank broad alias collisions', async () => {
+  const index = bicycleFixture();
+  const worker = await workerFor(prepare(index));
+  const pedal = await worker.search('bike pedal');
+  assert.equal(pedal.items[0][0], 'bicycle-pedal', 'pedal from a real guide beats shared pedal-cycle aliases');
+  assert.ok(pedal.items.findIndex(row => row[0] === 'bicycle-pedal') < pedal.items.findIndex(row => row[0] === 'bicycle-light'));
+  for (const [part, expected] of [['tire', 'bicycle-tire'], ['tube', 'bicycle-tire'], ['brake', 'bicycle-brake'],
+    ['wheel', 'bicycle-wheel'], ['seat', 'bicycle-seat'], ['handlebar', 'bicycle-handlebar']]) {
+    assert.equal((await worker.search('bike ' + part)).items[0][0], expected, part);
+    assert.equal((await worker.search('bikes ' + part)).items[0][0], expected, 'plural subject ' + part);
+    assert.equal((await worker.search('bicycle ' + part)).items[0][0], expected, 'canonical ' + part);
+  }
+  assert.equal((await worker.search('Dirt Bike Tire Replacement')).items[0][0], 'dirt-tire', 'exact motorcycle procedure remains first');
+  assert.equal((await worker.search('dirt bike tire')).items[0][0], 'dirt-tire', 'explicit dirt-bike intent remains required');
+  assert.equal((await worker.search('Bike Tire Replacement')).items[0][0], 'motorcycle-prefix', 'an exact motorcycle title still wins');
+  assert.equal((await worker.search('motorbike tire')).items[0][4], 'Motorcycle', 'explicit motorcycle synonym overrides the bicycle default');
+  assert.ok((await worker.search('bike')).items.every(row => row[3] !== 'topic'));
+  assert.equal(worker.fetches(), 1);
+});
+
+test('concept preference remains below exact and complete title intent', async () => {
+  const index = bicycleFixture();
+  index.items.push(['literal-pedal', 'Bike Pedal', 'transport', 'article', '']);
+  index.items.push(['literal-reordered', 'Pedal Bike', 'transport', 'article', '']);
+  index.search.itemGroups.push(0, 0);
+  const worker = await workerFor(prepare(index));
+  const result = await worker.search('bike pedal');
+  assert.equal(result.items[0][0], 'literal-pedal');
+  assert.equal(result.items[1][0], 'literal-reordered');
+  assert.equal(result.items[2][0], 'bicycle-pedal');
 });
 
 test('queued keystrokes coalesce to the latest query', async () => {

@@ -4,13 +4,14 @@
 - Work locally; pause prod deploys until explicitly requested again.
 - Huge "please, mend my" in styled native textbox; blinking caret; wrap long text/words.
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
-- Underline editable areas+idle floaters. Broad noun idle 2.5s→hero "What's wrong with your <noun>?" + blank answer below; focus answer. No added comma/repeated noun/it's. Enter/Tab/?.! opens now (keep typed punctuation; noun end, no selection; mobile too); phrases skip; empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; search typed text only.
+- Underline editable areas+idle floaters. Shared settle: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank focused answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
 - Hero: visual wordplay > font swaps; stitched/taped/tooltype/spareparts/blueprint/cutpaper; inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
+- Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - Never: duplicate carets, shape changes on typing, busy meshes/curved bands, missing spotlight.
@@ -22,6 +23,7 @@
 - Prepare all enrichment/aliases/categories before publish; searches use our index/DB only; no external API calls.
 - Search: offline aliases+inverted postings+Porter stems; typo edits 1 for 5–7 letters, 2 for ≥8; numeric/model tokens strict; exact/model matches first; benchmark size/startup/memory/query before deploy.
 - Index v2 symptoms+materials per guide at build time; overlay must rebuild postings before publish. Read processed IDs only; no raw-corpus scan/runtime fetches.
+- Cards: guide/article only; never topic. Keep doc/posting indices + direct topic links/files. Ready resident terms→sync real-word lookup; no per-key worker roundtrip. Direct part matches beat alias collisions; bicycle concept beats Dirt Bike for bike parts; exact/model intent stays.
 - General entries before niche guides; complete title words win even reordered ("arm broken"→"Broken arm"); exact/model intent wins.
 - Search ignores conversational filler/intensifiers ("it's", "fucking"); retain negation/symptoms/exact title+model intent; browser only.
 - Hero completion uses the same filler rules: "fucking dick"→"dick" for Enter/Tab/?.!/idle eligibility/question; keep typed text; symptom phrases still skip.
@@ -51,7 +53,7 @@
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
 - Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
-- Typing pause: results list stays hidden during initial typing and reveals only after a 180ms pause; clearing input cancels timer and hides results immediately; guide return stays immediate.
+- Hero/search share one settle timer; no separate debounce. Awaiting specifics→hide cards; clear answer→deselect/hide now; settled answers reveal; keep prior results while ordinary edits settle.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
 - Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.

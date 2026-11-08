@@ -129,6 +129,15 @@ let maximumWordLength = 0;
 let broadBonuses;
 let rootTopics;
 const subjectAnchors = new Map();
+// Exact source concept names point to explicit anchor devices. Whole aliases
+// count here (bike -> Bicycle); a word inside "pedal cycle" is not a subject.
+const primarySubjects = new Map();
+// "Bike" is a published alias of both Bicycle and Motorcycle. A component
+// request without explicit motor/dirt-bike intent uses the bicycle archetype.
+const bicycleParts = new Set(["chain", "master", "link", "tire", "tyre", "tube", "brake", "cable", "gear", "derailleur",
+  "wheel", "spoke", "handlebar", "stem", "seat", "seatpost", "pedal", "crank", "bottom", "bracket",
+  "fork", "suspension", "light", "bell", "rust"].map(porter));
+const motorIntent = new Set(["dirt", "motorcycle", "motorbike", "motor", "motorized", "moped"]);
 const RESULT_LIMIT = 100;
 const tokenCache = new Map();
 let tokenCacheBytes = 0;
@@ -161,6 +170,16 @@ function lowerBound(list, word) {
     else high = middle;
   }
   return low;
+}
+
+const actionable = entry => entry.row[3] === "guide" || entry.row[3] === "article";
+
+function firstActionable() {
+  const documents = [];
+  for (let doc = 0; doc < entries.length && documents.length < RESULT_LIMIT; doc++) {
+    if (actionable(entries[doc])) documents.push(doc);
+  }
+  return documents;
 }
 
 function invalidIndex() {
@@ -384,7 +403,8 @@ function resolveToken(token, widen = false, strict = false) {
     const cost = groupQuality[group];
     for (let at = groupOffsets[group]; at < groupOffsets[group + 1]; at++) addDocument(groupDocuments[at], cost);
   }
-  const result = { documents: Uint32Array.from(documents).sort(), quality, expanded };
+  const result = { documents: Uint32Array.from(documents).sort(), quality, expanded,
+    primaryDevices: primarySubjects.get(token) || primarySubjects.get(porter(token)) };
   tokenCache.set(cacheKey, result);
   tokenCacheBytes += result.documents.byteLength + result.quality.byteLength;
   while (tokenCache.size > 32 || tokenCacheBytes > 8 * 1024 ** 2) {
@@ -481,7 +501,9 @@ function broadSearch(query, list) {
   const best = shortlist(), anchors = subjectAnchors.get(query);
   const wordPrefix = " " + query, subjectPrefix = query + " ";
   for (const doc of list.documents) {
-    const entry = entries[doc], quality = list.quality[doc], penalty = (quality - 1) * 100;
+    const entry = entries[doc];
+    if (!actionable(entry)) continue;
+    const quality = list.quality[doc], penalty = (quality - 1) * 100;
     const bonus = broadBonuses[doc];
     const subject = subjectPriority(doc, entry, subjectPrefix, anchors);
     const upper = (quality <= 2 ? (entry.title.length === query.length ? 1035 : 535) : 0) + bonus - penalty;
@@ -493,11 +515,14 @@ function broadSearch(query, list) {
 }
 
 function indexedSearch(query, tokens) {
-  if (!tokens.length) return query ? [] : Array.from({ length: Math.min(entries.length, RESULT_LIMIT) }, (_, index) => index);
+  if (!tokens.length) return query ? [] : firstActionable();
   const wordPrefixes = tokens.map(token => " " + token);
   const singleWord = tokens.length === 1 && tokens[0] === query;
   // A one-letter prefix is not yet a subject; keep its cheap original ranking.
   const broad = singleWord && query.length > 1 && !/\p{N}/u.test(query);
+  const bicycleContext = tokens.some(token => token === "bike" || token === "bikes") &&
+    !tokens.some(token => motorIntent.has(token)) && tokens.some(token => bicycleParts.has(porter(token)))
+    ? primarySubjects.get("bicycle") : null;
   // Literal punctuation in model identifiers remains significant after word
   // tokenization, e.g. S23+ must not match S23 and WH-1000XM4 stays one model.
   const identifiers = query.split(/\s+/).filter(token => /\p{N}/u.test(token))
@@ -513,27 +538,44 @@ function indexedSearch(query, tokens) {
     if (broad) return broadSearch(query, lists[0]);
     const best = shortlist();
     for (const doc of lists[0].documents) {
-      let penalty = 0, matches = true, literal = false;
+      const entry = entries[doc];
+      if (!actionable(entry)) continue;
+      let penalty = 0, matches = true, literal = false, primary = false;
       for (const list of lists) {
         if (!list.quality[doc]) { matches = false; break; }
-        penalty += list.quality[doc] - 1;
-        if (list.quality[doc] <= 2) literal = true;
+        let quality = list.quality[doc];
+        if (list.primaryDevices?.has(entry.device)) {
+          // An ambiguous source alias must not boost both competing concepts
+          // equally after the part selector has established bicycle context.
+          if (!bicycleContext || bicycleContext.has(entry.device)) primary = true;
+          // Explicit concept equivalence should cost the same as an own word.
+          // Other group aliases (e.g. "pedal" from "pedal cycle") retain their
+          // full penalty, so real component postings win over alias collisions.
+          if (quality >= 17) quality = 1;
+        }
+        penalty += quality - 1;
+        if (quality <= 2) literal = true;
       }
       if (!matches) continue;
-      const entry = entries[doc];
       for (const identifier of identifiers) {
         if (!entry.text.includes(identifier) && !searchGroups[itemGroups[doc]].includes(identifier)) { matches = false; break; }
       }
       if (!matches) continue;
       const bonus = entry.row[3] === "guide" ? 15 : 0;
-      const upper = literal ? singleWord ? (entry.title.length === query.length ? 1035 : 535) + bonus : Infinity : bonus;
+      const upper = primary ? Infinity : literal ? singleWord ? (entry.title.length === query.length ? 1035 : 535) + bonus : Infinity : bonus;
       if (!best.canBeat(upper - penalty * 100)) continue;
       // A candidate found solely through aliases/stem changes/typos has no
       // literal title-word bonus. Avoid rescanning thousands of unrelated
       // titles for broad shared aliases such as "cellphone".
-      const score = (literal ? singleWord ? singleWordTitleScore(entry, query, wordPrefixes[0], bonus)
-        : titleScore(entry, query, tokens, wordPrefixes, bonus) : bonus) - penalty * 100;
-      best.add(doc, score);
+      let score = literal ? singleWord ? singleWordTitleScore(entry, query, wordPrefixes[0], bonus)
+        : titleScore(entry, query, tokens, wordPrefixes, bonus) : bonus;
+      // Prefer a named subject's own device over incidental title words such as
+      // "Dirt Bike". Keep this below exact/complete title scores so an explicit
+      // request for a particular procedure still wins.
+      if (primary && tokens.length > 1 && score < 900) {
+        score = Math.min(900, score + (bicycleContext?.has(entry.device) ? 650 : 450));
+      }
+      best.add(doc, score - penalty * 100);
     }
     return best.sorted();
   };
@@ -544,6 +586,7 @@ function indexedSearch(query, tokens) {
 }
 
 function legacySearch(query, literalQuery = "") {
+  if (!query) return firstActionable();
   const tokens = query.split(/\s+/).filter(Boolean), best = shortlist();
   const wordPrefixes = tokens.map(token => " " + token);
   const negations = tokens.map(token => token === "not" ? /\bnot\b/ : token === "no" ? /\bno\b/ : null);
@@ -565,6 +608,7 @@ function legacySearch(query, literalQuery = "") {
   }
   for (let index = 0; index < entries.length; index++) {
     const entry = entries[index], group = itemGroups[index], aliasMask = groupMasks[group];
+    if (!actionable(entry)) continue;
     if (literalQuery && entry.title === literalQuery) {
       best.add(index, 3000 + (entry.row[3] === "guide" ? 15 : 0));
       continue;
@@ -600,7 +644,7 @@ function literalTitles(query) {
   if (!Number.isFinite(last)) return matches;
   for (let at = first; at < last; at++) {
     const doc = postings.values[at];
-    if (doc < entries.length && entries[doc].title === query) matches.push(doc);
+    if (doc < entries.length && actionable(entries[doc]) && entries[doc].title === query) matches.push(doc);
   }
   return matches.sort((a, b) => Number(entries[b].row[3] === "guide") - Number(entries[a].row[3] === "guide") || a - b);
 }
@@ -658,7 +702,11 @@ self.onmessage = ({ data }) => {
       for (const path of source.ifixitPaths) {
         const title = clean(path.slice(path.lastIndexOf("/") + 1).replaceAll("_", " "));
         if (!anchorNames.has(title)) anchorNames.set(title, new Set());
-        for (const name of names) anchorNames.get(title).add(name);
+        for (const name of names) {
+          anchorNames.get(title).add(name);
+          if (!primarySubjects.has(name)) primarySubjects.set(name, new Set());
+          primarySubjects.get(name).add(title);
+        }
       }
     }
     broadBonuses = new Uint8Array(catalog.items.length);
@@ -674,7 +722,8 @@ self.onmessage = ({ data }) => {
         }
       }
       if (!devices.has(row[4])) devices.set(row[4], clean(row[4]));
-      return { row, title, text: `${title} ${devices.get(row[4])} ${categories.get(row[2]) || ""}` };
+      const device = devices.get(row[4]);
+      return { row, title, device, text: `${title} ${device} ${categories.get(row[2]) || ""}` };
     });
     if (catalog.search?.inverted) {
       prepareInverted(catalog.search.inverted);
@@ -686,6 +735,7 @@ self.onmessage = ({ data }) => {
     postMessage({ type: "ready", total: entries.length, categories: catalog.categories, source: catalog.source,
       revision: catalog.revision, aliasGroups: searchGroups.length - 1, invertedIndex: Boolean(inverted),
       termCount: inverted?.terms.length || 0, stemming: Boolean(inverted), fuzzy: Boolean(inverted),
+      terms: inverted?.terms || [],
       resultLimit: RESULT_LIMIT,
       loadDuration: performance.now() - started });
     if (pending) schedule(pending);

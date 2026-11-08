@@ -36,16 +36,16 @@ async function heroFor(options = {}) {
     return before;
   };
   dom.visible = () => dom.line.getAttribute('aria-hidden') !== 'true' && !dom.line.inert;
-  dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(2500); assert.equal(dom.visible(), true); };
+  dom.reveal = noun => { dom.type(dom.response, noun); dom.advance(380); assert.equal(dom.visible(), true); };
   return dom;
 }
 
-test('a bare noun waits 2.5 seconds then asks a separate question and focuses a blank answer', async () => {
+test('a bare noun waits 380ms then asks a separate question and focuses a blank answer', async () => {
   const dom = await heroFor();
   assert.equal(dom.window.mendHero.query(), '');
   assert.equal(dom.visible(), false);
   dom.type(dom.response, 'arm');
-  dom.advance(2499);
+  dom.advance(379);
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
@@ -71,15 +71,15 @@ test('a bare noun waits 2.5 seconds then asks a separate question and focuses a 
 test('the idle deadline resets and continuing a full phrase cancels clarification', async () => {
   const dom = await heroFor();
   dom.type(dom.response, 'arm');
-  dom.advance(2000);
+  dom.advance(200);
   dom.type(dom.response, 'arms');
-  dom.advance(2499);
+  dom.advance(379);
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
   dom.response.focus();
   dom.type(dom.response, 'car');
-  dom.advance(2499);
+  dom.advance(379);
   assert.equal(dom.visible(), false);
   dom.type(dom.response, 'arm hurts');
   dom.advance(20000);
@@ -363,7 +363,7 @@ test('qualified known objects share the idle delay while unfamiliar nouns remain
     ['the freaking washing machine', 'washing machine']]) {
     const dom = await heroFor();
     dom.type(dom.response, raw);
-    dom.advance(2499);
+    dom.advance(379);
     assert.equal(dom.visible(), false);
     dom.advance(1);
     assert.equal(dom.visible(), true);
@@ -401,7 +401,7 @@ test('qualifier cleanup preserves symptom phrases and cannot turn grammar alone 
   assert.equal(dom.visible(), false);
   assert.equal(dom.key(dom.response, 'Enter', { isComposing: true }).defaultPrevented, false);
   dom.event(dom.response, 'compositionend');
-  dom.advance(2500);
+  dom.advance(380);
   assert.equal(dom.question.textContent, "What's wrong with your arm?");
 });
 
@@ -469,7 +469,7 @@ test('changing the noun updates the question and clears an unrelated answer', as
   dom.response.focus();
   dom.type(dom.response, 'laptop');
   assert.equal(dom.window.mendHero.query(), 'laptop');
-  dom.advance(2500);
+  dom.advance(380);
   assert.equal(dom.question.textContent, "What's wrong with your laptop?");
   assert.equal(dom.clarification.value, '');
   dom.response.focus();
@@ -489,7 +489,7 @@ test('composition does not reveal a prompt until committed and pasted full phras
   dom.advance(20000);
   assert.equal(dom.visible(), false);
   dom.event(dom.response, 'compositionend', { bubbles: true });
-  dom.advance(2499);
+  dom.advance(379);
   assert.equal(dom.visible(), false);
   dom.advance(1);
   assert.equal(dom.visible(), true);
@@ -535,7 +535,7 @@ test('background clicks retain the active second selection while cards and guide
 test('pending automatic reveal is cancelled while the document is hidden or a guide is open', async () => {
   const dom = await heroFor();
   dom.type(dom.response, 'arm');
-  dom.advance(1000);
+  dom.advance(200);
   dom.document.visibilityState = 'hidden';
   dom.event(dom.document, 'visibilitychange');
   dom.advance(20000);
@@ -556,7 +556,7 @@ test('normal search-result visibility does not cancel a bare noun idle prompt', 
   dom.type(dom.response, 'arm');
   dom.document.body.classList.add('searching');
   await Promise.resolve();
-  dom.advance(2500);
+  dom.advance(380);
   assert.equal(dom.visible(), true);
   assert.equal(dom.document.activeElement, dom.clarification);
   assert.equal(dom.window.mendHero.query(), 'arm');
@@ -570,7 +570,7 @@ test('editable underline content stays in sync through typing, cut, and reset', 
   dom.type(dom.response, 'arm');
   assert.equal(dom.suffixMirror.textContent, 'arm');
   assert.equal(dom.suffixMirror.classList.contains('is-empty'), false);
-  dom.advance(2500);
+  dom.advance(380);
   assert.equal(dom.answerMirror.textContent, '');
   assert.equal(dom.answerMirror.classList.contains('is-empty'), true);
   dom.type(dom.clarification, 'hurts');

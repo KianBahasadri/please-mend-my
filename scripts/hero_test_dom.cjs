@@ -87,6 +87,7 @@ class Element extends EventTarget {
   setAttribute(name, value) {
     this.attributes.set(name, String(value));
     if (name === 'id') this.id = String(value);
+    if (name === 'class') this.className = String(value);
     if (name.startsWith('data-')) this.dataset[name.slice(5).replace(/-([a-z])/g, (_, char) => char.toUpperCase())] = String(value);
   }
   getAttribute(name) { return this.attributes.get(name) ?? null; }
@@ -97,17 +98,32 @@ class Element extends EventTarget {
     active ? this.setAttribute(name, '') : this.removeAttribute(name);
     return active;
   }
-  append(...children) { for (const child of children) { child.parentNode = this; this.children.push(child); } }
+  append(...children) {
+    for (const child of children) {
+      if (child.tagName === 'FRAGMENT') { this.append(...child.children); continue; }
+      child.parentNode = this; this.children.push(child);
+    }
+  }
   appendChild(child) { this.append(child); return child; }
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   contains(target) { return target === this || this.children.some(child => child.contains?.(target)); }
   matches(selector) {
     return selector.split(',').some(part => {
       part = part.trim();
-      if (part.startsWith('#')) return this.id === part.slice(1);
-      if (part.startsWith('.')) return this.classList.contains(part.slice(1));
-      if (part.startsWith('[')) return this.hasAttribute(part.slice(1, -1).split('=')[0]);
-      return this.tagName.toLowerCase() === part;
+      const tag = part.match(/^[a-z][a-z0-9-]*/i)?.[0];
+      if (tag && this.tagName.toLowerCase() !== tag.toLowerCase()) return false;
+      const id = part.match(/#([\w-]+)/)?.[1];
+      if (id && this.id !== id) return false;
+      const classes = Array.from(part.matchAll(/\.([\w-]+)/g), match => match[1]);
+      if (!classes.every(name => this.classList.contains(name) || (this.className || '').split(/\s+/).includes(name))) return false;
+      for (const match of part.matchAll(/\[([\w-]+)(?:=["']?([^"'\]]+)["']?)?\]/g)) {
+        const name = match[1];
+        const value = name.startsWith('data-')
+          ? this.dataset[name.slice(5).replace(/-([a-z])/g, (_, char) => char.toUpperCase())]
+          : this.getAttribute(name);
+        if (value === undefined || value === null || match[2] !== undefined && value !== match[2]) return false;
+      }
+      return Boolean(tag || id || classes.length || part.startsWith('['));
     });
   }
   closest(selector) {
@@ -150,6 +166,11 @@ class Element extends EventTarget {
       this.dispatchEvent(new TestEvent('blur', { relatedTarget: null }));
     }
   }
+  scrollIntoView(options) { this.scrolledIntoView = options; }
+  remove() {
+    if (this.parentNode) this.parentNode.children.splice(this.parentNode.children.indexOf(this), 1);
+    this.parentNode = null;
+  }
   getAnimations() { return []; }
   animate() {
     this.ownerDocument.animations++;
@@ -186,6 +207,9 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
   document.hasFocus = () => true;
   document.fonts = Object.assign(new EventTarget(), { ready: Promise.resolve(), check: () => true });
   document.createElement = tag => new Element(tag, document);
+  document.createElementNS = (namespace, tag) => new Element(tag, document);
+  document.createDocumentFragment = () => new Element('fragment', document);
+  document.createTextNode = text => Object.assign(new Element('#text', document), { textContent: text });
   document.getElementById = id => document.documentElement.querySelector('#' + id);
   document.querySelector = selector => document.documentElement.querySelector(selector);
   document.querySelectorAll = selector => document.documentElement.querySelectorAll(selector);
@@ -210,8 +234,12 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
   line.setAttribute('aria-hidden', 'true');
   const secondHero = add('span', 'clarification-hero', line);
   const question = add('span', 'clarification-question', secondHero);
-  const answerMirror = add('span', 'clarification-underline', secondHero);
-  const clarification = add('textarea', 'clarification-response', secondHero);
+  const workspace = add('span', 'clarification-workspace', secondHero); workspace.classList.add('clarification-workspace');
+  const answerField = add('span', 'answer-field', workspace); answerField.classList.add('hero-field');
+  const answerMirror = add('span', 'clarification-underline', answerField);
+  const clarification = add('textarea', 'clarification-response', answerField);
+  const specifierContainer = add('span', 'topic-specifier', workspace);
+  specifierContainer.classList.add('topic-specifier'); specifierContainer.hidden = true;
   const secondMeasure = add('span', 'clarification-measure', secondHero);
   const media = Object.assign(new EventTarget(), { matches: reducedMotion, media: '(prefers-reduced-motion: reduce)' });
   const setTimeout = (callback, delay = 0) => {
@@ -251,7 +279,7 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
     clock = end; flushFrames();
   };
   return { context, window, document, response, clarification, question, line, hero, measure, secondMeasure,
-    firstField, prefixMirror, suffixMirror, answerMirror,
+    firstField, prefixMirror, suffixMirror, answerMirror, workspace, specifierContainer,
     add, event: (target, type, options) => { const event = new TestEvent(type, options); target.dispatchEvent(event); return event; },
     advance, flushFrames };
 }

@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/assets/search.css">
     <link rel="stylesheet" href="/assets/hero-styles.css">
     <script src="/assets/hero-styles.js" defer></script>
+    <script src="/assets/specifiers.js" defer></script>
     <script src="/assets/hero.js" defer></script>
     <script src="/assets/search.js" defer></script>
     <script src="assets/backgrounds.js"></script>
@@ -418,9 +419,12 @@
             <span id="clarification-line" class="clarification-line" aria-hidden="true" inert>
               <span class="clarification-content">
                 <span id="clarification-question" class="clarification-question"></span>
-                <span class="hero-field">
-                  <textarea id="clarification-response" class="hero-input" aria-label="What is wrong?" spellcheck="false" rows="1" tabindex="-1" disabled></textarea>
-                  <span class="hero-underline" aria-hidden="true" inert><span id="clarification-underline" class="hero-suffix is-empty"></span></span>
+                <span class="clarification-workspace">
+                  <span class="hero-field">
+                    <textarea id="clarification-response" class="hero-input" aria-label="What is wrong?" spellcheck="false" rows="1" tabindex="-1" disabled></textarea>
+                    <span class="hero-underline" aria-hidden="true" inert><span id="clarification-underline" class="hero-suffix is-empty"></span></span>
+                  </span>
+                  <span id="topic-specifier" class="topic-specifier" hidden></span>
                 </span>
               </span>
             </span>

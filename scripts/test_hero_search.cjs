@@ -3,91 +3,29 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
-const { performance } = require('node:perf_hooks');
+const { makeDOM } = require('./hero_test_dom.cjs');
 
-// Run the actual search UI with the hero controller's public contract. This
-// isolates query/focus wiring from native textbox protection and worker ranking,
-// which have their own tests; no browser or catalog corpus is needed.
-function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
-  let document;
-  class Element extends EventTarget {
-    constructor(tag = 'div') {
-      super();
-      this.tagName = tag.toUpperCase();
-      this.dataset = {};
-      this.style = {};
-      this.children = [];
-      this.hidden = false;
-      this.clientWidth = 1000;
-      const classes = new Set();
-      this.classList = {
-        add: value => classes.add(value),
-        remove: value => classes.delete(value),
-        contains: value => classes.has(value),
-        toggle: (value, enabled) => enabled ? classes.add(value) : classes.delete(value),
-      };
-    }
-    append(...items) {
-      for (const item of items) {
-        if (item.tagName === 'FRAGMENT') this.children.push(...item.children);
-        else this.children.push(item);
-      }
-    }
-    replaceChildren(...items) { this.children = []; this.append(...items); }
-    setAttribute() {}
-    removeAttribute() {}
-    querySelector() { return null; }
-    querySelectorAll() { return []; }
-    closest(selector) {
-      if (selector === 'a' && this.tagName === 'A') return this;
-      if (selector === '.repair-card' && this.className === 'repair-card') return this;
-      return null;
-    }
-    getBoundingClientRect() { return { top: 150, bottom: 358 }; }
-    focus() { document.activeElement = this; }
-  }
-
-  const ids = ['response', 'clarification-response', 'catalog-status', 'search-results',
-    'result-cards', 'result-count', 'guide-panel', 'guide-body', 'guide-nav-error', 'close-guide'];
-  const elements = Object.fromEntries(ids.map(id => [id, new Element(id.includes('response') ? 'textarea' : 'div')]));
-  elements.response.dataset.promptLength = '15';
-  elements.response.value = 'please, mend my ';
+// Execute the actual hero, specifier registry and search controller together.
+// Synthetic DOM events/clock cover coordination, not CSS/native font paint.
+async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } = {}) {
+  const dom = makeDOM();
+  const ids = ['catalog-status', 'search-results', 'result-cards', 'result-count',
+    'guide-panel', 'guide-body', 'guide-nav-error', 'close-guide'];
+  const elements = Object.fromEntries(ids.map(id => [id, dom.add(id === 'close-guide' ? 'button' : 'div', id)]));
   elements['search-results'].hidden = true;
   elements['guide-panel'].hidden = true;
   elements['guide-nav-error'].hidden = true;
-  document = Object.assign(new EventTarget(), {
-    body: new Element('body'), activeElement: elements.response,
-    getElementById: id => elements[id],
-    createElement: tag => new Element(tag),
-    createDocumentFragment: () => new Element('fragment'),
-    createTextNode: text => Object.assign(new Element('#text'), { textContent: text }),
-  });
-  const window = new EventTarget();
-  let query = initialQuery;
-  let heroFocuses = 0;
-  if (heroAvailable) window.mendHero = {
-    query: () => query,
-    focus() { heroFocuses++; elements['clarification-response'].focus(); },
-  };
-  const frames = new Map();
-  let frameId = 0;
-  const timers = new Map();
-  let timerId = 0;
-  const posted = [], requests = [], workers = [];
+  elements.response = dom.response;
+  elements['clarification-response'] = dom.clarification;
+  const posted = [], requests = [], workers = [], settled = [];
   class Worker {
     constructor(url) { assert.equal(url, '/assets/search-worker.js'); workers.push(this); }
     postMessage(message) { posted.push(structuredClone(message)); }
     emit(message) { this.onmessage({ data: message }); }
   }
   const location = { href: 'http://127.0.0.1:8080/', origin: 'http://127.0.0.1:8080', pathname: '/', protocol: 'http:' };
-  const context = vm.createContext({ window, document, location, Worker, Event, URL, performance,
-    innerHeight: 900, scrollY: 0,
+  Object.assign(dom.context, { location, URL, Worker, scrollY: 0, innerHeight: 800,
     history: { pushState(state, title, href) { location.href = new URL(href, location.href).href; } },
-    getComputedStyle: () => ({ columnGap: '13.6px', getPropertyValue: name => name === '--columns' ? '3' : '208' }),
-    requestAnimationFrame: fn => { const id = ++frameId; frames.set(id, fn); return id; },
-    cancelAnimationFrame: id => frames.delete(id),
-    setTimeout: (fn, ms) => { const id = ++timerId; timers.set(id, fn); return id; },
-    clearTimeout: id => timers.delete(id),
     fetch: async (url, options) => {
       requests.push(url);
       assert.equal(url, '/api/guides/example');
@@ -95,118 +33,298 @@ function searchUI({ heroAvailable = true, initialQuery = '' } = {}) {
       return { ok: true, json: async () => ({ id: 'example', title: 'Example guide', html: '<p>Guide content</p>', images: [] }) };
     },
   });
-  window.scrollTo = () => {};
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/search.js'), 'utf8'), context);
-  const flush = () => {
-    while (timers.size || frames.size) {
-      const timerBatch = [...timers.values()];
-      timers.clear();
-      for (const fn of timerBatch) fn();
-      const frameBatch = [...frames.values()];
-      frames.clear();
-      for (const fn of frameBatch) fn();
-    }
+  const context = vm.createContext(dom.context);
+  const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/' + file), 'utf8'), context);
+  run('specifiers.js');
+  if (heroAvailable) run('hero.js');
+  else { dom.response.value = 'please, mend my '; dom.response.dataset.promptLength = '15'; }
+  run('search.js');
+  dom.window.addEventListener('mend:settle', event => settled.push(structuredClone(event.detail)));
+  await Promise.resolve();
+  dom.flushFrames();
+  const type = (input, value, inputType = 'insertText') => {
+    input.focus();
+    input.value = input.value.slice(0, Number(input.dataset.promptLength || 0)) + value;
+    dom.event(input, 'input', { inputType, bubbles: true });
   };
-  return {
-    document, window, elements, posted, requests, workers, flush,
-    get heroFocuses() { return heroFocuses; },
-    ready() { workers[0].emit({ type: 'ready', categories: [], source: {}, loadDuration: 1 }); },
-    change(value) { query = value; window.dispatchEvent(new Event('mend:querychange')); },
-    clickGuide() {
-      const link = new Element('a');
-      link.href = 'http://127.0.0.1:8080/?guide=example';
-      const event = new Event('click', { cancelable: true });
-      Object.defineProperties(event, { target: { value: link }, button: { value: 0 } });
-      document.dispatchEvent(event);
+  const ui = Object.assign(dom, { elements, posted, requests, workers, settled,
+    ready(words = terms) { workers[0].emit({ type: 'ready', categories: [], source: {}, terms: words, loadDuration: 1 }); dom.flushFrames(); },
+    change(value) { type(dom.response, value); },
+    answer(value) { type(dom.clarification, value); },
+    key(input, key, options = {}) { return dom.event(input, 'keydown', { key, bubbles: true, ...options }); },
+    searches() { return posted.filter(message => message.type === 'search'); },
+    option(id) { return dom.specifierContainer.querySelector(`button[data-part="${id}"]`); },
+    part(id) { return dom.specifierContainer.querySelector(`g[data-part="${id}"]`); },
+    clickPart(id, svg = false) {
+      const target = svg ? ui.part(id) : ui.option(id);
+      assert.ok(target, id);
+      const down = dom.event(target, 'pointerdown', { bubbles: true });
+      assert.equal(down.defaultPrevented, false, 'specifier pointerdown must reach its real target');
+      dom.event(target, 'click', { bubbles: true });
+      dom.flushFrames();
     },
-  };
+    results(requestId, rows = []) { workers[0].emit({ type: 'results', requestId, total: rows.length, items: rows, duration: 1 }); },
+    clickGuide() {
+      const link = dom.add('a', 'example-link');
+      link.href = 'http://127.0.0.1:8080/?guide=example';
+      dom.event(link, 'click', { bubbles: true });
+    },
+  });
+  if (initialQuery) ui.change(initialQuery);
+  return ui;
 }
 
-test('results list stays hidden on first type and reveals only after the typing pause', () => {
-  const ui = searchUI();
-  ui.ready();
+test('one 380ms settle opens bike specifics with full-width prompt and no cards', async () => {
+  const ui = await searchUI(); ui.ready();
+  const width = ui.response.clientWidth;
+  ui.change('bike'); ui.advance(379);
+  assert.equal(ui.question.textContent, '');
   assert.equal(ui.elements['search-results'].hidden, true);
-  ui.change('a');
-  assert.equal(ui.elements['search-results'].hidden, true, 'results must stay hidden on first type');
-  assert.equal(ui.document.body.classList.contains('searching'), false);
-  assert.equal(ui.posted.length, 0);
-  ui.change('arm');
-  assert.equal(ui.elements['search-results'].hidden, true, 'results must stay hidden while typing continues');
-  ui.flush();
-  assert.equal(ui.elements['search-results'].hidden, false, 'results must reveal after the typing pause');
-  assert.equal(ui.document.body.classList.contains('searching'), true);
-  assert.equal(ui.posted.at(-1).query, 'arm');
+  assert.equal(ui.searches().length, 0);
+  ui.advance(1);
+  assert.equal(ui.question.textContent, "What's wrong with your bike?");
+  assert.equal(ui.specifierContainer.hidden, false);
+  assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
+  assert.equal(ui.document.activeElement, ui.clarification);
+  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.searches().length, 0, 'a settled broad noun never briefly searches topic cards');
+  assert.equal(ui.response.clientWidth, width, 'underneath specifier does not change first-line width');
+  assert.equal(ui.workspace.parentNode.contains(ui.question), true);
+  assert.equal(ui.workspace.contains(ui.question), false, 'question stays outside the split workspace');
 });
 
-test('hero noun and symptom changes coalesce into one suffix-only worker search', () => {
-  const ui = searchUI();
-  ui.ready();
-  ui.change('car');
-  ui.change('car won');
-  ui.change("car won't start");
-  ui.elements.response.dispatchEvent(new Event('input'));
-  ui.flush();
-  const searches = ui.posted.filter(message => message.type === 'search');
-  assert.equal(searches.length, 1);
-  assert.equal(searches[0].query, "car won't start");
-  assert.ok(searches[0].count <= 60);
-  assert.equal(ui.requests.length, 0, 'typing must not make a server request');
+test('SVG and list selections write the native answer and reveal cards immediately; clear hides again', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
+  ui.clickPart('chain', true);
+  assert.equal(ui.clarification.value, 'chain');
+  assert.equal(ui.clarification.selectionStart, 5);
+  assert.equal(ui.document.activeElement, ui.clarification);
+  assert.equal(ui.elements['search-results'].hidden, false);
+  assert.equal(ui.searches().at(-1).query, 'bike chain');
+  assert.equal(ui.option('chain').classList.contains('is-selected'), true);
+  assert.equal(ui.part('chain').classList.contains('is-selected'), true);
+  const count = ui.searches().length;
+  ui.clickPart('chain');
+  assert.equal(ui.clarification.value, '');
+  assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
+  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.searches().length, count);
+  assert.equal(ui.option('chain').classList.contains('is-selected'), false);
+  ui.clickPart('pedals');
+  assert.equal(ui.clarification.value, 'pedal');
+  assert.equal(ui.searches().at(-1).query, 'bike pedal');
+  const stale = ui.searches().at(-1).requestId;
+  ui.answer('');
+  assert.equal(ui.elements['search-results'].hidden, true);
+  ui.results(stale);
+  assert.equal(ui.elements['search-results'].hidden, true, 'a stale response cannot reopen cleared specifics');
+  assert.equal(ui.option('pedals').classList.contains('is-selected'), false);
 });
 
-test('the latest combined query survives worker startup and full phrases remain untouched', () => {
-  const ui = searchUI({ initialQuery: 'arm' });
-  ui.change('arm hurts');
-  ui.flush();
-  assert.equal(ui.posted.length, 0, 'wait for the resident index before searching');
-  ui.change('broken arm');
-  ui.ready();
-  ui.flush();
-  assert.equal(ui.posted.at(-1).query, 'broken arm');
-  assert.equal(ui.requests.length, 0);
+test('two-way hover/focus and manual answer matches synchronize exact SVG/list parts live', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('road bike'); ui.key(ui.response, 'Enter');
+  const group = ui.part('chain'), option = ui.option('chain');
+  ui.event(group, 'pointerenter');
+  assert.equal(option.classList.contains('is-highlighted'), true);
+  assert.equal(option.scrolledIntoView.block, 'nearest');
+  ui.event(group, 'pointerleave');
+  const brakes = ui.option('brakes'); brakes.focus();
+  assert.equal(ui.part('brakes').classList.contains('is-highlighted'), true);
+  ui.answer('master link broken');
+  assert.equal(group.classList.contains('is-selected'), true);
+  assert.equal(option.classList.contains('is-selected'), true);
+  assert.equal(ui.elements['search-results'].hidden, true, 'manual matching highlights before the shared settle');
+  ui.advance(379); assert.equal(ui.searches().length, 0);
+  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'road bike master link broken');
 });
 
-test('dismissing clarification replaces its symptom and clearing both inputs cancels pending search', () => {
-  const ui = searchUI();
-  ui.ready();
-  ui.change('laptop screen cracked');
-  ui.flush();
-  ui.change('laptop');
-  ui.flush();
-  assert.deepEqual(ui.posted.filter(message => message.type === 'search').map(message => message.query),
-    ['laptop screen cracked', 'laptop']);
-  ui.change('laptop battery');
+test('resident real words settle at380ms and unknown/model/one-letter tails use1000ms', async () => {
+  for (const [query, delay] of [['broken laptop', 380], ['broken carpet', 380], ['broken flubbergorp', 1000],
+    ['headphones WH-1000XM4', 1000], ['broken z', 1000], ['broken zygomatic', 380]]) {
+    const ui = await searchUI(); ui.ready(['zygomatic']); ui.change(query);
+    assert.equal(ui.window.mendHero.settleDelay(), delay, query);
+    ui.advance(delay - 1); assert.equal(ui.searches().length, 0, query);
+    ui.advance(1); assert.equal(ui.searches().at(-1).query, query);
+    assert.equal(ui.requests.length, 0, 'dictionary lookup and typed search need no API request');
+  }
+});
+
+test('car to carpet and bike to bikes continue typing without a premature clarification', async () => {
+  const ui = await searchUI(); ui.ready();
+  ui.change('car'); ui.advance(200); ui.change('carpet'); ui.advance(379);
+  assert.equal(ui.question.textContent, '');
+  ui.advance(1); assert.equal(ui.question.textContent, '');
+  assert.equal(ui.searches().at(-1).query, 'carpet');
+  ui.change('bike'); ui.advance(200); ui.change('bikes'); ui.advance(379);
+  assert.equal(ui.question.textContent, '');
+  ui.advance(1);
+  assert.equal(ui.question.textContent, "What's wrong with your bikes?");
+  assert.equal(ui.elements['search-results'].hidden, true);
+});
+
+test('startup dictionary updates preserve elapsed timing and never bypass the shared settle', async () => {
+  const ui = await searchUI(); ui.change('broken zygomatic'); ui.advance(100);
+  ui.ready(['zygomatic']);
+  assert.equal(ui.searches().length, 0);
+  ui.advance(279); assert.equal(ui.searches().length, 0);
+  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken zygomatic');
+  const pending = await searchUI(); pending.change('broken laptop'); pending.advance(380);
+  assert.equal(pending.searches().length, 0);
+  pending.ready();
+  assert.equal(pending.searches().at(-1).query, 'broken laptop', 'an already-settled query runs as soon as its index is ready');
+});
+
+test('full-phrase Enter/Tab and noun punctuation settle immediately without rewriting native text', async () => {
+  for (const key of ['Enter', 'Tab']) {
+    const ui = await searchUI(); ui.ready(); ui.change('broken laptop');
+    ui.key(ui.response, key); ui.flushFrames();
+    assert.equal(ui.searches().at(-1).query, 'broken laptop');
+    assert.equal(ui.question.textContent, '');
+  }
+  const ui = await searchUI(); ui.ready(); ui.change('bike');
+  const before = ui.event(ui.response, 'beforeinput', { inputType: 'insertText', data: '?', bubbles: true });
+  assert.equal(before.defaultPrevented, false);
+  ui.response.setRangeText('?', ui.response.value.length, ui.response.value.length, 'end');
+  ui.event(ui.response, 'input', { inputType: 'insertText', data: '?', bubbles: true });
+  assert.equal(ui.response.value, 'please, mend my bike?');
+  assert.equal(ui.question.textContent, "What's wrong with your bike?");
+  assert.equal(ui.elements['search-results'].hidden, true);
+  ui.answer('chain'); ui.key(ui.clarification, 'Enter'); ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'bike? chain');
+});
+
+test('empty answer Backspace dissolves then settles the suppressed noun without reopening', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
+  ui.key(ui.clarification, 'Backspace');
+  assert.equal(ui.question.textContent, '');
+  assert.equal(ui.specifierContainer.hidden, true);
+  assert.equal(ui.document.activeElement, ui.response);
+  ui.advance(379); assert.equal(ui.searches().length, 0);
+  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'bike');
+  assert.equal(ui.question.textContent, '');
   ui.change('');
-  ui.flush();
-  assert.equal(ui.posted.filter(message => message.type === 'search').length, 2);
   assert.equal(ui.elements['search-results'].hidden, true);
   assert.equal(ui.elements['result-cards'].children.length, 0);
-  assert.equal(ui.document.body.classList.contains('searching'), false);
+  ui.advance(2000); assert.equal(ui.searches().length, 1);
 });
 
-test('returning from a guide restores the hero controller focus and combined query', async () => {
-  const ui = searchUI({ initialQuery: 'car brakes squeak' });
-  ui.ready();
-  ui.flush();
-  ui.clickGuide();
-  for (let pass = 0; pass < 10; pass++) await Promise.resolve();
+test('pending edits retain displayed results but reject old replies and never steal focused cards', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('broken laptop'); ui.advance(380);
+  const previous = ui.searches().at(-1).requestId;
+  assert.equal(ui.elements['search-results'].hidden, false);
+  ui.change('broken screen');
+  assert.equal(ui.elements['search-results'].hidden, false);
+  ui.results(previous, [['old', 'Old result', 'technology', 'guide', 'Laptop']]);
+  assert.equal(ui.elements['result-cards'].children.length, 0, 'old request must not render into a new query');
+  const card = ui.add('a', 'focused-card'); card.focus();
+  ui.advance(380);
+  assert.equal(ui.document.activeElement, card);
+  assert.equal(ui.searches().at(-1).query, 'broken screen');
+  ui.change('bike'); card.focus(); ui.advance(380);
+  assert.equal(ui.question.textContent, '', 'a focused card must not be hijacked by a delayed noun prompt');
+  assert.equal(ui.searches().at(-1).query, 'bike');
+});
+
+test('composition waits until commitment and hidden/reading views cancel pending work', async () => {
+  const ui = await searchUI(); ui.ready();
+  ui.event(ui.response, 'compositionstart'); ui.change('broken laptop'); ui.advance(2000);
+  assert.equal(ui.searches().length, 0);
+  ui.event(ui.response, 'compositionend'); ui.advance(379); assert.equal(ui.searches().length, 0);
+  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken laptop');
+  ui.change('bike'); ui.document.visibilityState = 'hidden'; ui.event(ui.document, 'visibilitychange');
+  ui.advance(1000); assert.equal(ui.searches().length, 1);
+  ui.document.visibilityState = 'visible'; ui.event(ui.document, 'visibilitychange');
+  ui.document.body.classList.add('reading'); await Promise.resolve(); ui.advance(1000);
+  assert.equal(ui.question.textContent, '');
+  assert.equal(ui.searches().length, 1);
+});
+
+test('return from an open guide searches and restores the native answer caret immediately', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380); ui.clickPart('chain');
+  ui.clickGuide(); for (let pass = 0; pass < 12; pass++) await Promise.resolve();
   assert.equal(ui.document.body.classList.contains('reading'), true);
   assert.equal(ui.elements['guide-panel'].hidden, false);
-  assert.equal(ui.heroFocuses, 0, 'opening a guide must keep its heading focus');
-  ui.elements['close-guide'].dispatchEvent(new Event('click'));
-  ui.flush();
-  assert.equal(ui.heroFocuses, 1);
-  assert.equal(ui.document.activeElement, ui.elements['clarification-response']);
+  const prior = ui.searches().length;
+  ui.event(ui.elements['close-guide'], 'click'); ui.flushFrames();
   assert.equal(ui.document.body.classList.contains('reading'), false);
-  assert.equal(ui.posted.filter(message => message.type === 'search').at(-1).query, 'car brakes squeak');
+  assert.equal(ui.document.activeElement, ui.clarification);
+  assert.equal(ui.searches().length, prior + 1);
+  assert.equal(ui.searches().at(-1).query, 'bike chain');
   assert.deepEqual(ui.requests, ['/api/guides/example']);
 });
 
-test('a cached older page without the hero controller still searches the editable first suffix', () => {
-  const ui = searchUI({ heroAvailable: false });
-  ui.ready();
-  ui.elements.response.value = 'please, mend my broken arm';
-  ui.elements.response.dispatchEvent(new Event('input'));
-  ui.flush();
-  assert.equal(ui.posted.at(-1).query, 'broken arm');
+test('list-only nouns narrow cleanly and unsupported nouns never get empty SVG boxes', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('laptop'); ui.advance(380);
+  assert.equal(ui.specifierContainer.classList.contains('is-list-only'), true);
+  assert.equal(ui.specifierContainer.querySelector('svg'), null);
+  ui.clickPart('battery'); assert.equal(ui.searches().at(-1).query, 'laptop battery');
+  ui.change('relationship'); ui.advance(380);
+  assert.equal(ui.specifierContainer.hidden, true);
+  assert.equal(ui.question.textContent, "What's wrong with your relationship?");
+  assert.equal(ui.elements['search-results'].hidden, true);
+});
+
+test('a cached older page without the hero controller still searches the editable suffix', async () => {
+  const ui = await searchUI({ heroAvailable: false }); ui.ready();
+  ui.change('broken arm'); ui.advance(999); assert.equal(ui.searches().length, 0);
+  ui.advance(1); assert.equal(ui.searches().at(-1).query, 'broken arm');
   assert.equal(ui.requests.length, 0);
+});
+
+
+test('a stale cached worker cannot create topic or unknown-kind cards in the UI', async () => {
+  const ui = await searchUI(); ui.ready(); ui.change('broken laptop'); ui.advance(380);
+  ui.results(ui.searches().at(-1).requestId, [
+    ['topic', 'Laptop topic', 'technology', 'topic', 'Laptop'],
+    ['example', 'Laptop repair', 'technology', 'guide', 'Laptop'],
+    ['unknown', 'Unknown kind', 'technology', 'device', 'Laptop'],
+    ['example', 'Laptop article', 'technology', 'article', 'Laptop'],
+  ]);
+  const cards = ui.elements['result-cards'].querySelectorAll('.repair-card');
+  assert.equal(cards.length, 2);
+  assert.deepEqual(cards.map(card => card.dataset.resultIndex), [1, 3], 'original worker positions stay intact');
+  assert.ok(cards.every(card => card.dataset.guideId === 'example'));
+  for (let pass = 0; pass < 12; pass++) await Promise.resolve();
+  assert.deepEqual(ui.requests, ['/api/guides/example'], 'only actionable visible cards are prefetched');
+});
+
+
+test('part selection uses native insertText undo when available and safely falls back on failure', async () => {
+  for (const mode of ['native', 'false-after-edit', 'false', 'throws', 'unsupported']) {
+    const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380);
+    let commands = 0, fallbackEdits = 0;
+    const undo = [];
+    const nativeRangeText = ui.clarification.setRangeText.bind(ui.clarification);
+    ui.clarification.setRangeText = (...args) => { fallbackEdits++; return nativeRangeText(...args); };
+    if (mode !== 'unsupported') ui.document.execCommand = (command, showUI, text) => {
+      commands++;
+      assert.equal(command, 'insertText'); assert.equal(showUI, false);
+      assert.equal(ui.document.activeElement, ui.clarification);
+      assert.equal(ui.clarification.selectionStart, 0);
+      assert.equal(ui.clarification.selectionEnd, ui.clarification.value.length);
+      if (mode === 'throws') throw new Error('Unsupported editing command');
+      if (mode === 'false') return false;
+      undo.push(ui.clarification.value);
+      // Model one successful browser-native edit and its synchronous input.
+      ui.clarification.value = text;
+      ui.event(ui.clarification, 'input', { inputType: 'insertText', data: text, bubbles: true });
+      return mode === 'native';
+    };
+    ui.clickPart('chain');
+    assert.equal(ui.clarification.value, 'chain', mode);
+    assert.equal(ui.clarification.selectionStart, 5);
+    assert.equal(ui.clarification.selectionEnd, 5);
+    assert.equal(ui.searches().length, 1, 'native input plus callback publishes one immediate search');
+    assert.equal(ui.searches()[0].query, 'bike chain');
+    assert.equal(commands, mode === 'unsupported' ? 0 : 1);
+    assert.equal(fallbackEdits, ['native', 'false-after-edit'].includes(mode) ? 0 : 1, mode);
+    if (undo.length) {
+      ui.clarification.value = undo.pop();
+      ui.event(ui.clarification, 'input', { inputType: 'historyUndo', bubbles: true });
+      assert.equal(ui.clarification.value, '');
+      assert.equal(ui.window.mendHero.query(), 'bike');
+      assert.equal(ui.elements['search-results'].hidden, true);
+      assert.equal(ui.part('chain').classList.contains('is-selected'), false);
+    }
+  }
 });

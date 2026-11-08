@@ -8,6 +8,8 @@
   const fixedUnderline = document.getElementById("hero-prefix");
   const firstUnderline = document.getElementById("hero-suffix");
   const secondUnderline = document.getElementById("clarification-underline");
+  const specifierContainer = document.getElementById("topic-specifier");
+  const specifiers = window.mendSpecifiers;
   const heading = document.querySelector("h1");
   const measure = document.getElementById("measure");
   const theme = document.documentElement.dataset.theme;
@@ -44,7 +46,16 @@
   let suppressed = null;
   let active = first;
   let lastQuery = "";
-  let automaticTimer = null;
+  let settleTimer = null;
+  let edited = first;
+  let editedAt = 0;
+  let vocabulary = [];
+  let specifier = null;
+  let lastAwaiting = false;
+  const curatedWords = new Set([...broadNouns, ...symptomPredicates, ...conversational,
+    ...pronouns, ...determiners, ...contractions, ...(specifiers?.nouns || []),
+    ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
+  for (const name of [...curatedWords]) for (const word of name.split(/\s+/)) curatedWords.add(word);
   const completionPunctuation = new Set(["?", ".", "!"]);
 
   function completesSubject(input, text) {
@@ -53,8 +64,66 @@
   }
 
   function cancelAutomatic() {
-    if (automaticTimer !== null) clearTimeout(automaticTimer);
-    automaticTimer = null;
+    if (settleTimer !== null) clearTimeout(settleTimer);
+    settleTimer = null;
+  }
+
+  function isAwaitingSpecifics() {
+    return open && !suffix(second).trim();
+  }
+
+  function settleDelay() {
+    const value = suffix(edited === second && open ? second : first).trim();
+    if (!value) return 0;
+    const token = value.split(/\s+/).at(-1).normalize("NFKD").replace(/\p{M}/gu, "")
+      .toLowerCase().replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replaceAll("’", "'");
+    if (token.length < 2 || /\p{N}/u.test(token)) return 1000;
+    if (curatedWords.has(token) || token.endsWith("s") && broadNouns.has(token.slice(0, -1))) return 380;
+    let low = 0, high = vocabulary.length;
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (vocabulary[middle] < token) low = middle + 1;
+      else high = middle;
+    }
+    return vocabulary[low] === token ? 380 : 1000;
+  }
+
+  function publishSettle(immediate) {
+    window.dispatchEvent(new CustomEvent("mend:settle", {
+      detail: { query: query(), awaiting: isAwaitingSpecifics(), immediate: Boolean(immediate) },
+    }));
+  }
+
+  function finishSettle(immediate = false) {
+    cancelAutomatic();
+    if (document.visibilityState === "hidden" || document.body.classList.contains("reading") ||
+        [...state.values()].some(item => item.composing)) return;
+    const value = suffix(first);
+    if (edited === first && document.activeElement === first && value !== suppressed) {
+      const name = bareNoun(value);
+      if (name) {
+        updateLine(name);
+        focus(second, true);
+      }
+    }
+    notify();
+    publishSettle(immediate);
+  }
+
+  function scheduleSettle(input = edited, preserveTime = false) {
+    cancelAutomatic();
+    edited = input;
+    if (!preserveTime) editedAt = performance.now();
+    if (!query()) { publishSettle(true); return; }
+    if (document.visibilityState === "hidden" || document.body.classList.contains("reading")) return;
+    const remaining = Math.max(0, settleDelay() - (performance.now() - editedAt));
+    if (!remaining) finishSettle();
+    else settleTimer = setTimeout(() => finishSettle(), remaining);
+  }
+
+  function setVocabulary(terms) {
+    vocabulary = Array.isArray(terms) ? terms : [];
+    if (settleTimer !== null) scheduleSettle(edited, true);
   }
 
   function suffix(input) {
@@ -72,8 +141,10 @@
 
   function notify() {
     const current = query();
-    if (current === lastQuery) return;
+    const awaiting = isAwaitingSpecifics();
+    if (current === lastQuery && awaiting === lastAwaiting) return;
     lastQuery = current;
+    lastAwaiting = awaiting;
     window.dispatchEvent(new Event("mend:querychange"));
   }
 
@@ -153,7 +224,8 @@
     const name = kept.join(" ");
     const normalized = name.toLocaleLowerCase("en");
     if (!name || notSubjects.has(normalized)) return "";
-    if (broadNouns.has(normalized) || normalized.endsWith("s") && broadNouns.has(normalized.slice(0, -1))) return name;
+    if (broadNouns.has(normalized) || specifiers?.resolve?.(normalized) ||
+        normalized.endsWith("s") && broadNouns.has(normalized.slice(0, -1))) return name;
     return explicit && /^[\p{L}][\p{L}\p{M}'’\-]*$/u.test(name) ? name : "";
   }
 
@@ -172,6 +244,12 @@
       question.textContent = "";
       if (active === second || document.activeElement === second) focus(first, true);
     }
+    if (open !== wasOpen || changedSubject) {
+      specifier?.destroy?.();
+      specifier = open && specifierContainer ? specifiers?.mount?.(specifierContainer, name, selectSpecific) : null;
+      if (specifierContainer && !specifier) specifierContainer.hidden = true;
+    }
+    specifier?.sync?.(suffix(second));
     second.disabled = !open;
     second.tabIndex = open ? 0 : -1;
     line.inert = !open;
@@ -181,38 +259,43 @@
     if (open !== wasOpen || changedSubject) window.dispatchEvent(new Event("mend:layout"));
   }
 
-  function syncFirst(explicit = false) {
-    cancelAutomatic();
+  function syncFirst() {
     const value = suffix(first);
     if (suppressed !== null && value !== suppressed) suppressed = null;
-    const name = !explicit && value === suppressed ? "" : bareNoun(value, explicit);
-    if (explicit) {
-      updateLine(name);
-    } else if (open && name && name.toLocaleLowerCase("en") === subject.toLocaleLowerCase("en")) {
-      updateLine(name);
-    } else {
-      updateLine("");
-      if (name && document.visibilityState !== "hidden" && !document.body.classList.contains("reading")) {
-        automaticTimer = setTimeout(() => {
-          automaticTimer = null;
-          // A continued phrase, background tab, guide, or card focus must never
-          // receive a late prompt. The idle follow-up starts at its symptom.
-          if (suffix(first) !== value || value === suppressed || document.activeElement !== first ||
-              document.visibilityState === "hidden" || document.body.classList.contains("reading")) return;
-          updateLine(name);
-          focus(second, true);
-        }, 2500);
-      }
-    }
+    const name = value === suppressed ? "" : bareNoun(value);
+    if (open && name && name.toLocaleLowerCase("en") === subject.toLocaleLowerCase("en")) updateLine(name);
+    else updateLine("");
   }
 
   function activate() {
-    syncFirst(true);
-    if (!open) return false;
-    suppressed = null;
+    cancelAutomatic();
+    const name = bareNoun(suffix(first), true);
+    if (name) {
+      suppressed = null;
+      updateLine(name);
+      focus(second, true);
+    } else syncFirst();
+    notify();
+    publishSettle(true);
+    return Boolean(name);
+  }
+
+  function selectSpecific(value) {
+    if (!open || typeof value !== "string") return;
+    // insertText preserves the browser's native undo buffer where supported.
+    // It may synchronously emit input; finishSettle below cancels that timer.
+    // The optional command is never called from an input handler.
+    focus(second);
+    second.setSelectionRange(0, second.value.length);
+    try { document.execCommand?.("insertText", false, value); } catch { /* Native edit fallback below. */ }
+    if (second.value !== value) second.setRangeText(value, 0, second.value.length, "end");
+    state.get(second).previous = second.value;
+    edited = second;
+    grow(second);
+    specifier?.sync?.(suffix(second));
     focus(second, true);
     notify();
-    return true;
+    finishSettle(true);
   }
 
   function dissolve() {
@@ -220,7 +303,9 @@
     suppressed = suffix(first);
     updateLine("");
     focus(first, true);
+    edited = first;
     notify();
+    scheduleSettle(first);
   }
 
   function changed(input, event) {
@@ -234,10 +319,13 @@
     item.previous = input.value;
     if (input === first) syncTitle();
     grow(input);
-    if (!item.composing) {
-      if (input === first) completed ? activate() : syncFirst();
-      notify();
-    }
+    if (input === second) specifier?.sync?.(suffix(second));
+    if (input === first && !suffix(first).trim()) updateLine("");
+    if (item.composing) { cancelAutomatic(); notify(); return; }
+    if (input === first && completed) { edited = first; activate(); return; }
+    if (input === first) syncFirst();
+    notify();
+    scheduleSettle(input);
   }
 
   function inputEvent(input, inputType) {
@@ -265,6 +353,10 @@
       } else if (input === first && !event.ctrlKey && !event.metaKey && !event.altKey &&
           !event.shiftKey && (event.key === "Enter" || event.key === "Tab")) {
         if (activate() || event.key === "Enter") event.preventDefault();
+      } else if (input === second && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey &&
+          (event.key === "Enter" || event.key === "Tab")) {
+        finishSettle(true);
+        if (event.key === "Enter") event.preventDefault();
       } else if (input === second && event.key === "Backspace" && !suffix(second) && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault();
         dissolve();
@@ -287,6 +379,10 @@
       if (input === first && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") &&
           !event.ctrlKey && !event.metaKey && !event.altKey && !event.isComposing && !item.composing) {
         activate();
+        event.preventDefault();
+      } else if (input === second && (event.inputType === "insertLineBreak" || event.inputType === "insertParagraph") &&
+          !event.isComposing && !item.composing) {
+        finishSettle(true);
         event.preventDefault();
       } else if (event.inputType.startsWith("delete") && event.inputType.endsWith("Backward") && end <= boundary) {
         event.preventDefault();
@@ -312,7 +408,6 @@
       });
     }
     input.addEventListener("blur", () => {
-      if (input === first) cancelAutomatic();
       queueMicrotask(() => {
         if (document.hasFocus() && document.activeElement === document.body && !document.body.classList.contains("reading")) focus();
       });
@@ -324,13 +419,13 @@
   });
   document.addEventListener("pointerdown", (event) => {
     if (document.body.classList.contains("reading") || event.button !== 0 ||
-        event.target.closest("a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
+        event.target.closest(".topic-specifier, [data-part], a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
     event.preventDefault();
     focus();
   }, { capture: true });
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "hidden") cancelAutomatic();
-    else if (document.activeElement === first && !open) syncFirst();
+    else if (document.activeElement === first || document.activeElement === second) scheduleSettle(document.activeElement);
   });
   new MutationObserver(() => {
     if (document.body.classList.contains("reading")) cancelAutomatic();
@@ -338,7 +433,8 @@
   fixedUnderline.textContent = prompt;
   promptArt = styles?.mount?.(first.closest(".hero-field"), fixedUnderline, theme);
   measure.textContent = `${prompt}relationship`;
-  window.mendHero = { query, focus: () => focus() };
+  window.mendHero = { query, focus: () => focus(), isAwaitingSpecifics, settleDelay, setVocabulary,
+    settle: () => finishSettle(true) };
   window.addEventListener("resize", fit);
   window.addEventListener("mend:layout", fit);
   document.fonts?.ready.then(fit);
