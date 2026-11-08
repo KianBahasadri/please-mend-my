@@ -32,6 +32,15 @@ replace a newer accepted catalog. Updating a catalog invalidates persisted guide
 the page's in-memory detail cache. Offline use retains full local search and
 previously cached guide content; a guide never fetched is not promised offline.
 
+Guide reads use a tiny catalog-generation marker rather than repeatedly matching
+the full catalog response. Publication updates that marker under the catalog
+lock; cached guide reads bypass the background persistence/LRU queue. Stalled
+catalog-body reads and recency writes are covered by regression tests. The UI
+posts searches immediately, renders resident alternative titles before details
+arrive, and retains an unchanged article DOM instead of rebuilding it per edit.
+`window.mendSearchStats` separates worker reply, detail queue/transport/parse,
+and article-render timings; these are not browser-paint measurements.
+
 The shell manifest is derived from the embedded site assets. Service-worker
 installation prepares a complete shell version before activation, and offline
 navigation uses that version's entry page and assets. Activation does not reload

@@ -237,6 +237,59 @@ test('late old-guide responses cannot repopulate a changed catalog generation', 
   assert.equal((await guides.keys()).filter(key => key.url.includes('/api/guides/')).length, 0);
 });
 
+test('foreground guide hits use tiny generation metadata and never wait for the full catalog body', async () => {
+  const ui = helper({ transport: async url => json({ id: url.slice('/api/guides/'.length), title: 'Guide', html: 'Body' },
+    '"guide"', { 'X-PMM-Catalog-ETag': '"one"' }) });
+  await activate(ui);
+  await ui.cache.fetchGuide('one', { etag: '"one"' }); await ui.cache.idle();
+  const catalogs = await ui.caches.open('pmm-catalog-v1'), match = catalogs.match.bind(catalogs);
+  let release;
+  const held = new Promise(resolve => { release = resolve; });
+  catalogs.match = async key => {
+    if (String(key) === '/api/catalog') await held;
+    return match(key);
+  };
+  let timeout;
+  try {
+    const response = await Promise.race([
+      ui.cache.fetchGuide('one', { etag: '"one"' }),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(Error('Guide lookup waited for full catalog I/O')), 1000); }),
+    ]);
+    assert.equal((await response.json()).id, 'one');
+    assert.equal(ui.requests.length, 1, 'the saved guide is still cache-first');
+  } finally {
+    clearTimeout(timeout); release(); await ui.cache.idle();
+  }
+});
+
+test('foreground guide hits bypass stalled prefetch and recency writes', async () => {
+  const ui = helper({ transport: async url => json({ id: url.slice('/api/guides/'.length), title: 'Guide', html: 'Body' },
+    '"guide"', { 'X-PMM-Catalog-ETag': '"one"' }) });
+  await activate(ui);
+  await ui.cache.fetchGuide('one', { etag: '"one"' }); await ui.cache.idle();
+  const guides = await ui.caches.open('pmm-guides-v1'), put = guides.put.bind(guides);
+  let release, entered;
+  const held = new Promise(resolve => { release = resolve; });
+  const started = new Promise(resolve => { entered = resolve; });
+  guides.put = async (key, response) => {
+    if (String(key) === '/__pmm_guides_state__') { entered(); await held; }
+    return put(key, response);
+  };
+  await ui.cache.fetchGuide('one', { etag: '"one"' });
+  await started;
+  let timeout;
+  try {
+    const response = await Promise.race([
+      ui.cache.fetchGuide('one', { etag: '"one"' }),
+      new Promise((_, reject) => { timeout = setTimeout(() => reject(Error('Guide read joined the background write queue')), 1000); }),
+    ]);
+    assert.equal((await response.json()).id, 'one');
+    assert.equal(ui.requests.length, 1);
+  } finally {
+    clearTimeout(timeout); release(); await ui.cache.idle();
+  }
+});
+
 test('a cached-guide lookup spanning a catalog change never returns the old payload', async () => {
   const ui = helper({ transport: async () => json({ id: 'one', title: 'Old', html: 'Old' },
     '"guide"', { 'X-PMM-Catalog-ETag': '"one"' }) });

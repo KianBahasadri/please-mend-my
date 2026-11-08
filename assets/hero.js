@@ -44,6 +44,7 @@
   let registryPending = false;
   let lastAwaiting = false;
   let selectingAnswer = false;
+  let fittedKey;
   const curatedWords = new Set([...symptomPredicates, ...conversational,
     ...pronouns, ...determiners, ...contractions,
     ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
@@ -166,8 +167,12 @@
     input.style.height = `${input.scrollHeight + 2}px`;
   }
 
-  function fit() {
-    if (!first.clientWidth) return;
+  function fit(force = false) {
+    const width = first.clientWidth;
+    if (!width) return;
+    const key = `${width}\n${open ? question.textContent : ""}\n${document.body.classList.contains("searching")}`;
+    if (force !== true && key === fittedKey) return;
+    fittedKey = key;
     heading.style.fontSize = "";
     const size = parseFloat(getComputedStyle(heading).fontSize);
     measure.textContent = `${prompt}relationship`;
@@ -176,7 +181,7 @@
       measure.textContent = question.textContent;
       sampleWidth = Math.max(sampleWidth, measure.getBoundingClientRect().width);
     }
-    if (sampleWidth > 0) heading.style.fontSize = `${Math.min(size, size * (first.clientWidth - 6) / sampleWidth)}px`;
+    if (sampleWidth > 0) heading.style.fontSize = `${Math.min(size, size * (width - 6) / sampleWidth)}px`;
     grow(first);
     grow(second);
     promptArt?.sync?.();
@@ -446,10 +451,10 @@
     notify();
     if (settleTimer !== null) scheduleSettle(edited, true);
   });
-  window.addEventListener("resize", fit);
-  window.addEventListener("mend:layout", fit);
-  document.fonts?.ready.then(fit);
-  document.fonts?.addEventListener("loadingdone", fit);
+  window.addEventListener("resize", () => fit(true));
+  window.addEventListener("mend:layout", () => fit());
+  document.fonts?.ready.then(() => fit(true));
+  document.fonts?.addEventListener("loadingdone", () => fit(true));
   syncTitle();
   fit();
   focus(first, true);

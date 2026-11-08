@@ -4,6 +4,7 @@
   const scope = globalThis;
   const CATALOG = "pmm-catalog-v1", GUIDES = "pmm-guides-v1";
   const CATALOG_URL = "/api/catalog", CANDIDATES = "/__pmm_catalog_candidate__/";
+  const CATALOG_GENERATION = "/__pmm_catalog_generation__";
   const GUIDE_META = "/__pmm_guides_state__", GUIDE_LIMIT = 500;
   const listeners = new Set();
   const stats = { catalogSource: "", catalogReadMs: 0, catalogParseMs: 0,
@@ -53,6 +54,30 @@
       const etag = etagOf(response); discard(response);
       return etag;
     } catch { storageFailure(); return ""; }
+  }
+
+  async function guideEtag() {
+    const store = await cache(CATALOG);
+    if (!store) return "";
+    try {
+      const response = await store.match(CATALOG_GENERATION);
+      const etag = etagOf(response); discard(response);
+      if (validEtag(etag)) return etag;
+    } catch { storageFailure(); }
+    // Compatibility with catalogs saved before the tiny generation marker.
+    // Publication/CAS still checks the authoritative catalog response itself.
+    return activeEtag();
+  }
+
+  async function saveGuideGeneration(store, etag) {
+    if (!store || !validEtag(etag)) return;
+    try {
+      await store.put(CATALOG_GENERATION, new Response(null, { headers: { ETag: etag } }));
+    } catch {
+      storageFailure();
+      // A stale marker must not survive a successful catalog replacement.
+      try { await store.delete(CATALOG_GENERATION); } catch {}
+    }
   }
 
   async function stage(response, baseEtag) {
@@ -123,7 +148,10 @@
     try {
       const key = candidateURL(entry.staging ? await entry.staging : entry.candidateKey);
       if (key) await store.delete(key);
-      else if (entry.source === "cache" && await activeEtag() === entry.etag) await store.delete(CATALOG_URL);
+      else if (entry.source === "cache" && await activeEtag() === entry.etag) {
+        await store.delete(CATALOG_URL);
+        await store.delete(CATALOG_GENERATION);
+      }
     } catch { storageFailure(); }
   }
 
@@ -148,6 +176,7 @@
         } catch { storageFailure(); return false; }
       } else if (entry.source !== "network" && previous !== etag) return false;
       currentEtag = etag;
+      await saveGuideGeneration(store, etag);
       if (previous && etag && previous !== etag) {
         guideState = null;
         try { await scope.caches?.delete?.(GUIDES); } catch { storageFailure(); }
@@ -234,29 +263,31 @@
   async function fetchGuide(id, { etag = currentEtag, signal } = {}) {
     if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,64}$/.test(id)) throw new Error("Invalid guide identifier.");
     if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-    if (!validEtag(etag)) etag = await activeEtag();
+    if (!validEtag(etag)) etag = await guideEtag();
     const key = guideKey(id, etag);
-    if (validEtag(etag) && await activeEtag() === etag) {
-      const response = await serial(async () => {
-        const state = await stateFor(etag);
-        if (!state) return null;
-        const hit = await state.store.match(key);
+    if (validEtag(etag) && await guideEtag() === etag) {
+      // Reading a guide must never queue behind prefetch persistence, full
+      // response validation or an LRU write. Only mutations are serialized.
+      const response = await (async () => {
+        const store = await cache(GUIDES);
+        if (!store) return null;
+        const hit = await store.match(key);
         if (!hit || hit.status !== 200 || hit.headers.get("X-PMM-Catalog-ETag") !== etag) { discard(hit); return null; }
         try {
           if (!validGuide(await hit.clone().json(), id)) throw new Error("Invalid cached guide.");
-        } catch { discard(hit); await state.store.delete(key); state.order.delete(key); return null; }
+        } catch { discard(hit); await store.delete(key); return null; }
         // Web Locks serialize updates with other tabs/workers and catalog
         // publication. Refresh the small LRU metadata while holding the lock;
         // another context may have inserted guides since this one's last hit.
         void serial(() => exclusiveCatalog(async () => {
-          if (await activeEtag() !== etag) return;
+          if (await guideEtag() !== etag) return;
           const latest = await stateFor(etag, true);
           if (latest) await remember(latest, key);
         })).catch(storageFailure);
         return hit;
-      }).catch(() => { storageFailure(); return null; });
+      })().catch(() => { storageFailure(); return null; });
       if (response) {
-        const latest = await activeEtag();
+        const latest = await guideEtag();
         if (latest && changed(etag, latest)) { discard(response); throw new Error("Catalog changed."); }
         stats.guideHits++; return response;
       }
@@ -271,11 +302,11 @@
         try {
           const detail = await copy.clone().json();
           if (!validGuide(detail, id)) { discard(copy); return; }
-          if (signal?.aborted || await activeEtag() !== etag) { discard(copy); return; }
+          if (signal?.aborted || await guideEtag() !== etag) { discard(copy); return; }
           const state = await stateFor(etag, true);
           if (!state) { discard(copy); return; }
           await state.store.put(key, copy);
-          if (await activeEtag() !== etag) { await state.store.delete(key); return; }
+          if (await guideEtag() !== etag) { await state.store.delete(key); return; }
           try { await remember(state, key); }
           catch (error) { await state.store.delete(key); throw error; }
         } catch { discard(copy); storageFailure(); }

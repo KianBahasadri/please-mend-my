@@ -15,7 +15,9 @@
   const prefetchedImages = new Set();
   const queue = [];
   const loading = new Set();
-  const stats = { indexLoadMs: null, searchMs: [], inputToResultsMs: [], cachedOpenMs: [], detailRequests: 0 };
+  const stats = { indexLoadMs: null, searchMs: [], inputToWorkerReplyMs: [], inputToResultsMs: [],
+    guideQueueMs: [], detailTransportMs: [], detailParseMs: [], articleRenderMs: [], cachedOpenMs: [],
+    detailRequests: 0, answerReuses: 0 };
   window.mendSearchStats = stats;
   let worker;
   let ready = false;
@@ -26,10 +28,15 @@
   let pendingGuide = null;
   let viewVersion = 0;
   let latestSource;
-  let searchFrame = 0;
   let pendingSearch;
+  let pendingInputAt;
+  let inputEventAt;
   let choices = [];
   let choiceScopes = new Map();
+  let possibilitiesKey;
+  let renderedDetail;
+  let renderedGeneration;
+  let renderedScope;
   let explicitNavigation = false;
   let catalogETag = "";
   let replacement = null;
@@ -39,6 +46,11 @@
   const attemptedUpdates = new Set();
   const composingInputs = new Set();
   const searchBlocked = () => composingInputs.size > 0 || document.visibilityState === "hidden";
+  const timing = (key, duration) => {
+    const samples = stats[key];
+    samples.push(duration);
+    if (samples.length > 128) samples.shift();
+  };
 
   const query = () => hero ? hero.query() : input.value.slice(Number(input.dataset.promptLength)).trim();
   const node = (tag, className, text) => {
@@ -64,8 +76,6 @@
   function invalidateSearch() {
     requestId += 1;
     pendingSearch = null;
-    if (searchFrame) cancelAnimationFrame(searchFrame);
-    searchFrame = 0;
   }
 
   function hideResults() {
@@ -73,6 +83,8 @@
     currentGuide = null;
     choices = [];
     choiceScopes = new Map();
+    renderedDetail = renderedGeneration = renderedScope = undefined;
+    possibilitiesKey = undefined;
     document.body.classList.remove("searching");
     results.hidden = true;
     panel.hidden = true;
@@ -88,6 +100,7 @@
     const text = query();
     if (!text) {
       invalidateSearch();
+      pendingInputAt = undefined;
       hideResults();
       return;
     }
@@ -99,17 +112,16 @@
     requestId += 1;
     pruneQueue(new Set());
     document.body.classList.add("searching");
-    inputAt = performance.now();
+    inputAt = pendingInputAt ?? performance.now();
     if (!ready) return;
     // The worker still ranks the best 100. The inline UI needs only the first
     // answer and five alternatives, avoiding card layout/range round trips.
     results.hidden = false;
     pendingSearch = { type: "search", requestId, query: text, count: 6 };
-    if (!searchFrame) searchFrame = requestAnimationFrame(() => {
-      searchFrame = 0;
-      if (searchBlocked()) { pendingSearch = null; return; }
-      worker.postMessage(pendingSearch);
-    });
+    pendingInputAt = undefined;
+    // Posting is independent of the rendering frame. The worker already
+    // coalesces pending edits; an animation-frame wait adds visible input lag.
+    worker.postMessage(pendingSearch);
   }
 
   function pruneQueue(wanted) {
@@ -154,7 +166,7 @@
     const promise = new Promise((accept, fail) => { resolve = accept; reject = fail; });
     // Background prefetch failures are surfaced only if that item is opened.
     promise.catch(() => {});
-    record = { id, promise, resolve, reject, data: null, state: "queued" };
+    record = { id, promise, resolve, reject, data: null, state: "queued", queuedAt: performance.now() };
     details.set(id, record);
     if (priority) queue.unshift(record); else queue.push(record);
     pump();
@@ -169,6 +181,8 @@
       loading.add(record);
       activeFetches += 1;
       stats.detailRequests += 1;
+      const transportAt = performance.now();
+      timing("guideQueueMs", transportAt - record.queuedAt);
       const generation = catalogETag;
       const signal = record.controller?.signal;
       const response = clientCache?.fetchGuide
@@ -176,9 +190,13 @@
         : fetch(`/api/guides/${encodeURIComponent(record.id)}`, { credentials: "same-origin", mode: "same-origin",
           ...(signal ? { signal } : {}) });
       response
-        .then((response) => {
+        .then(async (response) => {
+          timing("detailTransportMs", performance.now() - transportAt);
           if (!response.ok) throw new Error(`This repair page could not be loaded (${response.status}).`);
-          return response.json();
+          const parseAt = performance.now();
+          const detail = await response.json();
+          timing("detailParseMs", performance.now() - parseAt);
+          return detail;
         })
         .then((detail) => {
           if (generation && generation !== catalogETag) throw new Error("Catalog changed");
@@ -202,6 +220,9 @@
   }
 
   function renderPossibilities() {
+    const key = JSON.stringify(choices.slice(1, 6).map(row => [row[0], row[1], row[0] === currentGuide]));
+    if (key === possibilitiesKey) return;
+    possibilitiesKey = key;
     const fragment = document.createDocumentFragment();
     for (const row of choices.slice(1, 6)) {
       const link = node("a", "answer-possibility", row[1]);
@@ -218,7 +239,8 @@
 
   function renderAnswers(message) {
     if (message.requestId !== requestId || explicitNavigation || !query()) return;
-    stats.searchMs.push(message.duration);
+    timing("searchMs", message.duration);
+    timing("inputToWorkerReplyMs", performance.now() - inputAt);
     const seen = new Set();
     const rows = message.items.filter(row => (row[3] === "guide" || row[3] === "article") &&
       !seen.has(row[0]) && seen.add(row[0])).slice(0, 6);
@@ -238,6 +260,11 @@
       .filter(scope => scope && typeof scope.id === "string" && typeof scope.label === "string" &&
         scope.label.trim() && scope.label.length <= 160 && Number.isInteger(scope.distance) && scope.distance > 0)
       .map(scope => [scope.id, scope]));
+    // Ranked titles are already in memory. Show the alternatives immediately,
+    // while retaining the current article until the new detail is available.
+    choices = rows;
+    choiceScopes = scopes;
+    renderPossibilities();
     showGuide(rows[0][0], false, { automatic: true, rows, scopes, searchRequest: message.requestId });
     for (const row of rows.slice(1, 5)) loadDetail(row[0]);
   }
@@ -436,6 +463,9 @@
   }
 
   function commitGuide(id, detail, addHistory, options) {
+    const scope = (options.scopes || choiceScopes).get(id);
+    const sameAnswer = currentGuide === id && renderedDetail === detail &&
+      renderedGeneration === catalogETag && renderedScope === (scope?.label || "");
     currentGuide = id;
     pendingGuide = null;
     navigationError.hidden = true;
@@ -446,10 +476,20 @@
     if (options.rows) choices = options.rows;
     if (options.scopes) choiceScopes = options.scopes;
     if (addHistory) history.pushState({ guide: id }, "", guideHref(id));
-    renderGuide(detail, !options.automatic, choiceScopes.get(id));
+    if (!sameAnswer) {
+      const renderAt = performance.now();
+      renderGuide(detail, !options.automatic, scope);
+      timing("articleRenderMs", performance.now() - renderAt);
+      renderedDetail = detail;
+      renderedGeneration = catalogETag;
+      renderedScope = scope?.label || "";
+    } else {
+      stats.answerReuses += 1;
+      if (!options.automatic) body.querySelector(".guide-title")?.focus({ preventScroll: true });
+    }
     renderPossibilities();
-    if (options.automatic) stats.inputToResultsMs.push(performance.now() - inputAt);
-    window.dispatchEvent(new Event("mend:layout"));
+    if (options.automatic) timing("inputToResultsMs", performance.now() - inputAt);
+    if (!sameAnswer) window.dispatchEvent(new Event("mend:layout"));
   }
 
   function cancelPendingGuide() {
@@ -474,7 +514,7 @@
       !searchBlocked());
     if (record.data) {
       if (valid()) commitGuide(id, record.data, addHistory, options);
-      stats.cachedOpenMs.push(performance.now() - started);
+      timing("cachedOpenMs", performance.now() - started);
       return;
     }
     // Keep the prior answer and alternatives until the replacement is ready.
@@ -499,10 +539,13 @@
   function closeGuide(addHistory = true) {
     explicitNavigation = false;
     cancelPendingGuide();
+    invalidateSearch();
     if (addHistory) history.pushState({}, "", location.pathname);
     if (hero) hero.focus(); else input.focus({ preventScroll: true });
     hero?.settle?.();
-    runSearch(true);
+    // settle() can synchronously publish this query. Reuse that dispatch;
+    // older pages without the hero still search once through this fallback.
+    runSearch();
   }
 
   document.addEventListener("click", (event) => {
@@ -516,6 +559,8 @@
 
   const queryChanged = () => {
     lastEditAt = performance.now();
+    pendingInputAt = inputEventAt ?? lastEditAt;
+    inputEventAt = undefined;
     if (explicitNavigation) {
       explicitNavigation = false;
       history.replaceState?.({}, "", location.pathname);
@@ -529,6 +574,8 @@
   else input.addEventListener("input", queryChanged);
   window.addEventListener("mend:settle", () => runSearch());
   for (const field of [input, document.getElementById("clarification-response")].filter(Boolean)) {
+    // Capture precedes the hero's native input handler and its layout work.
+    field.addEventListener("input", () => { inputEventAt = performance.now(); }, { capture: true });
     field.addEventListener("compositionstart", () => {
       lastEditAt = performance.now(); composingInputs.add(field); cancelPendingGuide(); invalidateSearch();
     });
@@ -558,6 +605,7 @@
   function configureWorker(data) {
     ready = true;
     setStatus("");
+    possibilitiesKey = undefined;
     count.textContent = "";
     latestSource = data.source;
     catalogETag = typeof data.catalogETag === "string" ? data.catalogETag : "";

@@ -83,6 +83,60 @@ test('top answer renders inline without moving selection, prefetches 2–5 and o
   assert.equal(ui.searches()[0].count, 6);
 });
 
+test('ranked alternatives appear immediately while a first article is still pending', async () => {
+  const ui = answerUI({ deferred: ['slow'] }); ui.ready(); ui.change('laptop screen');
+  ui.result(['slow', 'other', 'third']);
+  assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['other', 'third']);
+  assert.equal(ui.elements['result-count'].textContent, 'Other possibilities');
+  assert.equal(ui.title(), '', 'pending article content stays blank without loading text');
+  assert.equal(ui.document.activeElement, ui.response);
+  ui.release('slow'); await settle();
+  assert.equal(ui.title(), 'Answer slow');
+});
+
+test('an unchanged best answer retains its DOM, checked steps and selection without another hero layout', async () => {
+  const ui = answerUI({ deferred: ['one'] }); ui.ready(); ui.change('laptop b');
+  ui.result(['one', 'two']);
+  ui.release('one', { version: 2, steps: [{ title: 'Disconnect power', body: 'Unplug the cable.' }] });
+  await settle();
+  const title = ui.elements['guide-body'].querySelector('.guide-title');
+  const step = ui.elements['guide-body'].querySelector('input');
+  assert.ok(step); step.checked = true;
+  ui.response.setSelectionRange(2, 5, 'backward');
+  let layouts = 0;
+  ui.window.addEventListener('mend:layout', () => { layouts++; });
+  const renders = ui.window.mendSearchStats.articleRenderMs.length;
+  ui.change('laptop battery');
+  ui.response.setSelectionRange(2, 5, 'backward');
+  ui.result(['one', 'three']);
+  assert.equal(ui.elements['guide-body'].querySelector('.guide-title') === title, true);
+  assert.equal(ui.elements['guide-body'].querySelector('input') === step, true);
+  assert.equal(step.checked, true, 'typing must not reset the article checklist');
+  assert.deepEqual([ui.response.selectionStart, ui.response.selectionEnd, ui.response.selectionDirection], [2, 5, 'backward']);
+  assert.equal(layouts, 0);
+  assert.equal(ui.window.mendSearchStats.articleRenderMs.length, renders);
+  assert.equal(ui.window.mendSearchStats.answerReuses, 1);
+  assert.deepEqual(ui.elements['result-cards'].children.map(link => link.dataset.guideId), ['three']);
+  ui.change('laptop battery replacement');
+  ui.result(['one'], undefined, [{ id: 'one', label: 'Computer', distance: 1 }]);
+  assert.equal(ui.elements['guide-body'].querySelector('.guide-scope').textContent, 'General guidance for Computer');
+  assert.equal(ui.elements['guide-body'].querySelector('.guide-title') === title, false,
+    'changed inherited scope must still update the article');
+});
+
+test('phase timings distinguish worker wait from pending detail transport and rendering', async () => {
+  const ui = answerUI({ deferred: ['slow'] }); ui.ready(); ui.change('laptop screen');
+  ui.advance(25); ui.result(['slow']);
+  assert.equal(ui.window.mendSearchStats.inputToWorkerReplyMs.at(-1), 25);
+  ui.advance(40); ui.release('slow'); await settle();
+  const stats = ui.window.mendSearchStats;
+  assert.equal(stats.detailTransportMs.at(-1), 40);
+  assert.equal(stats.guideQueueMs.at(-1), 0);
+  assert.equal(stats.detailParseMs.at(-1), 0);
+  assert.equal(stats.inputToResultsMs.at(-1), 65);
+  assert.equal(stats.articleRenderMs.length, 1);
+});
+
 test('retain the prior answer until the newest #1 payload resolves and reject older payloads', async () => {
   const ui = answerUI({ deferred: ['second', 'third'] }); ui.ready(); ui.change('old phrase');
   ui.result(['first']); await settle();

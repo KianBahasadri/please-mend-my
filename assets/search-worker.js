@@ -501,6 +501,23 @@ function restrictedToken(plan, candidates) {
   return { documents: Uint32Array.from(documents), quality, expanded: plan.expanded, primaryDevices };
 }
 
+function restrictedNumericToken(plan, candidates) {
+  const quality = new Uint8Array(entries.length), documents = [];
+  for (const doc of candidates) {
+    let cost = 0;
+    for (const word of words(entries[doc].text)) {
+      const surfaces = /\p{L}/u.test(word) ? [word, ...(word.match(/\p{Nd}+/gu) || [])] : [word];
+      for (const surface of surfaces) {
+        if (surface === plan.token) { cost = 1; break; }
+        if (surface.startsWith(plan.token)) cost ||= 2;
+      }
+      if (cost === 1) break;
+    }
+    if (cost) { quality[doc] = cost; documents.push(doc); }
+  }
+  return { quality, documents: Uint32Array.from(documents) };
+}
+
 function resolveToken(token, widen = false, strict = false, plan = undefined) {
   const cacheKey = (strict ? "!" : widen ? "+" : "=") + token;
   const cached = cachedToken(token, widen, strict);
@@ -888,14 +905,18 @@ function hierarchyCandidates(context, scope) {
   // actual title/device words and source-backed v2 symptoms/materials establish
   // the remaining symptom or part; alias expansion never supplies that evidence.
   const ownTerms = plans.filter(plan => !/\p{N}/u.test(plan.token)).map(plan =>
-    [...(plan.matches || tokenMatches(plan.token, false, plan.strict).matches).keys()].map(term => inverted.terms[term]));
+    new Set([...(plan.matches || tokenMatches(plan.token, false, plan.strict).matches).keys()]
+      .map(term => inverted.terms[term])));
   const identifiers = context.rest.split(/\s+/).filter(token => /\p{N}/u.test(token))
     .map(token => identifierPrefixPattern(token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "")));
   return candidates.filter(doc => {
     const entry = entries[doc];
     if (!actionable(entry) || !identifiers.every(identifier => identifier.test(entry.text))) return false;
-    const literal = new Set(words(entry.title + " " + entry.device)), structured = inverted.structuredTerms.get(doc);
-    return ownTerms.every(terms => terms.some(term => literal.has(term) || structured?.has(term)));
+    const literal = words(entry.title + " " + entry.device), structured = inverted.structuredTerms.get(doc);
+    // A short typed prefix can expand to thousands of vocabulary terms. Probe
+    // the handful of actual source words against that set, not the reverse.
+    return ownTerms.every(terms => literal.some(term => terms.has(term)) ||
+      structured && [...structured].some(term => terms.has(term)));
   });
 }
 
@@ -937,15 +958,17 @@ function inheritSearch(query, original) {
   const candidates = hierarchyCandidates(context, scope);
   if (!candidates.length) return original;
   const best = shortlist(), scopes = new Map();
+  const remainingWords = words(context.rest), remainingPrefixes = remainingWords.map(word => " " + word);
   for (const doc of candidates) {
     if (seen.has(doc)) continue;
     const entry = entries[doc];
     let selected, distance = Infinity, universal = false, literalSubject = false;
     const rawSubject = entry.title + " " + entry.device;
     for (const [node, level] of ancestors) {
+      if (level >= distance) continue;
       const primary = scopeContains(node, doc);
-      const literal = subjectPatterns.get(node)?.test(rawSubject) && !(canonicalDocDomains(doc) & conflictingDomains);
-      if (level < distance && (primary || literal)) {
+      const literal = !primary && subjectPatterns.get(node)?.test(rawSubject) && !(canonicalDocDomains(doc) & conflictingDomains);
+      if (primary || literal) {
         selected = node; distance = level; literalSubject = Boolean(literal);
       }
     }
@@ -960,8 +983,8 @@ function inheritSearch(query, original) {
     if (selected === undefined) continue;
     const allowed = hierarchy.categories[selected];
     if (!universal && !literalSubject && allowed.length && !allowed.includes(entry.row[2])) continue;
-    let score = 10000 - distance * 1000 + titleScore(entry, context.rest, words(context.rest),
-      words(context.rest).map(word => " " + word), entry.row[3] === "article" ? 20 : 0);
+    let score = 10000 - distance * 1000 + titleScore(entry, context.rest, remainingWords,
+      remainingPrefixes, entry.row[3] === "article" ? 20 : 0);
     if (!entry.device || normalizeSubject(entry.device) === normalizeSubject(hierarchy.nodes[selected][1])) score += 160;
     best.add(doc, score);
     if (distance > 0) scopes.set(doc, { id: entry.row[0], subject: context.subject,
@@ -1104,7 +1127,11 @@ function indexedSearch(query, tokens) {
     for (const plan of plans) {
       const useRestricted = candidates && !plan.cached &&
         (candidates.length <= 256 || plan.estimate > candidates.length * 2);
-      const list = useRestricted ? restrictedToken(plan, candidates)
+      // A partially typed model number can match thousands of numeric terms.
+      // Once another token has selected a subject, inspect its own fields
+      // directly instead of expanding numeric aliases across the catalog.
+      const list = candidates && !plan.cached && /\p{N}/u.test(plan.token)
+        ? restrictedNumericToken(plan, candidates) : useRestricted ? restrictedToken(plan, candidates)
         : resolveToken(plan.token, widen, plan.strict, plan);
       if (!list.documents.length) return [];
       lists.push(list);

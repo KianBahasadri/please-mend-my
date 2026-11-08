@@ -827,6 +827,9 @@ test('prompt artwork mounts once and remeasures on layout or fonts without per-k
   const initial = synced.length;
   for (const text of ['b', 'br', 'bro', 'broken', 'broken arm']) dom.type(dom.response, text);
   assert.equal(synced.length, initial, 'editing a phrase must not remeasure decorative artwork');
+  dom.event(dom.window, 'mend:layout');
+  dom.event(dom.window, 'mend:layout');
+  assert.equal(synced.length, initial, 'unchanged article layouts must not repeat hero measurements');
   assert.equal(prefixWrites, 1, 'native prefix mirror must retain its original text node while typing');
   dom.response.setSelectionRange(dom.prefix(dom.response).length + 1, dom.response.value.length - 1);
   const selection = [dom.response.selectionStart, dom.response.selectionEnd];

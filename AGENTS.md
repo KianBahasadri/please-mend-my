@@ -91,3 +91,5 @@
 - Inherited symptom/part evidence=rawtitle/device+v2structuredTerms;nevergeneratedaliases. No-match edits retainpriorarticle,dropalternatives;wholeclearhides.
 - Startup: consider systematic first-keystroke/core vs deferred-enrichment split; measure benefit, preserve whole-catalog browser search+generation coherence; no curated subsets.
 - Local5b gates246Py/199JS/Go;61art+24shellverified;HEAD304. Initialqueryp95~11ms,cached~.03ms;startup2.7s/280MiBheap. Inheritance scoped before residuals;avoid globalregex/JIT sweeps. OEWN human→homo stillunresolvedforpersonqueries.
+- Bug: visible typing→answer lag is unacceptable; measure input/worker/detail/render separately. No repeated article DOM rebuild for unchanged #1; foreground details must not wait behind cache/LRU bookkeeping.
+- Both startup+per-edit lag confirmed. Per-edit: immediate post, reuse unchanged article DOM, early alternatives, tiny generation marker+nonblocking LRU;204JS pass. Prefix100 exact-rank parity;numeric-prefix scan narrowed. Startup split prototype2.68→1.94s/280→240MiB;pending safe background enrichment wiring.

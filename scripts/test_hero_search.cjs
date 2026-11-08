@@ -163,14 +163,17 @@ test('two-way hover/focus and manual answer matches synchronize exact SVG/list p
   ui.event(group, 'pointerleave');
   const brakes = ui.option('brakes'); brakes.focus();
   assert.equal(ui.part('brakes').classList.contains('is-highlighted'), true);
+  const nounSearches = ui.searches().length;
+  assert.equal(nounSearches, 1, 'the initial noun was dispatched immediately');
   ui.answer('master link broken');
+  assert.equal(ui.searches().length, nounSearches + 1, 'the distinct answer dispatches exactly once');
   assert.equal(group.classList.contains('is-selected'), true);
   assert.equal(option.classList.contains('is-selected'), true);
   ui.flushFrames();
   assert.equal(ui.elements['search-results'].hidden, false, 'typing an answer reveals results without a settle delay');
   assert.equal(ui.searches().at(-1).query, 'road bike master link broken');
   ui.advance(1000);
-  assert.equal(ui.searches().length, 1, 'the later clarification settle does not repeat the search');
+  assert.equal(ui.searches().length, nounSearches + 1, 'the later clarification settle does not repeat the search');
 });
 
 test('real words, unknown tokens, models and one-letter prefixes all search without a timer', async () => {
@@ -186,22 +189,22 @@ test('real words, unknown tokens, models and one-letter prefixes all search with
   }
 });
 
-test('each successive edit searches in its next frame and rapid edits coalesce to the latest query', async () => {
+test('each committed edit posts immediately without waiting for a rendering frame', async () => {
   const ui = await searchUI(); ui.ready();
   for (const text of ['b', 'br', 'broken', 'broken l', 'broken laptop', 'broken WH-1000XM4']) {
     const prior = ui.searches().length;
-    ui.change(text); ui.flushFrames();
+    ui.change(text);
     assert.equal(ui.searches().length, prior + 1);
     assert.equal(ui.searches().at(-1).query, text);
   }
   const prior = ui.searches().length;
   ui.change('broken phone'); ui.change('broken phonex'); ui.change('broken phonexy');
-  assert.equal(ui.searches().length, prior, 'the rendering frame still coalesces same-frame edits');
+  assert.equal(ui.searches().length, prior + 3, 'each edit reaches the worker before another frame');
   ui.flushFrames();
-  assert.equal(ui.searches().length, prior + 1);
+  assert.equal(ui.searches().length, prior + 3);
   assert.equal(ui.searches().at(-1).query, 'broken phonexy');
   ui.advance(2000);
-  assert.equal(ui.searches().length, prior + 1);
+  assert.equal(ui.searches().length, prior + 3);
   assert.equal(ui.requests.length, 0);
 });
 
