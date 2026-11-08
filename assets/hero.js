@@ -10,7 +10,10 @@
   const secondUnderline = document.getElementById("clarification-underline");
   const heading = document.querySelector("h1");
   const measure = document.getElementById("measure");
-  const prompt = document.documentElement.dataset.theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
+  const theme = document.documentElement.dataset.theme;
+  const styles = window.mendHeroStyles;
+  const prompt = styles?.prompt?.(theme) ?? (theme === "toolbox" ? "🙏, 🔨 my " : "please, mend my ");
+  let promptArt;
   // A small local vocabulary makes the automatic prompt conservative. Explicit
   // Enter/Tab can also clarify an unfamiliar single-word object; phrases do not.
   const broadNouns = new Set(("arm leg hand foot feet knee shoulder elbow wrist ankle finger toe back neck head tooth teeth eye ear " +
@@ -91,7 +94,9 @@
 
   function grow(input) {
     const underline = input === first ? firstUnderline : secondUnderline;
-    if (input === first) fixedUnderline.textContent = state.get(first).prefix;
+    if (input === first && fixedUnderline.textContent !== state.get(first).prefix) {
+      fixedUnderline.textContent = state.get(first).prefix;
+    }
     underline.textContent = suffix(input);
     underline.classList.toggle("is-empty", !underline.textContent);
     input.style.height = "0px";
@@ -111,6 +116,7 @@
     if (sampleWidth > 0) heading.style.fontSize = `${Math.min(size, size * (first.clientWidth - 6) / sampleWidth)}px`;
     grow(first);
     grow(second);
+    promptArt?.sync?.();
   }
 
   function setPrefix(input, prefix, editable = "") {
@@ -329,11 +335,14 @@
   new MutationObserver(() => {
     if (document.body.classList.contains("reading")) cancelAutomatic();
   }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
+  fixedUnderline.textContent = prompt;
+  promptArt = styles?.mount?.(first.closest(".hero-field"), fixedUnderline, theme);
   measure.textContent = `${prompt}relationship`;
   window.mendHero = { query, focus: () => focus() };
   window.addEventListener("resize", fit);
   window.addEventListener("mend:layout", fit);
   document.fonts?.ready.then(fit);
+  document.fonts?.addEventListener("loadingdone", fit);
   syncTitle();
   fit();
   focus(first, true);

@@ -8,6 +8,7 @@
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔨 my".
+- Hero: visual wordplay > font swaps; stitched/taped/tooltype/spareparts/blueprint/cutpaper; inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.

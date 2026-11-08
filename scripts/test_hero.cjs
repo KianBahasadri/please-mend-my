@@ -4,12 +4,15 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const { makeDOM } = require('./hero_test_dom.cjs');
+const themes = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox',
+  'stitched', 'taped', 'tooltype', 'spareparts', 'blueprint', 'cutpaper'];
 
 // Run the shipped controller, not a duplicate of its state machine. The fixture
 // models native textarea selection/events; font metrics and CSS paint are not
 // available here, and no browser is opened by these tests.
 async function heroFor(options = {}) {
   const dom = makeDOM(options);
+  options.setup?.(dom);
   dom.queries = [];
   dom.window.addEventListener('mend:querychange', () => dom.queries.push(dom.window.mendHero.query()));
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8'), vm.createContext(dom.context));
@@ -585,8 +588,8 @@ test('editable underline content stays in sync through typing, cut, and reset', 
   assert.equal(dom.window.mendHero.query(), '');
 });
 
-test('all seven themes retain protected prompts and the controller stays static with reduced motion', async () => {
-  for (const theme of ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox']) {
+test('all thirteen themes retain protected prompts and the controller stays static with reduced motion', async () => {
+  for (const theme of themes) {
     const dom = await heroFor({ theme, reducedMotion: true, width: 320 });
     assert.equal(dom.prefix(dom.response), theme === 'toolbox' ? '🙏, 🔨 my ' : 'please, mend my ');
     dom.reveal('relationship');
@@ -601,11 +604,10 @@ test('all seven themes retain protected prompts and the controller stays static 
   }
 });
 
-test('all seven styles fit the visible question and first prompt on narrow and wide layouts', async () => {
+test('all thirteen styles fit the visible question and first prompt on narrow and wide layouts', async () => {
   // Injectable proportional metrics exercise the controller's real measurement
   // path. They model different font widths, not browser font shaping or paint.
-  const styles = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox'];
-  for (const [styleIndex, theme] of styles.entries()) {
+  for (const [styleIndex, theme] of themes.entries()) {
     const measureText = (text, size) => [...text].reduce((width, char) =>
       width + (char === ' ' ? 0.25 : /[il'?.]/.test(char) ? 0.3 : 0.48 + styleIndex * 0.035), 0) * size;
     for (const width of [280, 320, 768, 1440]) {
@@ -645,4 +647,97 @@ test('a question that already fits keeps its style size and fitting refreshes on
   const closedSize = parseFloat(dom.hero.style.fontSize);
   assert.ok(closedSize >= narrowSize, 'dismissal restores fitting for the first prompt only');
   assert.ok(measureText(dom.prefix(dom.response) + 'relationship', closedSize) <= 314 + 0.001);
+});
+
+test('new repair styles keep punctuation, title, query, and protected suffix selection native', async () => {
+  for (const theme of themes.slice(7)) {
+    const dom = await heroFor({ theme, width: 320 });
+    dom.type(dom.response, 'fucking arm');
+    for (const modifier of ['ctrlKey', 'metaKey']) {
+      dom.key(dom.response, 'a', { [modifier]: true });
+      assert.equal(dom.response.selectionStart, dom.prefix(dom.response).length, theme);
+      assert.equal(dom.response.value.slice(dom.response.selectionStart, dom.response.selectionEnd), 'fucking arm', theme);
+    }
+    dom.response.setSelectionRange(0, dom.response.value.length, 'backward');
+    dom.event(dom.response, 'select');
+    assert.equal(dom.response.selectionStart, dom.prefix(dom.response).length, theme);
+    dom.response.setSelectionRange(dom.prefix(dom.response).length, dom.prefix(dom.response).length);
+    assert.equal(dom.event(dom.response, 'beforeinput', { inputType: 'deleteWordBackward' }).defaultPrevented, true, theme);
+    dom.response.setSelectionRange(dom.response.value.length, dom.response.value.length);
+    dom.insert(dom.response, '?');
+    assert.equal(dom.suffix(dom.response), 'fucking arm?', theme);
+    assert.equal(dom.document.title, 'please, mend my fucking arm?', theme);
+    assert.equal(dom.question.textContent, "What's wrong with your arm?", theme);
+    assert.equal(dom.document.activeElement, dom.clarification, theme);
+    dom.type(dom.clarification, "it's broken");
+    assert.equal(dom.window.mendHero.query(), "fucking arm? it's broken", theme);
+    assert.equal(dom.document.title, 'please, mend my fucking arm?', theme);
+    assert.equal(dom.prefixMirror.textContent, 'please, mend my ', theme);
+  }
+});
+
+test('prompt artwork mounts once and remeasures on layout or fonts without per-keystroke work', async () => {
+  const mounted = [], synced = [];
+  let prefixWrites = 0;
+  const dom = await heroFor({ theme: 'stitched', setup(dom) {
+    let text = dom.prefixMirror.textContent;
+    Object.defineProperty(dom.prefixMirror, 'textContent', {
+      get: () => text,
+      set(value) { prefixWrites++; text = value; },
+    });
+    dom.window.mendHeroStyles = {
+      prompt(theme) { assert.equal(theme, 'stitched'); return 'please, mend my '; },
+      mount(field, prefix, theme) {
+        mounted.push({ field, prefix, theme, text: prefix.textContent });
+        return { sync() {
+          synced.push({ size: dom.hero.style.fontSize, prefix: prefix.textContent,
+            value: dom.response.value, question: dom.question.textContent });
+        } };
+      },
+    };
+  } });
+  assert.equal(mounted.length, 1);
+  assert.equal(mounted[0].field, dom.firstField);
+  assert.equal(mounted[0].prefix, dom.prefixMirror);
+  assert.equal(mounted[0].theme, 'stitched');
+  assert.equal(mounted[0].text, 'please, mend my ', 'metric anchor is populated before mounting');
+  assert.ok(synced.length >= 1);
+  assert.ok(synced.every(item => Number.isFinite(parseFloat(item.size))));
+  const initial = synced.length;
+  for (const text of ['b', 'br', 'bro', 'broken', 'broken arm']) dom.type(dom.response, text);
+  assert.equal(synced.length, initial, 'editing a phrase must not remeasure decorative artwork');
+  assert.equal(prefixWrites, 1, 'native prefix mirror must retain its original text node while typing');
+  dom.response.setSelectionRange(dom.prefix(dom.response).length + 1, dom.response.value.length - 1);
+  const selection = [dom.response.selectionStart, dom.response.selectionEnd];
+  const title = dom.document.title;
+  dom.response.clientWidth = 300;
+  dom.event(dom.window, 'resize');
+  assert.equal(synced.length, initial + 1);
+  assert.deepEqual([dom.response.selectionStart, dom.response.selectionEnd], selection);
+  dom.event(dom.document.fonts, 'loadingdone');
+  assert.equal(synced.length, initial + 2, 'late font loads refresh artwork metrics');
+  assert.deepEqual([dom.response.selectionStart, dom.response.selectionEnd], selection);
+  assert.equal(dom.document.title, title);
+  assert.equal(dom.window.mendHero.query(), 'broken arm');
+  dom.type(dom.response, 'arm');
+  dom.key(dom.response, 'Enter');
+  assert.equal(synced.at(-1).question, "What's wrong with your arm?");
+  const open = synced.length;
+  dom.type(dom.clarification, 'a very long symptom '.repeat(40));
+  assert.equal(synced.length, open, 'answer wrapping must not redraw the fixed artwork');
+  assert.equal(dom.document.activeElement, dom.clarification);
+  assert.equal(prefixWrites, 1);
+});
+
+test('an older cached page without artwork hooks retains the complete native input behavior', async () => {
+  for (const styles of [undefined, {}]) {
+    const dom = await heroFor({ theme: 'cutpaper', setup(dom) { dom.window.mendHeroStyles = styles; } });
+    dom.type(dom.response, 'relationship');
+    dom.insert(dom.response, '!');
+    assert.equal(dom.response.value, 'please, mend my relationship!');
+    assert.equal(dom.document.title, 'please, mend my relationship!');
+    assert.equal(dom.question.textContent, "What's wrong with your relationship?");
+    assert.equal(dom.document.activeElement, dom.clarification);
+    assert.equal(dom.window.mendHero.query(), 'relationship!');
+  }
 });

@@ -11,11 +11,14 @@
     <link rel="icon" href="data:,">
     <link rel="stylesheet" href="assets/backgrounds.css">
     <link rel="stylesheet" href="/assets/search.css">
+    <link rel="stylesheet" href="/assets/hero-styles.css">
+    <script src="/assets/hero-styles.js" defer></script>
     <script src="/assets/hero.js" defer></script>
     <script src="/assets/search.js" defer></script>
     <script src="assets/backgrounds.js"></script>
     <script>
-      const themes = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
+      const themes = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox",
+        "stitched", "taped", "tooltype", "spareparts", "blueprint", "cutpaper"];
       const theme = window.pickMendVariant("please-mend-my-theme", themes);
       document.documentElement.dataset.theme = theme;
     </script>
@@ -443,10 +446,11 @@
       response.dataset.promptLength = prompt.length;
 
       const floaterStage = document.querySelector(".hero-floaters");
-      const floaterStyles = ["pixel", "editorial", "comic", "poster", "typewriter", "handwritten", "toolbox"];
+      const floaterStyles = themes;
       const floaterWords = ["laptop", "stove", "kettle", "lamp", "bike", "radio", "toaster", "watch", "mixer", "boots", "camera", "phone", "jeans", "speaker", "blender", "clock", "chair", "iron"];
       const floaterMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
       let floaterGeneration = 0;
+      let floatersReady = false;
       let floatersRunning = false;
       let styleBag = [];
       let wordBag = [];
@@ -473,7 +477,7 @@
       }
 
       function floaterIdle() {
-        return response.value === prompt &&
+        return floatersReady && response.value === prompt &&
           !document.body.classList.contains("searching") &&
           !document.body.classList.contains("reading") &&
           document.visibilityState !== "hidden" &&
@@ -575,7 +579,8 @@
         pop.className = "floater-pop";
         const promptText = document.createElement("span");
         promptText.className = "floater-prompt";
-        promptText.textContent = style === "toolbox" ? "🙏, 🔨 my " : "please, mend my ";
+        promptText.textContent = window.mendHeroStyles.prompt(style);
+        window.mendHeroStyles.decorateFloater(promptText, style);
         const answer = document.createElement("span");
         answer.className = "floater-answer";
         pop.append(promptText, answer);
@@ -656,7 +661,13 @@
       floaterMotion.addEventListener("change", syncFloaters);
       response.addEventListener("input", syncFloaters);
       window.addEventListener("mend:querychange", syncFloaters);
-      document.fonts.ready.then(syncFloaters);
+      document.addEventListener("DOMContentLoaded", () => {
+        if (!window.mendHeroStyles) return;
+        document.fonts.ready.then(() => {
+          floatersReady = true;
+          syncFloaters();
+        });
+      });
     </script>
   </body>
 </html>

@@ -197,10 +197,13 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
   };
   const area = add('section', 'hero-area'); area.classList.add('hero-area');
   const hero = add('h1', 'hero-title', area);
-  const firstMirror = add('span', 'hero-underline', hero);
+  const firstField = add('span', 'hero-field', hero); firstField.classList.add('hero-field');
+  const response = add('textarea', 'response', firstField);
+  const firstMirror = add('span', 'hero-underline', firstField);
+  firstMirror.classList.add('hero-underline'); firstMirror.inert = true;
+  firstMirror.setAttribute('aria-hidden', 'true');
   const prefixMirror = add('span', 'hero-prefix', firstMirror);
   const suffixMirror = add('span', 'hero-suffix', firstMirror);
-  const response = add('textarea', 'response', hero);
   const measure = add('span', 'measure', hero);
   const line = add('span', 'clarification-line', hero);
   line.inert = true;
@@ -248,7 +251,7 @@ function makeDOM({ theme = 'editorial', reducedMotion = false, width = 1100,
     clock = end; flushFrames();
   };
   return { context, window, document, response, clarification, question, line, hero, measure, secondMeasure,
-    prefixMirror, suffixMirror, answerMirror,
+    firstField, prefixMirror, suffixMirror, answerMirror,
     add, event: (target, type, options) => { const event = new TestEvent(type, options); target.dispatchEvent(event); return event; },
     advance, flushFrames };
 }

@@ -1,6 +1,16 @@
 # please, mend my
 
-A responsive typing page with rotating fonts and subtle monochrome lighting.
+A responsive typing page with rotating typography and subtle monochrome lighting.
+
+Thirteen hero styles rotate without consecutive repeats. Alongside pixel, serif,
+comic, poster, typewriter, handwritten, and emoji styles, six repair treatments
+add stitched lettering, a torn tape patch, tool-shaped letters, riveted spare
+parts, blueprint marks, and cut-paper lettering. The new treatments decorate only
+the protected prompt; the editable text and caret stay native. The idle typing
+floaters share the same styles. Artwork uses local fonts, CSS, and inline vectors
+in the system light/dark palette; backgrounds keep their three-load rotation.
+The added HTML/controller/art assets total about 5.5 KB compressed. Prefix
+measurements run during fitting and font changes, never during ordinary typing.
 
 Both typing areas are underlined, matching the little idle typing animations.
 After 2.5 seconds without typing, bare subjects such as `arm` reveal the hero
@@ -27,7 +37,7 @@ The tab title follows the first hero line immediately, including its typed text.
 Check the hero and search interactions without opening a browser:
 
 ```sh
-node --test scripts/test_hero.cjs scripts/test_hero_search.cjs scripts/test_search_worker.cjs
+node --test scripts/test_hero.cjs scripts/test_hero_styles.cjs scripts/test_hero_search.cjs scripts/test_search_worker.cjs
 ```
 
 These controller tests cover timers, keyboard/selection behavior, focus, query
