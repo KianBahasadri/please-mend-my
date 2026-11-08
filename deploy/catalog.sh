@@ -13,40 +13,32 @@ for catalog_tool in python3 git ssh; do
   command -v "$catalog_tool" >/dev/null || { printf 'Missing command: %s\n' "$catalog_tool" >&2; exit 1; }
 done
 catalog_commit=${PMM_DEPLOY_COMMIT:-$(git -C "$catalog_repo_dir" rev-parse HEAD)}
-catalog_digest=$(python3 "$catalog_repo_dir/scripts/build_catalog.py" --print-key)
-read -r catalog_ingest_hash catalog_builder_hash catalog_enrich_hash catalog_vocabulary_hash catalog_search_hash catalog_wikimed_hash catalog_merge_hash catalog_first_aid_hash < <(python3 - "$catalog_repo_dir" <<'PY'
-import hashlib, sys
+catalog_digest=$(PYTHONPATH="$catalog_repo_dir/scripts" python3 -c 'from build_catalog import input_key, pipeline_files; print(input_key(pipeline_files()))')
+catalog_sources=$(python3 - "$catalog_repo_dir" <<'PY'
+import base64, hashlib, json, sys
 from pathlib import Path
-root = Path(sys.argv[1]) / 'scripts'
-print(*(hashlib.sha256((root / name).read_bytes()).hexdigest() for name in ('ingest_ifixit.py', 'build_catalog.py', 'enrich_search.py', 'search-vocabulary.json', 'prepare_search.py', 'ingest_wikimed.py', 'merge_catalogs.py', 'ingest_first_aid.py')))
+root = Path(sys.argv[1])
+sys.path.insert(0, str(root / 'scripts'))
+from build_catalog import pipeline_files
+sources = {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest() for path in pipeline_files()}
+print(base64.b64encode(json.dumps(sources, sort_keys=True).encode()).decode())
 PY
 )
 catalog_ssh=(-i "$catalog_key" -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=5 \
   -o "UserKnownHostsFile=$catalog_hosts" -o StrictHostKeyChecking=yes -o LogLevel=ERROR)
 ssh "${catalog_ssh[@]}" "ec2-user@$catalog_ip" sudo bash -s -- \
-  "$catalog_commit" "$catalog_digest" "$catalog_ingest_hash" "$catalog_builder_hash" "$catalog_enrich_hash" "$catalog_vocabulary_hash" "$catalog_search_hash" "$catalog_wikimed_hash" "$catalog_merge_hash" "$catalog_first_aid_hash" <<'REMOTE'
+  "$catalog_commit" "$catalog_digest" "$catalog_sources" <<'REMOTE'
 set -euo pipefail
 umask 022
 commit=$1
 digest=$2
-ingest_hash=$3
-builder_hash=$4
-enrich_hash=$5
-vocabulary_hash=$6
-search_hash=$7
-wikimed_hash=$8
-merge_hash=$9
-first_aid_hash=${10}
-[[ "$commit" =~ ^[0-9a-f]{40}$ && "$digest" =~ ^[0-9a-f]{64}$ &&
-   "$ingest_hash" =~ ^[0-9a-f]{64}$ && "$builder_hash" =~ ^[0-9a-f]{64}$ &&
-   "$enrich_hash" =~ ^[0-9a-f]{64}$ && "$vocabulary_hash" =~ ^[0-9a-f]{64}$ && "$search_hash" =~ ^[0-9a-f]{64}$ &&
-   "$wikimed_hash" =~ ^[0-9a-f]{64}$ && "$merge_hash" =~ ^[0-9a-f]{64}$ && "$first_aid_hash" =~ ^[0-9a-f]{64}$ ]]
+source_manifest=$3
+[[ "$commit" =~ ^[0-9a-f]{40}$ && "$digest" =~ ^[0-9a-f]{64}$ && "$source_manifest" =~ ^[A-Za-z0-9+/=]+$ ]]
 exec 9>/run/please-mend-my-catalog.lock
 flock -n 9 || { printf 'Another deployment is preparing the cloud catalog.\n' >&2; exit 1; }
 base=/opt/please-mend-my/ingest
 source_dir=$base/source/$commit
 release_root=/opt/please-mend-my/catalogs
-release=$release_root/$digest
 worker=please-mend-my-ingest
 if ! id "$worker" >/dev/null 2>&1; then
   useradd --system --home-dir "$base" --shell /sbin/nologin "$worker"
@@ -56,25 +48,45 @@ for directory in work cache python tools config; do
   install -d -o "$worker" -g "$worker" -m 0755 "$base/$directory"
 done
 install -d -o "$worker" -g "$worker" -m 0755 "$release_root"
-fetch_script() {
-  local name=$1 expected=$2 destination=$source_dir/scripts/$1
-  if [[ ! -f "$destination" ]] || [[ "$(sha256sum "$destination" | cut -d' ' -f1)" != "$expected" ]]; then
-    curl --fail --silent --show-error --location --retry 3 --connect-timeout 10 --max-time 120 \
-      "https://raw.githubusercontent.com/KianBahasadri/please-mend-my/$commit/scripts/$name" -o "$destination.tmp"
-    printf '%s  %s\n' "$expected" "$destination.tmp" | sha256sum --check --status
-    chmod 0644 "$destination.tmp"
-    mv "$destination.tmp" "$destination"
-  fi
-}
-fetch_script ingest_ifixit.py "$ingest_hash"
-fetch_script build_catalog.py "$builder_hash"
-fetch_script enrich_search.py "$enrich_hash"
-fetch_script search-vocabulary.json "$vocabulary_hash"
-fetch_script prepare_search.py "$search_hash"
-fetch_script ingest_wikimed.py "$wikimed_hash"
-fetch_script merge_catalogs.py "$merge_hash"
-fetch_script ingest_first_aid.py "$first_aid_hash"
-[[ "$(python3 "$source_dir/scripts/build_catalog.py" --print-key)" == "$digest" ]]
+python3 - "$source_dir" "$commit" "$source_manifest" <<'PY'
+import base64, hashlib, json, re, sys, time, urllib.request
+from pathlib import Path, PurePosixPath
+root, commit = Path(sys.argv[1]), sys.argv[2]
+sources = json.loads(base64.b64decode(sys.argv[3], validate=True))
+if not isinstance(sources, dict) or not 1 <= len(sources) <= 100:
+    raise SystemExit('Invalid pipeline source manifest')
+for name, expected in sorted(sources.items()):
+    relative = PurePosixPath(name)
+    if (relative.is_absolute() or '..' in relative.parts or relative.parts[0] not in {'scripts', 'docs'}
+            or not re.fullmatch(r'[a-zA-Z0-9_./-]+', name) or not re.fullmatch(r'[0-9a-f]{64}', expected)):
+        raise SystemExit('Unsafe pipeline source path or hash')
+    destination = root / name
+    if destination.is_file() and hashlib.sha256(destination.read_bytes()).hexdigest() == expected:
+        continue
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
+    temporary = destination.with_name(destination.name + '.tmp')
+    for attempt in range(3):
+        try:
+            address = f'https://raw.githubusercontent.com/KianBahasadri/please-mend-my/{commit}/{name}'
+            with urllib.request.urlopen(address, timeout=120) as response:
+                body = response.read(8 * 1024 * 1024 + 1)
+            if len(body) > 8 * 1024 * 1024 or hashlib.sha256(body).hexdigest() != expected:
+                raise ValueError('Pinned pipeline source hash mismatch: ' + name)
+            temporary.write_bytes(body)
+            temporary.chmod(0o644)
+            temporary.replace(destination)
+            break
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            if attempt == 2:
+                raise
+            time.sleep(2 ** attempt)
+PY
+[[ "$(PYTHONPATH="$source_dir/scripts" python3 -c 'from build_catalog import input_key, pipeline_files; print(input_key(pipeline_files()))')" == "$digest" ]]
+# Enrichment caches belong to this host. Their fingerprint must never come from
+# the workstation: no generated response cache or corpus is uploaded.
+digest=$(python3 "$source_dir/scripts/build_catalog.py" --data-dir "$base/work" --print-key)
+release=$release_root/$digest
 if [[ ! -x "$base/tools/uv" ]] || [[ "$("$base/tools/uv" --version | cut -d' ' -f1-2)" != 'uv 0.13.5' ]]; then
   curl --fail --silent --show-error --location --retry 3 --connect-timeout 10 --max-time 120 \
     https://astral.sh/uv/0.13.5/install.sh -o "$base/uv-install.sh"
@@ -109,6 +121,8 @@ TimeoutStartSec=infinity
 CPUQuota=200%
 CPUWeight=10
 MemoryMax=5G
+MemorySwapMax=0
+OOMPolicy=stop
 IOWeight=10
 Nice=10
 NoNewPrivileges=yes

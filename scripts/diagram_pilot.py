@@ -570,7 +570,7 @@ def main():
     parser.add_argument("--seeds", type=Path, default=SEEDS)
     parser.add_argument("--sources", type=Path, default=SOURCES)
     parser.add_argument("--work-dir", type=Path, default=WORK)
-    parser.add_argument("--output", type=Path, default=ROOT / "assets/art")
+    parser.add_argument("--output", type=Path, default=WORK / "published/art")
     parser.add_argument("--approvals", type=Path, default=APPROVALS)
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--concurrency", type=int, default=40)
@@ -604,7 +604,7 @@ def main():
         if args.command in {"compile", "run"}:
             report = publish(read_json(args.work_dir / "taxonomy.json")["archetypes"], read_json(args.work_dir / "digests.json"),
                 read_json(args.work_dir / "mapping-receipt.json"), args.work_dir, args.output, args.approvals,
-                ROOT / "credits.html" if args.output.resolve() == (ROOT / "assets/art").resolve() else None)
+                None)
             print(json.dumps({"stage": "compile", "statuses": {item["id"]: item["status"] for item in report["archetypes"]}}), flush=True)
         if args.command in {"taxonomy", "map", "report", "run"}:
             summary = accounting(args.work_dir)

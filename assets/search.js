@@ -614,6 +614,16 @@
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
         for (const item of data.categories) categoryNames.set(item.id, item.name);
+        // Cached workers may still send the earlier object representation.
+        let archetypes = data.archetypes;
+        const encoded = typeof data.archetypesJSON === "string" ? data.archetypesJSON
+          : typeof archetypes === "string" ? archetypes : "";
+        if (encoded) {
+          try { archetypes = JSON.parse(encoded); }
+          catch { /* Keep an available legacy object, or use an empty registry. */ }
+        }
+        if (!archetypes || typeof archetypes !== "object") archetypes = { version: 1, archetypes: [], models: [] };
+        window.mendSpecifiers?.configure?.(archetypes);
         hero?.setVocabulary?.(data.terms || []);
         runSearch();
         window.dispatchEvent(new Event("mend:catalogready"));

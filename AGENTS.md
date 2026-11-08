@@ -11,7 +11,7 @@
 - Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/blueprint/cutpaper; spareparts retired. Inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette across fonts; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
-- Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Inline SVG/registry assets/specifiers.js; no empty SVG box.
+- Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Generic SVG controller assets/specifiers.js; release-backed registry; no empty SVG box.
 - Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
 - Diagram pilot8: phone screen/buttons/speaker approved; camera map rejected; 7 lists. Qwen40/SHA cache; 21 SVG pins; source/map/compiler/art-hash visual gate. Lazy local art+instant lists; offline replay14s/0calls. See docs/diagram-pilot.md.
@@ -63,3 +63,6 @@
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
 - Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.
+- Build0–4: pinned OEWN+wordfreq nouns/edges/frequency→ALL merged-source noun/model links→build-only gaps→filled archetypes/parts/approved art→hashed release. No raw-guide scans; no fixed noun subset. Runtime registry/search+credits from release; /api/archetypes, /api/art/<sha>.json; no corpus art in assets/Git. Gate full Go/Python/JS tests+before/after bytes/startup/memory/query benchmarks.
+- Noun local18b15619…: 57566 seeded/12026 filled,12310 guide-backed models,2 approved art; 171186/207691 linked; gaps build-only. Alias ranks+model ancestry prevent bike/motorcycle,arm/weapon,phone/phoneme,Air/tune collisions.
+- Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.

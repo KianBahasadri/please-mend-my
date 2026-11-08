@@ -24,7 +24,7 @@ import (
 
 // Embed only public site files; repository files cannot be requested.
 //
-//go:embed index.html credits.html assets/*.css assets/*.js assets/art/*.json assets/fonts/*.woff2 assets/fonts/*-OFL.txt
+//go:embed index.html credits.html assets/*.css assets/*.js assets/fonts/*.woff2 assets/fonts/*-OFL.txt
 var siteFiles embed.FS
 
 type representation struct {
@@ -66,16 +66,6 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 			asset.contentType = "text/css; charset=utf-8"
 		case ".js":
 			asset.contentType = "text/javascript; charset=utf-8"
-		case ".json":
-			asset.contentType = "application/json; charset=utf-8"
-			if name != "assets/art/manifest.json" && strings.HasPrefix(name, "assets/art/") {
-				stem := strings.TrimSuffix(path.Base(name), ".json")
-				if dash := strings.LastIndex(stem, "-"); dash >= 0 {
-					if digest := stem[dash+1:]; len(digest) == 64 && strings.Trim(digest, "0123456789abcdef") == "" {
-						asset.cacheControl = "public, max-age=31536000, immutable"
-					}
-				}
-			}
 		case ".woff2":
 			asset.contentType = "font/woff2"
 			asset.cacheControl = "public, max-age=86400"
@@ -84,21 +74,9 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 		default:
 			return fmt.Errorf("unexpected embedded asset: %s", name)
 		}
-		if path.Ext(name) != ".woff2" {
-			var compressed bytes.Buffer
-			writer, err := gzip.NewWriterLevel(&compressed, gzip.BestCompression)
-			if err != nil {
-				return err
-			}
-			if _, err = writer.Write(body); err != nil {
-				return err
-			}
-			if err = writer.Close(); err != nil {
-				return err
-			}
-			if compressed.Len() < len(body) {
-				asset.compressed = newRepresentation(compressed.Bytes())
-			}
+		asset, err = prepareStaticAsset(name, asset.contentType, asset.cacheControl, body)
+		if err != nil {
+			return err
 		}
 		handler.assets["/"+name] = asset
 		if name == "index.html" {
@@ -111,7 +89,35 @@ func newHandler(catalogDirectory string) (*siteHandler, error) {
 	if err == nil && catalogDirectory != "" {
 		handler.catalog, err = openCatalog(catalogDirectory)
 	}
+	if err == nil {
+		err = handler.prepareCredits()
+	}
+	if err != nil {
+		_ = handler.Close()
+	}
 	return handler, err
+}
+
+func prepareStaticAsset(name, contentType, cacheControl string, body []byte) (*staticAsset, error) {
+	asset := &staticAsset{name: name, contentType: contentType, cacheControl: cacheControl, plain: newRepresentation(body)}
+	if path.Ext(name) == ".woff2" {
+		return asset, nil
+	}
+	var compressed bytes.Buffer
+	writer, err := gzip.NewWriterLevel(&compressed, gzip.BestCompression)
+	if err != nil {
+		return nil, err
+	}
+	if _, err = writer.Write(body); err != nil {
+		return nil, err
+	}
+	if err = writer.Close(); err != nil {
+		return nil, err
+	}
+	if compressed.Len() < len(body) {
+		asset.compressed = newRepresentation(compressed.Bytes())
+	}
+	return asset, nil
 }
 
 func (handler *siteHandler) Close() error {
@@ -142,7 +148,7 @@ func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Reque
 		}
 		return
 	}
-	if request.URL.Path == "/api/catalog" || strings.HasPrefix(request.URL.Path, "/api/guides/") || strings.HasPrefix(request.URL.Path, "/media/") {
+	if request.URL.Path == "/api/catalog" || request.URL.Path == "/api/archetypes" || strings.HasPrefix(request.URL.Path, "/api/art/") || strings.HasPrefix(request.URL.Path, "/api/guides/") || strings.HasPrefix(request.URL.Path, "/media/") {
 		if handler.catalog == nil {
 			w.Header().Set("Cache-Control", "no-store")
 			http.Error(w, "catalog unavailable", http.StatusServiceUnavailable)

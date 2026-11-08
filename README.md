@@ -31,9 +31,10 @@ retain the full container width; a workspace below pairs the answer with a
 bicycle diagram and a scrollable parts list. Diagram and list highlights follow
 hover, focus, selection, and matching typed answers. Selecting a part fills the
 answer and searches immediately; selecting that unchanged part again clears it.
-The eight-subject [diagram pilot](docs/diagram-pilot.md) adds a reviewed phone
-diagram; arm, laptop, car, stove, toilet, refrigerator, and jeans retain their
-list-only specifiers. On smaller screens,
+The [catalog pipeline](docs/catalog-pipeline.md) supplies nouns, models, and parts
+from the selected release. Reviewed bicycle and phone diagrams carry over from
+the [diagram pilot](docs/diagram-pilot.md); other subjects use generated lists
+until artwork passes review. On smaller screens,
 the specifier moves beneath the answer, with its diagram and list still paired.
 The bicycle reuses [Al2's Wikimedia drawing](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg)
 under CC BY 3.0 and a headlight from [WRomey's Openclipart bicycle](https://openclipart.org/detail/3891/bicycle)
@@ -90,6 +91,8 @@ listening, so the hero cannot appear healthy while the library returns 503.
 Check `GET /api/catalog` as well as `/healthz` after restarting.
 Build that snapshot with the commands in [scripts/README.md](scripts/README.md).
 `GET /api/catalog` supplies the complete compact browser-search index;
+`GET /api/archetypes` supplies the same resident registry included in that index;
+`GET /api/art/{sha256}.json` supplies immutable, lazy diagram geometry.
 `GET /api/guides/{id}` supplies full guide/topic content, and `/media/{filename}`
 serves content-addressed local images. Catalog data stays outside the binary and Git.
 `python3 scripts/build_catalog.py` runs the pinned ingestion pipeline locally or

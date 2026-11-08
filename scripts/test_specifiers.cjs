@@ -4,10 +4,11 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const { createHash } = require('node:crypto');
+const { releaseFixture, bicycleArt, artURL } = require('./specifier_test_data.cjs');
 
 // This fixture checks DOM/events and the real registry without opening a
 // browser. It does not model CSS layout, SVG paint, or font measurements.
-function registry({ art = true, pilot = null, fetchArt } = {}) {
+async function registry({ art = true, pilot = null, fetchArt, bicycle = bicycleArt() } = {}) {
   const document = { activeElement: null };
   const scrolls = [];
   class Node {
@@ -77,23 +78,32 @@ function registry({ art = true, pilot = null, fetchArt } = {}) {
     assert.equal(namespace, 'http://www.w3.org/2000/svg');
     return new Node(tag);
   };
-  const window = pilot ? { mendSpecifierPilot: pilot } : {};
-  const context = vm.createContext({ document, window, fetch: fetchArt });
-  if (art) vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/bicycle-art.js'), 'utf8'), context);
+  const window = {};
+  const payload = releaseFixture({ art });
+  if (pilot) {
+    const overrides = new Map(pilot.archetypes.map(row => [row.id, row]));
+    payload.archetypes = payload.archetypes.map(row => overrides.has(row.id) ? { ...row, ...overrides.get(row.id) } : row);
+    for (const row of pilot.archetypes) if (!payload.archetypes.some(item => item.id === row.id)) payload.archetypes.push({ guideCount: 1, ...row });
+  }
+  const bike = payload.archetypes.find(row => row.id === 'bicycle');
+  if (art) bike.artUrl = artURL(bicycle);
+  const context = vm.createContext({ document, window, Event, fetch: fetchArt || (art ? async () => artResponse(bicycle) : undefined) });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), context);
+  window.mendSpecifiers.configure(payload);
+  if (art && !fetchArt) { window.mendSpecifiers.prefetch('bike'); await settleArt(); }
   const container = new Node('span');
   container.className = 'topic-specifier';
   const selected = [];
   const mount = subject => window.mendSpecifiers.mount(container, subject, value => selected.push(value));
   const walk = node => [node, ...node.children.flatMap(walk)];
   const part = (id, tag) => walk(container).find(node => node.dataset.part === id && (!tag || node.tagName === tag));
-  return { api: window.mendSpecifiers, art: window.mendBicycleArt, document, container, selected, scrolls, mount, walk, part,
+  return { api: window.mendSpecifiers, art: bicycle, document, container, selected, scrolls, mount, walk, part,
     svg: () => walk(container).find(node => node.tagName === 'svg'),
-    replaceArt(value) { window.mendBicycleArt = value; } };
+     };
 }
 
-test('bicycle synonyms resolve to one archetype and supported nouns expose concise list fallbacks', () => {
-  const ui = registry();
+test('bicycle synonyms resolve to one archetype and supported nouns expose concise list fallbacks', async () => {
+  const ui = await registry();
   const bicycle = ui.api.resolve('bike');
   for (const noun of ['bicycle', 'ebike', 'e-bike', 'road bike', 'mountain bike', 'Bike!', 'bikes']) {
     assert.equal(ui.api.resolve(noun), bicycle, noun);
@@ -114,8 +124,8 @@ test('bicycle synonyms resolve to one archetype and supported nouns expose conci
   assert.ok(Array.from(ui.api.nouns).includes('road bike'));
 });
 
-test('the bicycle contains eleven independent accessible assemblies with generous hit targets', () => {
-  const ui = registry();
+test('the bicycle contains eleven independent accessible assemblies with generous hit targets', async () => {
+  const ui = await registry();
   ui.mount('bike');
   const svg = ui.svg();
   assert.equal(svg.tagName, 'svg');
@@ -154,8 +164,8 @@ test('the bicycle contains eleven independent accessible assemblies with generou
   }
 });
 
-test('SVG hover or focus highlights and scrolls the matching list option while list focus highlights the SVG', () => {
-  const ui = registry();
+test('SVG hover or focus highlights and scrolls the matching list option while list focus highlights the SVG', async () => {
+  const ui = await registry();
   ui.mount('bicycle');
   const chain = ui.part('chain', 'g'), option = ui.part('chain', 'button');
   chain.dispatch('pointerenter');
@@ -176,8 +186,8 @@ test('SVG hover or focus highlights and scrolls the matching list option while l
   assert.equal(ui.selected.length, 0, 'preview never writes the answer');
 });
 
-test('both surfaces select the canonical query, preserve edits, and toggle only an unchanged selection', () => {
-  const ui = registry();
+test('both surfaces select the canonical query, preserve edits, and toggle only an unchanged selection', async () => {
+  const ui = await registry();
   const mounted = ui.mount('bike');
   const chain = ui.part('chain', 'g'), option = ui.part('chain', 'button');
   chain.children[1].dispatch('click', { bubbles: true });
@@ -202,8 +212,8 @@ test('both surfaces select the canonical query, preserve edits, and toggle only 
   assert.equal(ui.svg().classList.contains('has-highlight'), false);
 });
 
-test('SVG keyboard controls select once and destroyed controls cannot change a subsequent answer', () => {
-  const ui = registry();
+test('SVG keyboard controls select once and destroyed controls cannot change a subsequent answer', async () => {
+  const ui = await registry();
   const mounted = ui.mount('bike');
   const pedal = ui.part('pedals', 'g');
   assert.equal(pedal.dispatch('keydown', { key: 'Enter' }).defaultPrevented, true);
@@ -223,8 +233,8 @@ test('SVG keyboard controls select once and destroyed controls cannot change a s
 });
 
 
-test('the paired controls keep source notices in SVG metadata without a visible credit line or link', () => {
-  const ui = registry(); ui.mount('bike');
+test('the paired controls keep source notices in SVG metadata without a visible credit line or link', async () => {
+  const ui = await registry(); ui.mount('bike');
   const [controls] = ui.container.children;
   assert.equal(ui.container.children.length, 1, 'the hero has no separate credit row');
   assert.equal(controls.className, 'specifier-controls');
@@ -243,8 +253,8 @@ test('the paired controls keep source notices in SVG metadata without a visible 
   assert.equal(ui.walk(ui.container).some(node => node.tagName === 'metadata'), false, 'list-only nouns do not inherit bicycle metadata');
 });
 
-test('a missing source module falls back to the parts list with no invented diagram or empty SVG', () => {
-  const ui = registry({ art: false });
+test('a noun without release artwork keeps its parts list with no invented diagram or empty SVG', async () => {
+  const ui = await registry({ art: false });
   const mounted = ui.mount('bike');
   assert.ok(mounted);
   assert.equal(ui.svg(), undefined);
@@ -256,13 +266,12 @@ test('a missing source module falls back to the parts list with no invented diag
 });
 
 
-test('unsafe source descriptors never create active SVG content and retain the usable parts list', () => {
+test('unsafe source descriptors never create active SVG content and retain the usable parts list', async () => {
   for (const descriptor of [['script', {}, []], ['path', { d: 'M0 0L1 1', onclick: 'alert(1)' }],
     ['path', { d: 'M0 0L1 1', fill: 'url(https://external.example/image)' }]]) {
-    const ui = registry();
-    const bad = structuredClone(ui.art);
+    const bad = structuredClone(bicycleArt());
     bad.context.push(descriptor);
-    ui.replaceArt(bad);
+    const ui = await registry({ bicycle: bad });
     ui.mount('bike');
     assert.equal(ui.svg(), undefined);
     assert.equal(ui.container.classList.contains('is-list-only'), true);
@@ -273,7 +282,7 @@ test('unsafe source descriptors never create active SVG content and retain the u
 });
 
 const pilotFixture = () => ({ version: 1, archetypes: [{
-  id: 'phone', label: 'Phone', aliases: ['cellphone'], artUrl: `/assets/art/phone-${'1'.repeat(64)}.json`,
+  id: 'phone', label: 'Phone', aliases: ['phone', 'cellphone'], guideCount: 1, artUrl: `/api/art/${'1'.repeat(64)}.json`,
   parts: [{ id: 'screen', label: 'Screen', query: 'screen', aliases: ['display'] },
     { id: 'battery', label: 'Battery', query: 'battery', aliases: ['charging'] },
     { id: 'water', label: 'Water damage', query: 'water damage', aliases: ['wet'] }],
@@ -288,15 +297,15 @@ const phoneArt = () => ({ version: 1, id: 'phone', viewBox: '0 0 100 100',
 const artResponse = data => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(data) });
 async function settleArt() { for (let pass = 0; pass < 24; pass++) await Promise.resolve(); }
 
-test('a generated archetype can be added through data without hardcoding another runtime branch', () => {
+test('a generated archetype can be added through data without hardcoding another runtime branch', async () => {
   const pilot = pilotFixture();
-  pilot.archetypes.push({ id: 'washing-machine', label: 'Washing machine', aliases: ['washing machine'],
+  pilot.archetypes.push({ id: 'espresso-machine', label: 'Espresso machine', guideCount: 1, aliases: ['espresso machine'],
     artUrl: null, parts: [{ id: 'drain', label: 'Drain', query: 'drain', aliases: ['draining'] }] });
-  const ui = registry({ pilot });
-  assert.equal(ui.api.resolve('washing machine').id, 'washing-machine');
-  ui.mount('washing machine');
+  const ui = await registry({ pilot });
+  assert.equal(ui.api.resolve('espresso machine').id, 'espresso-machine');
+  ui.mount('espresso machine');
   assert.equal(ui.container.hidden, false);
-  assert.equal(ui.container.getAttribute('aria-label'), 'Washing machine parts and symptoms');
+  assert.equal(ui.container.getAttribute('aria-label'), 'Espresso machine parts and symptoms');
   ui.part('drain', 'button').dispatch('click');
   assert.deepEqual(ui.selected, ['drain']);
 });
@@ -304,7 +313,7 @@ test('a generated archetype can be added through data without hardcoding another
 test('a lazy local diagram preserves the instant list, selected answer, scroll and focused option', async () => {
   let resolve;
   const requests = [];
-  const ui = registry({ pilot: pilotFixture(), fetchArt: (url, options) => {
+  const ui = await registry({ pilot: pilotFixture(), fetchArt: (url, options) => {
     requests.push({ url, options }); return new Promise(accept => { resolve = accept; });
   } });
   assert.equal(ui.api.resolve('cellphone').id, 'phone');
@@ -336,7 +345,7 @@ test('a lazy local diagram preserves the instant list, selected answer, scroll a
 
 test('late diagram responses cannot replace a newer noun and cached artwork mounts without another request', async () => {
   let resolve, requests = 0;
-  const ui = registry({ pilot: pilotFixture(), fetchArt: () => {
+  const ui = await registry({ pilot: pilotFixture(), fetchArt: () => {
     requests++; return new Promise(accept => { resolve = accept; });
   } });
   const previous = ui.mount('phone'); ui.mount('laptop');
@@ -352,7 +361,7 @@ test('late diagram responses cannot replace a newer noun and cached artwork moun
 
 test('prefix prefetch is bounded, cached and makes an eventual diagram mount synchronous', async () => {
   let requests = 0;
-  const ui = registry({ pilot: pilotFixture(), fetchArt: async () => { requests++; return artResponse(phoneArt()); } });
+  const ui = await registry({ pilot: pilotFixture(), fetchArt: async () => { requests++; return artResponse(phoneArt()); } });
   ui.api.prefetch('ph'); assert.equal(requests, 0);
   ui.api.prefetch('pho'); ui.api.prefetch('phon'); ui.api.prefetch('phone');
   await settleArt();
@@ -366,7 +375,7 @@ test('missing, rejected and unsafe lazy artwork retain usable list controls with
   for (const fetchArt of [async () => { throw new TypeError('Offline'); },
     async () => ({ ok: false }), async () => artResponse({ ...phoneArt(), id: 'car' }),
     async () => artResponse(unsafe)]) {
-    const ui = registry({ pilot: pilotFixture(), fetchArt });
+    const ui = await registry({ pilot: pilotFixture(), fetchArt });
     ui.mount('phone'); await settleArt();
     assert.equal(ui.svg(), undefined);
     assert.equal(ui.container.classList.contains('is-list-only'), true);
@@ -375,48 +384,139 @@ test('missing, rejected and unsafe lazy artwork retain usable list controls with
   }
   const pilot = pilotFixture(); pilot.archetypes[0].artUrl = 'https://example.org/phone.json';
   let requests = 0;
-  const ui = registry({ pilot, fetchArt: async () => { requests++; throw new Error('Must not request external art'); } });
+  const ui = await registry({ pilot, fetchArt: async () => { requests++; throw new Error('Must not request external art'); } });
   ui.mount('phone'); await settleArt();
   assert.equal(requests, 0);
   assert.equal(ui.svg(), undefined);
 });
 
-test('the shipped pilot registry and approved diagram payloads work through the real renderer', async () => {
-  const window = {};
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../assets/specifier-pilot.js'), 'utf8'), { window });
-  const pilot = window.mendSpecifierPilot;
-  assert.equal(pilot.version, 1);
-  assert.deepEqual(Array.from(pilot.archetypes, row => row.id).sort(),
-    ['arm', 'car', 'jeans', 'laptop', 'phone', 'refrigerator', 'stove', 'toilet']);
-  for (const definition of pilot.archetypes) {
-    let requests = 0;
-    const ui = registry({ pilot, fetchArt: async (url, options) => {
-      requests++;
-      assert.equal(url, definition.artUrl);
-      assert.equal(options.mode, 'same-origin');
-      assert.match(url, /^\/assets\/art\/[a-z-]+-[a-f0-9]{64}\.json$/);
-      const body = fs.readFileSync(path.join(__dirname, '..', url));
-      assert.ok(url.endsWith(createHash('sha256').update(body).digest('hex') + '.json'));
-      return artResponse(JSON.parse(body));
-    } });
-    ui.mount(definition.aliases[0]);
-    assert.equal(ui.container.hidden, false);
-    assert.equal(ui.walk(ui.container).filter(node => node.tagName === 'button').length, definition.parts.length);
-    await settleArt();
-    if (definition.artUrl) {
-      assert.equal(requests, 1);
-      assert.ok(ui.svg(), definition.id + ' must render its actual published geometry');
-      const groups = ui.svg().children.filter(node => node.dataset.part);
-      assert.ok(groups.length >= 3);
-      for (const group of groups) {
-        const part = definition.parts.find(row => row.id === group.dataset.part);
-        assert.ok(part);
-        group.dispatch('click');
-        assert.equal(ui.selected.at(-1), part.query);
-      }
-    } else {
-      assert.equal(requests, 0);
-      assert.equal(ui.svg(), undefined, 'rejected candidates stay list-only');
-    }
+test('the approved build data renders through release URLs without embedded catalog modules', async () => {
+  const phone = JSON.parse(fs.readFileSync(path.join(__dirname, 'data/approved-phone-art.json'), 'utf8'));
+  const payload = releaseFixture();
+  const definition = payload.archetypes.find(row => row.id === 'phone');
+  definition.artUrl = artURL(phone);
+  const ui = await registry({ pilot: { version: 1, archetypes: [definition] }, fetchArt: async (url, options) => {
+    assert.equal(url, definition.artUrl);
+    assert.equal(options.mode, 'same-origin');
+    assert.match(url, /^\/api\/art\/[a-f0-9]{64}\.json$/);
+    return artResponse(phone);
+  } });
+  ui.mount('phone'); await settleArt();
+  assert.ok(ui.svg(), 'approved phone geometry renders from the catalog');
+  const groups = ui.svg().children.filter(node => node.dataset.part);
+  assert.deepEqual(groups.map(node => node.dataset.part).sort(), ['buttons', 'screen', 'speaker']);
+  for (const group of groups) {
+    const item = definition.parts.find(row => row.id === group.dataset.part);
+    group.dispatch('click'); assert.equal(ui.selected.at(-1), item.query);
   }
+});
+
+test('a missing registry stays empty and filled data without parts has no empty workspace', async () => {
+  const ui = await registry({ art: false });
+  assert.equal(ui.api.configure({ version: 1, archetypes: [], models: [] }), true);
+  assert.equal(ui.api.resolve('bike'), null);
+  assert.equal(ui.mount('bike'), null);
+  assert.equal(ui.container.hidden, true);
+  assert.equal(ui.api.configure({ version: 1, archetypes: [{ id: 'vessel', label: 'Vessel', aliases: ['pot'], guideCount: 2, parts: [], artUrl: null }], models: [] }), true);
+  assert.equal(ui.api.resolve('pot').id, 'vessel');
+  assert.equal(ui.mount('pot'), null);
+  assert.equal(ui.container.hidden, true);
+});
+
+test('model names resolve literally while release replacement clears stale aliases', async () => {
+  const ui = await registry({ art: false });
+  assert.equal(ui.api.resolve('MacBook A2179').id, 'laptop');
+  assert.equal(ui.api.resolve('SM-G991B').id, 'phone');
+  assert.equal(ui.api.resolve('SMG991B'), null);
+  assert.equal(ui.api.resolve('SM-G991C'), null);
+  ui.api.configure({ version: 1, archetypes: [], models: [] });
+  assert.equal(ui.api.resolve('SM-G991B'), null);
+  assert.equal(ui.api.nouns.length, 0);
+});
+
+test('release noun IDs and exact punctuated model names use the same lazy artwork path', async () => {
+  const nounId = 'oewn-fixture-smartphone-n';
+  const art = { ...phoneArt(), id: nounId };
+  const url = artURL(art);
+  const requests = [];
+  const ui = await registry({ art: false, fetchArt: async (address, options) => {
+    requests.push({ address, options }); return artResponse(art);
+  } });
+  ui.api.configure({ version: 1, revision: 'release', archetypes: [{
+    id: nounId, label: 'Smartphone', aliases: ['smartphone'], guideCount: 4,
+    artUrl: url, parts: [{ id: 'screen', label: 'Screen', query: 'screen', aliases: ['display'] }],
+  }], models: [{ name: 'SM-G991B', nounId }] });
+  assert.equal(ui.api.resolve('SM-G991B').id, nounId);
+  assert.equal(ui.api.resolve('SMG991B'), null);
+  ui.api.prefetch('SM-G991B');
+  await settleArt();
+  ui.mount('SM-G991B');
+  assert.ok(ui.svg(), 'the art ID follows the release noun, without a canonical-name branch');
+  assert.equal(requests.length, 1, 'literal model prefetch is reused by the mount');
+  assert.equal(requests[0].address, url);
+  assert.equal(requests[0].options.mode, 'same-origin');
+  ui.part('screen', 'g').dispatch('click');
+  assert.deepEqual(ui.selected, ['screen']);
+});
+
+test('build-time sense ranks resolve polysemous aliases without object-specific browser rules', async () => {
+  const ui = await registry({ art: false });
+  const row = (id, label, alias, rank, guideCount = 1) => ({
+    id, label, aliases: [alias], aliasRanks: { [alias]: rank }, guideCount, parts: [], artUrl: null,
+  });
+  const payload = { version: 1, archetypes: [
+    row('motorcycle', 'Motorcycle', 'bike', 0, 90),
+    row('weapon', 'Weapon', 'arm', 1, 100),
+    row('phoneme', 'Phoneme', 'phone', 1, 100),
+    row('bicycle', 'Bicycle', 'bike', -1, 5),
+    row('body-arm', 'Arm', 'arm', 0, 5),
+    row('telephone', 'Telephone', 'phone', 0, 5),
+  ], models: [{ name: 'SM-G991B', nounId: 'telephone' }] };
+  for (const order of [payload.archetypes, [...payload.archetypes].reverse()]) {
+    ui.api.configure({ ...payload, archetypes: order });
+    assert.equal(ui.api.resolve('bike').id, 'bicycle', 'reviewed alias priority can override lexical polysemy');
+    assert.equal(ui.api.resolve('arm').id, 'body-arm', 'the first lexical sense beats a more numerous niche sense');
+    assert.equal(ui.api.resolve('phone').id, 'telephone');
+    assert.equal(ui.api.resolve('Bike!').id, 'bicycle', 'punctuation-normalized lookup uses the same sense winner');
+    assert.equal(ui.api.resolve('SM-G991B').id, 'telephone');
+    assert.equal(ui.api.resolve('SMG991B'), null, 'model punctuation remains literal');
+  }
+});
+
+test('equal sense ranks prefer covered guides then a stable noun ID, while absent ranks retain order', async () => {
+  const ui = await registry({ art: false });
+  const row = (id, guideCount, rank) => ({ id, label: id, aliases: ['shared'], guideCount, parts: [], artUrl: null,
+    ...(rank === undefined ? {} : { aliasRanks: { shared: rank } }) });
+  const definitions = [row('zeta', 2, 0), row('beta', 4, 0), row('alpha', 4, 0)];
+  for (const archetypes of [definitions, [...definitions].reverse()]) {
+    ui.api.configure({ version: 1, archetypes, models: [] });
+    assert.equal(ui.api.resolve('shared').id, 'alpha');
+  }
+  ui.api.configure({ version: 1, archetypes: [row('legacy-first', 1), row('legacy-more', 100)], models: [] });
+  assert.equal(ui.api.resolve('shared').id, 'legacy-first');
+});
+
+test('configuration shares identical immutable lexical parts without mixing different aliases', async () => {
+  const ui = await registry({ art: false });
+  const shared = { id: 'panel', label: 'Panel', query: 'panel', aliases: ['display panel', 'panel'] };
+  const row = (id, aliases) => ({ id, label: id, aliases: [id], guideCount: 1, artUrl: null,
+    parts: [{ ...shared, aliases: [...aliases] }] });
+  ui.api.configure({ version: 1, archetypes: [row('first', shared.aliases), row('second', shared.aliases),
+    row('different', ['control panel'])], models: [] });
+  const first = ui.api.resolve('first').parts[0];
+  assert.equal(ui.api.resolve('second').parts[0], first, 'the same immutable lexical part is prepared once');
+  assert.ok(Object.isFrozen(first));
+  assert.ok(Object.isFrozen(first.aliases));
+  assert.notEqual(ui.api.resolve('different').parts[0], first);
+  assert.ok(!first.aliases.includes('control panel'), 'reuse never combines distinct parts or aliases');
+});
+
+test('ASCII preparation fast paths preserve Unicode aliases and literal model punctuation', async () => {
+  const ui = await registry({ art: false });
+  ui.api.configure({ version: 1, archetypes: [{ id: 'accented', label: 'Réfrigérateur', aliases: ['réfrigérateur'],
+    guideCount: 1, parts: [], artUrl: null }], models: [{ name: 'É-1', nounId: 'accented' }] });
+  assert.equal(ui.api.resolve('RÉFRIGÉRATEUR').id, 'accented');
+  assert.equal(ui.api.resolve('refrigerateur').id, 'accented');
+  assert.equal(ui.api.resolve('E-1').id, 'accented');
+  assert.equal(ui.api.resolve('E1'), null);
 });

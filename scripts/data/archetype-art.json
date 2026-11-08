@@ -1,0 +1,245 @@
+{
+  "version": 1,
+  "artifacts": [
+    {
+      "id": "bicycle",
+      "label": "Bicycle",
+      "aliases": [
+        "bike",
+        "bikes",
+        "bicycle",
+        "bicycles",
+        "ebike",
+        "e-bike",
+        "electric bike",
+        "road bike",
+        "mountain bike"
+      ],
+      "parts": [
+        {
+          "id": "chain",
+          "label": "Chain",
+          "query": "chain",
+          "aliases": [
+            "chain",
+            "chains",
+            "master link",
+            "chain link"
+          ]
+        },
+        {
+          "id": "tires",
+          "label": "Tires & Tubes",
+          "query": "tire",
+          "aliases": [
+            "tire",
+            "tires tubes",
+            "tires",
+            "tyre",
+            "tyres",
+            "tube",
+            "tubes",
+            "flat",
+            "flat tire"
+          ]
+        },
+        {
+          "id": "brakes",
+          "label": "Brakes & Cables",
+          "query": "brake",
+          "aliases": [
+            "brake",
+            "brakes cables",
+            "brakes",
+            "brake cable",
+            "brake cables",
+            "brake pads"
+          ]
+        },
+        {
+          "id": "gears",
+          "label": "Gears & Derailleur",
+          "query": "derailleur",
+          "aliases": [
+            "derailleur",
+            "gears derailleur",
+            "gear",
+            "gears",
+            "shifting",
+            "shift",
+            "shifter"
+          ]
+        },
+        {
+          "id": "wheels",
+          "label": "Wheels & Spokes",
+          "query": "wheel",
+          "aliases": [
+            "wheel",
+            "wheels spokes",
+            "wheels",
+            "spoke",
+            "spokes",
+            "rim",
+            "rims"
+          ]
+        },
+        {
+          "id": "handlebars",
+          "label": "Handlebars & Stem",
+          "query": "handlebar",
+          "aliases": [
+            "handlebar",
+            "handlebars stem",
+            "handlebars",
+            "stem",
+            "grips"
+          ]
+        },
+        {
+          "id": "seat",
+          "label": "Seat & Seatpost",
+          "query": "seat",
+          "aliases": [
+            "seat",
+            "seat seatpost",
+            "saddle",
+            "seatpost",
+            "seat post"
+          ]
+        },
+        {
+          "id": "pedals",
+          "label": "Pedals & Cranks",
+          "query": "pedal",
+          "aliases": [
+            "pedal",
+            "pedals cranks",
+            "pedals",
+            "crank",
+            "cranks",
+            "crank arm"
+          ]
+        },
+        {
+          "id": "bottom-bracket",
+          "label": "Bottom Bracket",
+          "query": "bottom bracket",
+          "aliases": [
+            "bottom bracket",
+            "bottom brackets"
+          ]
+        },
+        {
+          "id": "fork",
+          "label": "Fork & Suspension",
+          "query": "fork",
+          "aliases": [
+            "fork",
+            "fork suspension",
+            "forks",
+            "suspension"
+          ]
+        },
+        {
+          "id": "lights",
+          "label": "Lights, Bell & Rust",
+          "query": "light",
+          "aliases": [
+            "light",
+            "lights bell rust",
+            "lights",
+            "bell",
+            "rust"
+          ]
+        }
+      ],
+      "kind": "pinned-bicycle",
+      "file": null,
+      "sha256": null
+    },
+    {
+      "id": "phone",
+      "label": "Phone",
+      "aliases": [
+        "phone",
+        "phones",
+        "smartphone",
+        "iphone",
+        "mobile phone"
+      ],
+      "parts": [
+        {
+          "id": "screen",
+          "label": "Screen",
+          "query": "screen",
+          "aliases": [
+            "screen",
+            "display"
+          ]
+        },
+        {
+          "id": "battery",
+          "label": "Battery",
+          "query": "battery",
+          "aliases": [
+            "battery"
+          ]
+        },
+        {
+          "id": "charging",
+          "label": "Charging port",
+          "query": "charging port",
+          "aliases": [
+            "charging port",
+            "charger",
+            "charging"
+          ]
+        },
+        {
+          "id": "camera",
+          "label": "Camera",
+          "query": "camera",
+          "aliases": [
+            "camera"
+          ]
+        },
+        {
+          "id": "speaker",
+          "label": "Speaker & microphone",
+          "query": "speaker",
+          "aliases": [
+            "speaker",
+            "speaker microphone",
+            "microphone",
+            "audio",
+            "sound"
+          ]
+        },
+        {
+          "id": "buttons",
+          "label": "Buttons",
+          "query": "button",
+          "aliases": [
+            "button",
+            "buttons",
+            "power button"
+          ]
+        },
+        {
+          "id": "water",
+          "label": "Water damage",
+          "query": "water damage",
+          "aliases": [
+            "water damage",
+            "water",
+            "wet"
+          ]
+        }
+      ],
+      "kind": "approved-json",
+      "file": "scripts/data/approved-phone-art.json",
+      "sha256": "c15418940cb86ec29d9dd97c8efc7bb458c1b26f0fcabc0ed1c76f7dc184685b"
+    }
+  ]
+}

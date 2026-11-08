@@ -4,6 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const { makeDOM } = require('./hero_test_dom.cjs');
+const { releaseFixture, bicycleArt } = require('./specifier_test_data.cjs');
 const themes = ['pixel', 'editorial', 'comic', 'poster', 'typewriter', 'handwritten', 'toolbox',
   'stitched', 'taped', 'tooltype', 'blueprint', 'cutpaper'];
 
@@ -16,10 +17,12 @@ async function heroFor(options = {}) {
   dom.queries = [];
   dom.window.addEventListener('mend:querychange', () => dom.queries.push(dom.window.mendHero.query()));
   const context = vm.createContext(dom.context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), context);
+  dom.window.mendSpecifiers.configure(releaseFixture({ specifics: Boolean(options.specifiers), art: Boolean(options.specifiers) }));
   if (options.specifiers) {
-    for (const file of ['bicycle-art.js', 'specifiers.js']) {
-      vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/' + file), 'utf8'), context);
-    }
+    context.fetch = async () => ({ ok: true, headers: { get: () => null }, text: async () => JSON.stringify(bicycleArt()) });
+    dom.window.mendSpecifiers.prefetch('bike');
+    for (let pass = 0; pass < 24; pass++) await Promise.resolve();
   }
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/hero.js'), 'utf8'), context);
   await Promise.resolve();
@@ -76,14 +79,14 @@ test('a bare noun waits 380ms then asks a separate question and focuses a blank 
 
 test('every prepared specifier alias appears at zero clock without moving the first caret', async () => {
   const dom = await heroFor({ specifiers: true });
-  for (const noun of [...dom.window.mendSpecifiers.nouns, 'e-bike']) {
+  for (const noun of [...dom.window.mendSpecifiers.nouns.filter(noun => dom.window.mendSpecifiers.resolve(noun).parts.length), 'e-bike']) {
     const definition = dom.window.mendSpecifiers.resolve(noun);
     dom.type(dom.response, noun);
     assert.equal(dom.visible(), true, noun);
     assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`, noun);
     assert.equal(dom.specifierContainer.hidden, false, noun);
     assert.equal(dom.specifierContainer.querySelectorAll('.specifier-option').length, definition.parts.length, noun);
-    assert.equal(Boolean(dom.specifierContainer.querySelector('svg')), Boolean(definition.svg), noun);
+    assert.equal(Boolean(dom.specifierContainer.querySelector('svg')), Boolean(definition.artUrl), noun);
     assert.equal(dom.document.activeElement, dom.response, 'instant narrowing never redirects ongoing typing');
     assert.equal(dom.response.selectionStart, dom.response.value.length, noun);
     assert.equal(dom.response.selectionEnd, dom.response.value.length, noun);
@@ -129,7 +132,7 @@ test('continuing a recognized prefix or full phrase replaces instant controls wi
     dom.response.focus();
     for (const text of sequence) {
       dom.type(dom.response, text);
-      const prepared = Boolean(dom.window.mendSpecifiers.resolve(text));
+      const prepared = Boolean(dom.window.mendSpecifiers.resolve(text)?.parts.length);
       assert.equal(!dom.specifierContainer.hidden, prepared, text);
       assert.equal(dom.visible(), prepared, text);
       assert.equal(dom.document.activeElement, dom.response, text);
@@ -475,9 +478,10 @@ test('qualified bare objects agree with the worker contract for immediate keyboa
   }
 });
 
-test('qualified known objects share the idle delay while unfamiliar nouns remain manual', async () => {
+test('qualified resident nouns share the idle delay while unfamiliar nouns remain manual', async () => {
   for (const [raw, noun] of [['damn laptop', 'laptop'], ['my fucking arm', 'arm'],
-    ['the freaking washing machine', 'washing machine']]) {
+    ['the freaking washing machine', 'washing machine'], ['dick', 'dick'],
+    ['fucking dick', 'dick'], ['my fucking dick', 'dick']]) {
     const dom = await heroFor();
     dom.type(dom.response, raw);
     dom.advance(379);
@@ -487,13 +491,13 @@ test('qualified known objects share the idle delay while unfamiliar nouns remain
     assert.equal(dom.question.textContent, `What's wrong with your ${noun}?`);
     assert.equal(dom.window.mendHero.query(), raw);
   }
-  for (const raw of ['dick', 'fucking dick', 'my fucking dick']) {
+  for (const raw of ['unregisteredthing', 'fucking unregisteredthing', 'my fucking unregisteredthing']) {
     const dom = await heroFor();
     dom.type(dom.response, raw);
     dom.advance(20000);
     assert.equal(dom.visible(), false, 'qualifiers do not expand the conservative automatic vocabulary');
     dom.key(dom.response, 'Enter');
-    assert.equal(dom.question.textContent, "What's wrong with your dick?");
+    assert.equal(dom.question.textContent, "What's wrong with your unregisteredthing?");
   }
 });
 

@@ -4,6 +4,8 @@ const path = require('node:path');
 const test = require('node:test');
 const vm = require('node:vm');
 const { makeDOM } = require('./hero_test_dom.cjs');
+const { releaseFixture, bicycleArt } = require('./specifier_test_data.cjs');
+async function settleArt() { for (let pass = 0; pass < 24; pass++) await Promise.resolve(); }
 
 // Execute the actual hero, specifier registry and search controller together.
 // Synthetic DOM events/clock cover coordination, not CSS/native font paint.
@@ -27,6 +29,7 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   Object.assign(dom.context, { location, URL, Worker, scrollY: 0, innerHeight: 800,
     history: { pushState(state, title, href) { location.href = new URL(href, location.href).href; } },
     fetch: async (url, options) => {
+      if (url.startsWith('/api/art/')) return { ok: true, headers: { get: () => null }, text: async () => JSON.stringify(bicycleArt()) };
       requests.push(url);
       assert.equal(url, '/api/guides/example');
       assert.equal(options.mode, 'same-origin');
@@ -35,7 +38,6 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   });
   const context = vm.createContext(dom.context);
   const run = file => vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/' + file), 'utf8'), context);
-  run('bicycle-art.js');
   run('specifiers.js');
   if (heroAvailable) run('hero.js');
   else { dom.response.value = 'please, mend my '; dom.response.dataset.promptLength = '15'; }
@@ -49,7 +51,11 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
     dom.event(input, 'input', { inputType, bubbles: true });
   };
   const ui = Object.assign(dom, { elements, posted, requests, workers, settled,
-    ready(words = terms) { workers[0].emit({ type: 'ready', categories: [], source: {}, terms: words, loadDuration: 1 }); dom.flushFrames(); },
+    ready(words = terms, archetypes = releaseFixture(), transport = 'json') {
+      workers[0].emit({ type: 'ready', categories: [], source: {}, terms: words, loadDuration: 1,
+        ...(transport === 'object' ? { archetypes } : { archetypesJSON: archetypes ? JSON.stringify(archetypes) : '' }) });
+      dom.flushFrames();
+    },
     change(value) { type(dom.response, value); },
     answer(value) { type(dom.clarification, value); },
     key(input, key, options = {}) { return dom.event(input, 'keydown', { key, bubbles: true, ...options }); },
@@ -86,6 +92,8 @@ test('bike controls appear immediately, hide unspecific results and preserve fir
   ui.change('bike');
   assert.equal(ui.question.textContent, "What's wrong with your bike?");
   assert.equal(ui.specifierContainer.hidden, false);
+  assert.equal(ui.specifierContainer.querySelector('svg'), null, 'cold art starts with the usable list');
+  await settleArt();
   assert.ok(ui.specifierContainer.querySelector('svg'));
   assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
   assert.equal(ui.document.activeElement, ui.response, 'instant display never interrupts the first field');
@@ -105,6 +113,7 @@ test('bike controls appear immediately, hide unspecific results and preserve fir
 
 test('SVG and list selections write the native answer and reveal cards immediately; clear hides again', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('bike');
+  await settleArt();
   ui.clickPart('chain', true);
   assert.equal(ui.clarification.value, 'chain');
   assert.equal(ui.clarification.selectionStart, 5);
@@ -112,7 +121,7 @@ test('SVG and list selections write the native answer and reveal cards immediate
   assert.equal(ui.elements['search-results'].hidden, false);
   assert.equal(ui.searches().at(-1).query, 'bike chain');
   assert.equal(ui.option('chain').classList.contains('is-selected'), true);
-  assert.equal(ui.part('chain').classList.contains('is-selected'), true);
+  assert.equal(ui.option('chain').classList.contains('is-selected'), true);
   const count = ui.searches().length;
   ui.clickPart('chain');
   assert.equal(ui.clarification.value, '');
@@ -133,6 +142,7 @@ test('SVG and list selections write the native answer and reveal cards immediate
 
 test('two-way hover/focus and manual answer matches synchronize exact SVG/list parts live', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('road bike'); ui.key(ui.response, 'Enter');
+  await settleArt();
   const group = ui.part('chain'), option = ui.option('chain');
   ui.event(group, 'pointerenter');
   assert.equal(option.classList.contains('is-highlighted'), true);
@@ -324,9 +334,12 @@ test('index readiness during composition waits for same-value commit in either f
   assert.equal(first.searches().at(-1).query, 'broken laptop');
   assert.equal(first.searches().length, 1);
   const answer = await searchUI(); answer.change('bike'); answer.key(answer.response, 'Enter');
+  assert.equal(answer.specifierContainer.hidden, true, 'no registry is available before readiness');
   answer.event(answer.clarification, 'compositionstart'); answer.answer('chain'); answer.ready();
   assert.equal(answer.searches().length, 0);
+  assert.equal(answer.specifierContainer.hidden, true, 'readiness leaves active IME composition alone');
   answer.event(answer.clarification, 'compositionend'); answer.flushFrames();
+  assert.equal(answer.specifierContainer.hidden, false, 'deferred registry controls mount on commitment');
   assert.equal(answer.searches().at(-1).query, 'bike chain');
   assert.equal(answer.searches().length, 1);
 });
@@ -417,7 +430,91 @@ test('part selection uses native insertText undo when available and safely falls
       assert.equal(ui.clarification.value, '');
       assert.equal(ui.window.mendHero.query(), 'bike');
       assert.equal(ui.elements['search-results'].hidden, true);
-      assert.equal(ui.part('chain').classList.contains('is-selected'), false);
+      assert.equal(ui.option('chain').classList.contains('is-selected'), false);
+    }
+  }
+});
+
+test('late resident nouns mount without a synchronous caret move or unspecific search', async () => {
+  const ui = await searchUI();
+  ui.change('bike');
+  ui.advance(700);
+  const selection = [ui.response.selectionStart, ui.response.selectionEnd];
+  assert.equal(ui.question.textContent, '', 'no built-in noun list can guess before release readiness');
+  ui.ready();
+  assert.equal(ui.question.textContent, "What's wrong with your bike?");
+  assert.equal(ui.specifierContainer.hidden, false);
+  assert.equal(ui.document.activeElement, ui.response, 'configuration itself never moves the native caret');
+  assert.deepEqual([ui.response.selectionStart, ui.response.selectionEnd], selection);
+  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.searches().length, 0);
+  ui.advance(0);
+  assert.equal(ui.document.activeElement, ui.clarification, 'the already elapsed idle deadline runs separately');
+});
+
+test('legacy catalogs search without inventing a fixed noun registry', async () => {
+  const ui = await searchUI();
+  ui.ready([], null);
+  ui.change('bike'); ui.flushFrames(); ui.advance(1000);
+  assert.equal(ui.question.textContent, '');
+  assert.equal(ui.specifierContainer.hidden, true);
+  assert.equal(ui.searches().at(-1).query, 'bike');
+  assert.equal(ui.window.mendSpecifiers.resolve('bike'), null);
+});
+
+test('model-backed clarification preserves literal user text throughout part selection', async () => {
+  for (const model of ['MacBook A2179', 'SM-G991B']) {
+    const ui = await searchUI(); ui.ready();
+    ui.change(model);
+    assert.equal(ui.question.textContent, `What's wrong with your ${model}?`);
+    assert.equal(ui.document.activeElement, ui.response);
+    assert.equal(ui.elements['search-results'].hidden, true);
+    assert.equal(ui.response.value, 'please, mend my ' + model);
+    ui.key(ui.response, 'Enter');
+    assert.equal(ui.document.activeElement, ui.clarification);
+    ui.clickPart('battery');
+    assert.equal(ui.searches().at(-1).query, model + ' battery');
+    assert.equal(ui.document.title, 'please, mend my ' + model);
+  }
+  const unknown = await searchUI(); unknown.ready(); unknown.change('SM-G991C');
+  unknown.advance(1000); unknown.key(unknown.response, 'Enter'); unknown.flushFrames();
+  assert.equal(unknown.question.textContent, '');
+  assert.equal(unknown.specifierContainer.hidden, true);
+  assert.equal(unknown.searches().at(-1).query, 'SM-G991C');
+});
+
+test('JSON registry transport and cached object workers configure the same synchronous controls', async () => {
+  for (const transport of ['json', 'object']) {
+    const ui = await searchUI();
+    ui.change('bike');
+    ui.ready([], releaseFixture(), transport);
+    assert.equal(ui.question.textContent, "What's wrong with your bike?", transport);
+    assert.equal(ui.document.activeElement, ui.response, 'readiness preserves the current native caret');
+    assert.equal(ui.specifierContainer.hidden, false);
+    assert.equal(ui.elements['search-results'].hidden, true);
+    ui.clickPart('chain');
+    assert.equal(ui.searches().at(-1).query, 'bike chain', transport);
+  }
+  const text = await searchUI();
+  text.workers[0].emit({ type: 'ready', categories: [], source: {}, terms: [], loadDuration: 1,
+    archetypes: JSON.stringify(releaseFixture()) });
+  text.change('bike');
+  assert.equal(text.question.textContent, "What's wrong with your bike?");
+});
+
+test('malformed registry transport falls back to a cached object or ordinary search without an error UI', async () => {
+  for (const legacy of [null, releaseFixture()]) {
+    const ui = await searchUI();
+    ui.workers[0].emit({ type: 'ready', categories: [], source: {}, terms: [], loadDuration: 1,
+      archetypesJSON: '{invalid', archetypes: legacy });
+    ui.change('bike'); ui.flushFrames();
+    assert.equal(ui.elements['catalog-status'].hidden, true);
+    if (legacy) {
+      assert.equal(ui.question.textContent, "What's wrong with your bike?");
+      assert.equal(ui.elements['search-results'].hidden, true);
+    } else {
+      assert.equal(ui.question.textContent, '');
+      assert.equal(ui.searches().at(-1).query, 'bike');
     }
   }
 });

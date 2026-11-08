@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "wordnet": {
+    "name": "Open English WordNet 2025",
+    "url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025/english-wordnet-2025.xml.gz",
+    "filename": "english-wordnet-2025.xml.gz",
+    "bytes": 11363503,
+    "sha256": "9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe",
+    "license": "CC BY 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+    "project": "https://github.com/globalwordnet/english-wordnet",
+    "licenseNotice": "docs/references/wordnet/OEWN-LICENSE.md",
+    "licenseNoticeSha256": "672cc8b5663e8dc74c4b07a9dcf477193853575b119908fd3dc0aeeb60a9dbbb"
+  },
+  "wordfreq": {
+    "version": "3.1.1",
+    "language": "en",
+    "wordlist": "best",
+    "project": "https://github.com/rspeer/wordfreq",
+    "codeLicense": "Apache-2.0",
+    "dataLicense": "CC BY-SA 4.0",
+    "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "notice": "docs/references/wordnet/wordfreq-NOTICE.md",
+    "noticeSha256": "d9b104dafe63886af55e7cea7484824e32e12d4e1f57f319923dd643b36d6b15"
+  },
+  "domains": [
+    "act",
+    "animal",
+    "artifact",
+    "attribute",
+    "body",
+    "cognition",
+    "communication",
+    "event",
+    "feeling",
+    "food",
+    "group",
+    "location",
+    "motive",
+    "object",
+    "phenomenon",
+    "plant",
+    "possession",
+    "process",
+    "relation",
+    "state",
+    "substance"
+  ],
+  "categoryDomains": {
+    "health": [
+      "artifact",
+      "body",
+      "state",
+      "feeling",
+      "process",
+      "substance",
+      "plant",
+      "animal",
+      "food",
+      "phenomenon",
+      "cognition",
+      "act",
+      "event",
+      "communication",
+      "group",
+      "object",
+      "attribute",
+      "relation",
+      "location"
+    ],
+    "medical": [
+      "artifact",
+      "body",
+      "state",
+      "process",
+      "substance"
+    ],
+    "technology": [
+      "artifact",
+      "communication",
+      "cognition",
+      "state",
+      "process"
+    ],
+    "vehicles": [
+      "artifact",
+      "state",
+      "process",
+      "substance"
+    ],
+    "household": [
+      "artifact",
+      "state",
+      "process",
+      "substance"
+    ],
+    "handyman": [
+      "artifact",
+      "state",
+      "process",
+      "substance",
+      "plant",
+      "object",
+      "location"
+    ],
+    "other": [
+      "act",
+      "animal",
+      "artifact",
+      "attribute",
+      "body",
+      "cognition",
+      "communication",
+      "event",
+      "feeling",
+      "food",
+      "group",
+      "location",
+      "motive",
+      "object",
+      "phenomenon",
+      "plant",
+      "possession",
+      "process",
+      "relation",
+      "state",
+      "substance"
+    ]
+  }
+}

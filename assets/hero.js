@@ -16,16 +16,6 @@
   const styles = window.mendHeroStyles;
   const prompt = styles?.prompt?.(theme) ?? (theme === "toolbox" ? "🙏, 🔧 my " : "please, mend my ");
   let promptArt;
-  // A small local vocabulary makes the automatic prompt conservative. Explicit
-  // Enter/Tab can also clarify an unfamiliar single-word object; phrases do not.
-  const broadNouns = new Set(("arm leg hand foot feet knee shoulder elbow wrist ankle finger toe back neck head tooth teeth eye ear " +
-    "car truck van motorcycle bicycle bike scooter engine tire wheel boat " +
-    "laptop computer desktop macbook phone iphone smartphone tablet ipad screen keyboard mouse printer camera radio speaker headphones watch " +
-    "stove oven refrigerator fridge freezer dishwasher washer dryer microwave kettle toaster blender mixer vacuum lamp light clock iron " +
-    "sink faucet toilet shower door window roof wall floor chair table desk sofa couch bed furniture " +
-    "jacket coat jeans pants shirt dress shoe shoes boot boots bag backpack zipper " +
-    "relationship marriage friendship family resume cv code website app software").split(/\s+/));
-  for (const name of ["washing machine", "air conditioner", "coffee maker", "game console", "water heater", "mobile phone", "sewing machine"]) broadNouns.add(name);
   const notSubjects = new Set(["broken", "damaged", "hurts", "painful", "fix", "repair", "please", "my", "the", "a", "an", "not"]);
   // Keep object recognition aligned with the worker's conversational search
   // contract. Only the displayed question is cleaned; typed input/query is not.
@@ -51,9 +41,10 @@
   let editedAt = 0;
   let vocabulary = [];
   let specifier = null;
+  let registryPending = false;
   let lastAwaiting = false;
-  const curatedWords = new Set([...broadNouns, ...symptomPredicates, ...conversational,
-    ...pronouns, ...determiners, ...contractions, ...(specifiers?.nouns || []),
+  const curatedWords = new Set([...symptomPredicates, ...conversational,
+    ...pronouns, ...determiners, ...contractions,
     ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
   for (const name of [...curatedWords]) for (const word of name.split(/\s+/)) curatedWords.add(word);
   const completionPunctuation = new Set(["?", ".", "!"]);
@@ -78,7 +69,7 @@
     const token = value.split(/\s+/).at(-1).normalize("NFKD").replace(/\p{M}/gu, "")
       .toLowerCase().replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replaceAll("’", "'");
     if (token.length < 2 || /\p{N}/u.test(token)) return 1000;
-    if (curatedWords.has(token) || token.endsWith("s") && broadNouns.has(token.slice(0, -1))) return 380;
+    if (curatedWords.has(token) || specifiers?.isWord?.(token)) return 380;
     let low = 0, high = vocabulary.length;
     while (low < high) {
       const middle = (low + high) >>> 1;
@@ -117,8 +108,9 @@
     if (!query()) { publishSettle(true); return; }
     if (document.visibilityState === "hidden" || document.body.classList.contains("reading")) return;
     const remaining = Math.max(0, settleDelay() - (performance.now() - editedAt));
-    if (!remaining) finishSettle();
-    else settleTimer = setTimeout(() => finishSettle(), remaining);
+    // Catalog readiness may shorten an already elapsed deadline. Reveal its
+    // controls now, but leave focus alone until the automatic timer runs.
+    settleTimer = setTimeout(() => finishSettle(), remaining);
   }
 
   function setVocabulary(terms) {
@@ -207,7 +199,7 @@
     let construction = true;
     for (let at = 0; at < pieces.length; at++) {
       const key = keys[at], next = keys[at + 1] || "";
-      if (/\p{N}/u.test(key)) { kept.push(pieces[at]); construction = false; continue; }
+      if (/\p{N}/u.test(key)) { kept.push(labels[at]); construction = false; continue; }
       if (negativeContraction.test(key)) {
         kept.push("not"); construction = true;
       } else if (intensifiers.has(key) || contractions.has(key)) {
@@ -224,12 +216,11 @@
     const name = kept.join(" ");
     const normalized = name.toLocaleLowerCase("en");
     if (!name || notSubjects.has(normalized)) return "";
-    if (broadNouns.has(normalized) || specifiers?.resolve?.(normalized) ||
-        normalized.endsWith("s") && broadNouns.has(normalized.slice(0, -1))) return name;
+    if (specifiers?.resolve?.(normalized)) return name;
     return explicit && /^[\p{L}][\p{L}\p{M}'’\-]*$/u.test(name) ? name : "";
   }
 
-  function updateLine(name) {
+  function updateLine(name, remount = false) {
     const wasOpen = open;
     const changedSubject = name.toLocaleLowerCase("en") !== subject.toLocaleLowerCase("en");
     const symptom = changedSubject || !name ? "" : suffix(second);
@@ -244,7 +235,7 @@
       question.textContent = "";
       if (active === second || document.activeElement === second) focus(first, true);
     }
-    if (open !== wasOpen || changedSubject) {
+    if (open !== wasOpen || changedSubject || remount) {
       specifier?.destroy?.();
       specifier = open && specifierContainer ? specifiers?.mount?.(specifierContainer, name, selectSpecific) : null;
       if (specifierContainer && !specifier) specifierContainer.hidden = true;
@@ -259,7 +250,7 @@
     if (open !== wasOpen || changedSubject) window.dispatchEvent(new Event("mend:layout"));
   }
 
-  function syncFirst() {
+  function syncFirst(remount = false) {
     const value = suffix(first);
     if (suppressed !== null && value !== suppressed) suppressed = null;
     const name = value === suppressed ? "" : bareNoun(value);
@@ -267,9 +258,9 @@
     // Show prepared narrowing controls as soon as the whole subject matches.
     // Keep native focus on the first field until a pause or explicit action,
     // so continuing from "car" to "carpet" never types into the answer.
-    const preview = name && specifiers?.resolve?.(name) && document.visibilityState !== "hidden" &&
+    const preview = name && specifiers?.resolve?.(name)?.parts.length && document.visibilityState !== "hidden" &&
       !document.body.classList.contains("reading");
-    if (sameSubject || preview) updateLine(name);
+    if (sameSubject || preview) updateLine(name, remount);
     else updateLine("");
   }
 
@@ -328,6 +319,10 @@
     if (input === second) specifier?.sync?.(suffix(second));
     if (input === first && !suffix(first).trim()) updateLine("");
     if (item.composing) { cancelAutomatic(); notify(); return; }
+    if (registryPending && ![...state.values()].some(value => value.composing)) {
+      registryPending = false;
+      syncFirst(true);
+    }
     if (input === first && completed) { edited = first; activate(); return; }
     if (input === first) syncFirst();
     notify();
@@ -441,6 +436,12 @@
   measure.textContent = `${prompt}relationship`;
   window.mendHero = { query, focus: () => focus(), isAwaitingSpecifics, settleDelay, setVocabulary,
     settle: () => finishSettle(true) };
+  window.addEventListener("mend:specifiersready", () => {
+    if ([...state.values()].some(item => item.composing)) { registryPending = true; return; }
+    syncFirst(true);
+    notify();
+    if (settleTimer !== null) scheduleSettle(edited, true);
+  });
   window.addEventListener("resize", fit);
   window.addEventListener("mend:layout", fit);
   document.fonts?.ready.then(fit);

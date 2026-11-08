@@ -752,11 +752,16 @@ async function loadCatalog() {
       // arrays, the word dictionary and shared alias strings stay resident.
       delete catalog.search.inverted;
     }
+    // A JSON string crosses the worker boundary without deep-cloning thousands
+    // of nested part arrays on the main thread. Parse it once in the page.
+    const archetypesJSON = catalog.archetypes ? JSON.stringify(catalog.archetypes) : "";
+    delete catalog.archetypes;
     ready = true;
     postMessage({ type: "ready", total: entries.length, categories: catalog.categories, source: catalog.source,
       revision: catalog.revision, aliasGroups: searchGroups.length - 1, invertedIndex: Boolean(inverted),
       termCount: inverted?.terms.length || 0, stemming: Boolean(inverted), fuzzy: Boolean(inverted),
       terms: inverted?.terms || [],
+      archetypesJSON,
       resultLimit: RESULT_LIMIT,
       loadDuration: performance.now() - started });
     if (pending) schedule(pending);

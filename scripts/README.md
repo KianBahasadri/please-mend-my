@@ -9,15 +9,28 @@ python3 scripts/build_catalog.py
 python3 scripts/build_catalog.py --data-dir /mnt/catalog/work --release-root /mnt/catalog/releases
 ```
 
+The [noun-backed release pipeline](../docs/catalog-pipeline.md) covers Stage 0–4,
+all merged sources, build-only coverage reports, resident noun/model/part metadata,
+and reviewed, content-addressed diagrams. On the workstation, run heavy jobs
+serially through the memory limiter:
+
+```sh
+python3 scripts/run_bounded.py -- python3 scripts/build_catalog.py
+```
+
+This caps the complete job at 2 GiB and two CPU cores, and reserves 8 GiB available
+RAM. Run JavaScript checks with `--test-concurrency=1`; never run full suites in
+parallel. The wrapper requires a Linux systemd user service manager and refuses
+to fall back to an uncapped command.
+
 `build_catalog.py` downloads and combines iFixit, English WikiMed, and the U.S.
 military First Aid manual. It pins uv 0.13.5 and Python 3.12.12; the source scripts
 pin libzim 4.1.0, lxml 6.1.3, and PyMuPDF 1.28.2. Its default work cache is
 `catalog-data/build`, with completed snapshots in `catalog-data/releases/<pipeline hash>`.
 The fingerprint covers the toolchain pins, active structured-guide cache, and
-all ten pipeline input files:
-`build_catalog.py`, `ingest_ifixit.py`, `enrich_search.py`, `search-vocabulary.json`,
-`ingest_wikimed.py`, `ingest_first_aid.py`, `merge_catalogs.py`, `prepare_search.py`,
-`overlay_guides.py`, and `structured_guides.py`.
+all pipeline scripts, noun-source and artwork configurations, pinned art inputs,
+and the credits generator. OEWN and wordfreq pins participate in the noun seed
+receipt; noun/link inputs participate in the release key.
 An unchanged completed release is reused without downloading or scanning its
 corpus. A lock prevents overlapping builds; failed builds cannot replace a
 published release. EC2 downloads the same public sources and builds its own

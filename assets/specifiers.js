@@ -2,113 +2,124 @@
   "use strict";
 
   const ns = "http://www.w3.org/2000/svg";
-  const clean = value => String(value).normalize("NFKD").replace(/\p{M}/gu, "")
-    .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-  const part = (id, label, query, aliases = []) => Object.freeze({
-    id, label, query, aliases: Object.freeze([...new Set([query, label, ...aliases].map(clean))]),
+  const normalizedWords = /^[a-z0-9]+(?: [a-z0-9]+)*$/;
+  const printableASCII = /^[\x20-\x7e]*$/;
+  const clean = value => {
+    value = String(value);
+    if (normalizedWords.test(value)) return value;
+    if (printableASCII.test(value)) return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    return value.normalize("NFKD").replace(/\p{M}/gu, "")
+      .toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  };
+  const part = (id, label, query, aliases = [], normalize = clean) => Object.freeze({
+    id, label, query, aliases: Object.freeze([...new Set([query, label, ...aliases].map(normalize))]),
   });
-  const definitions = [
-    {
-      id: "bicycle", label: "Bicycle", svg: true,
-      aliases: ["bike", "bikes", "bicycle", "bicycles", "ebike", "e-bike", "electric bike", "road bike", "mountain bike"],
-      parts: [
-        part("chain", "Chain", "chain", ["chains", "master link", "chain link"]),
-        part("tires", "Tires & Tubes", "tire", ["tires", "tyre", "tyres", "tube", "tubes", "flat", "flat tire"]),
-        part("brakes", "Brakes & Cables", "brake", ["brakes", "brake cable", "brake cables", "brake pads"]),
-        part("gears", "Gears & Derailleur", "derailleur", ["gear", "gears", "shifting", "shift", "shifter"]),
-        part("wheels", "Wheels & Spokes", "wheel", ["wheels", "spoke", "spokes", "rim", "rims"]),
-        part("handlebars", "Handlebars & Stem", "handlebar", ["handlebars", "stem", "grips"]),
-        part("seat", "Seat & Seatpost", "seat", ["saddle", "seatpost", "seat post"]),
-        part("pedals", "Pedals & Cranks", "pedal", ["pedals", "crank", "cranks", "crank arm"]),
-        part("bottom-bracket", "Bottom Bracket", "bottom bracket", ["bottom brackets"]),
-        part("fork", "Fork & Suspension", "fork", ["forks", "suspension"]),
-        part("lights", "Lights, Bell & Rust", "light", ["lights", "bell", "rust"]),
-      ],
-    },
-    {
-      id: "arm", label: "Arm", aliases: ["arm", "arms"],
-      parts: [part("pain", "Pain", "pain", ["hurts", "aches"]), part("swelling", "Swelling", "swelling", ["swollen"]),
-        part("injury", "Injury or fracture", "injury", ["fracture", "broken"]), part("numbness", "Numbness", "numbness", ["tingling"]),
-        part("elbow", "Elbow", "elbow"), part("wrist", "Wrist", "wrist"), part("shoulder", "Shoulder", "shoulder")],
-    },
-    {
-      id: "laptop", label: "Laptop", aliases: ["laptop", "laptops", "computer", "macbook", "notebook"],
-      parts: [part("battery", "Battery & charging", "battery", ["charging", "charger"]), part("screen", "Screen", "screen", ["display"]),
-        part("keyboard", "Keyboard", "keyboard", ["keys"]), part("trackpad", "Trackpad", "trackpad", ["touchpad"]),
-        part("wifi", "Wi-Fi", "wifi", ["wi fi", "wireless"]), part("fan", "Fan & overheating", "fan", ["overheating", "hot"]),
-        part("power", "Power & startup", "power", ["startup", "boot"]), part("audio", "Sound", "audio", ["sound", "speaker"])],
-    },
-    {
-      id: "phone", label: "Phone", aliases: ["phone", "phones", "smartphone", "iphone", "mobile phone"],
-      parts: [part("screen", "Screen", "screen", ["display"]), part("battery", "Battery", "battery"),
-        part("charging", "Charging port", "charging port", ["charger", "charging"]), part("camera", "Camera", "camera"),
-        part("speaker", "Speaker & microphone", "speaker", ["microphone", "audio", "sound"]),
-        part("buttons", "Buttons", "button", ["buttons", "power button"]), part("water", "Water damage", "water damage", ["water", "wet"])],
-    },
-    {
-      id: "car", label: "Car", aliases: ["car", "cars", "truck", "vehicle"],
-      parts: [part("battery", "Battery", "battery"), part("tires", "Tires", "tire", ["tires", "tyre", "flat"]),
-        part("brakes", "Brakes", "brake", ["brakes"]), part("engine", "Engine", "engine"), part("oil", "Oil & leaks", "oil", ["leak", "leaks"]),
-        part("lights", "Lights", "light", ["lights", "headlight"]), part("starter", "Starting", "starter", ["starting", "start"]),
-        part("wipers", "Windshield wipers", "wiper", ["wipers"])],
-    },
-    {
-      id: "stove", label: "Stove", aliases: ["stove", "stoves", "oven", "range", "cooktop"],
-      parts: [part("burner", "Burners", "burner", ["burners"]), part("igniter", "Igniter", "igniter", ["ignition"]),
-        part("element", "Heating element", "heating element", ["element", "not heating"]), part("knob", "Knobs & controls", "knob", ["knobs", "controls"]),
-        part("door", "Oven door", "door", ["hinge"]), part("thermostat", "Temperature", "thermostat", ["temperature"])],
-    },
-    {
-      id: "toilet", label: "Toilet", aliases: ["toilet", "toilets"],
-      parts: [part("clog", "Clogged drain", "clog", ["clogged", "blocked"]), part("flapper", "Flapper & running water", "flapper", ["running"]),
-        part("fill-valve", "Fill valve", "fill valve"), part("leak", "Leaks", "leak", ["leaks", "leaking"]),
-        part("handle", "Flush handle", "handle", ["flush", "flushing"]), part("seat", "Seat", "seat")],
-    },
-    {
-      id: "refrigerator", label: "Refrigerator", aliases: ["refrigerator", "refrigerators", "fridge", "freezer"],
-      parts: [part("cooling", "Not cooling", "not cooling", ["warm", "cooling"]), part("seal", "Door seal", "door seal", ["seal", "gasket"]),
-        part("ice", "Ice maker", "ice maker", ["ice"]), part("leak", "Leaks", "leak", ["leaks", "leaking"]),
-        part("fan", "Fan & noise", "fan", ["noise", "noisy"]), part("thermostat", "Thermostat", "thermostat", ["temperature"])],
-    },
-    {
-      id: "jeans", label: "Jeans", aliases: ["jeans", "pants", "trousers", "denim"],
-      parts: [part("hole", "Holes & tears", "hole", ["holes", "tear", "tears", "ripped"]), part("zipper", "Zipper", "zipper", ["zip"]),
-        part("button", "Button", "button", ["buttons"]), part("seam", "Seams", "seam", ["seams"]),
-        part("hem", "Hem", "hem", ["hemming"]), part("pocket", "Pockets", "pocket", ["pockets"])],
-    },
-  ];
-  const pilot = window.mendSpecifierPilot;
-  const artURL = (id, value) => typeof value === "string" &&
-    new RegExp(`^/assets/art/${id}-[a-f0-9]{64}\\.json$`).test(value) ? value : "";
-  if (pilot?.version === 1 && Array.isArray(pilot.archetypes)) {
-    for (const item of pilot.archetypes) {
-      if (!item || typeof item.id !== "string" || !/^[a-z][a-z0-9-]{0,48}$/.test(item.id) || item.id === "bicycle") continue;
-      const index = definitions.findIndex(definition => definition.id === item.id);
-      if (typeof item.label !== "string" || !item.label.trim() || item.label.length > 100 ||
-          !Array.isArray(item.parts) || !item.parts.length || item.parts.length > 24 ||
-          !item.parts.every(value => value && /^[a-z][a-z0-9-]*$/.test(value.id) &&
-            typeof value.label === "string" && value.label.length <= 100 &&
-            typeof value.query === "string" && value.query.trim() && value.query.length <= 120 &&
-            Array.isArray(value.aliases) && value.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) ||
-          new Set(item.parts.map(value => value.id)).size !== item.parts.length ||
-          !Array.isArray(item.aliases) || !item.aliases.every(alias => typeof alias === "string" && alias.length <= 120)) continue;
-      const base = definitions[index] || { id: item.id, label: item.label, aliases: [] };
-      const definition = { ...base,
-        aliases: [...new Set([...base.aliases, ...item.aliases])],
-        parts: item.parts.map(value => part(value.id, value.label, value.query, value.aliases)),
-        artUrl: artURL(base.id, item.artUrl),
-      };
-      if (index < 0) definitions.push(definition); else definitions[index] = definition;
+  let definitions = [];
+  let aliases = new Map();
+  let exactAliases = new Map();
+  let prefixArt = new Map();
+  let nounWords = new Set();
+  const precise = value => {
+    value = String(value);
+    if (normalizedWords.test(value)) return value;
+    if (printableASCII.test(value)) return value.toLowerCase().trim().replace(/\s+/g, " ");
+    return value.normalize("NFKD").replace(/\p{M}/gu, "").toLowerCase().trim().replace(/\s+/g, " ");
+  };
+  const artURL = value => typeof value === "string" && /^\/api\/art\/[a-f0-9]{64}\.json$/.test(value) ? value : "";
+  const validText = (value, maximum = 160) => typeof value === "string" && Boolean(value.trim()) &&
+    value.length <= maximum && !/[\u0000-\u001f]/.test(value);
+  const resolve = subject => {
+    const key = precise(subject);
+    // Model punctuation is literal: SM-G991B and SMG991B are different inputs.
+    return exactAliases.get(key) || (/\p{N}/u.test(key) ? null : aliases.get(clean(key))) || null;
+  };
+
+  function configure(payload) {
+    const next = [], byId = new Map(), normalized = new Map(), exact = new Map();
+    const normalizedRanks = new Map(), exactRanks = new Map();
+    const prefixes = new Map(), words = new Set();
+    // Many nouns share the same lexical parts. Reuse validated immutable parts
+    // during this call; neither cache survives configuration or grows on edits.
+    const partCache = new Map(), cleanCache = new Map();
+    function cleanPart(value) {
+      let result = cleanCache.get(value);
+      if (result === undefined) { result = clean(value); cleanCache.set(value, result); }
+      return result;
     }
+    function preparePart(value) {
+      if (!value || !validText(value.id) || !Array.isArray(value.aliases)) return null;
+      const cached = partCache.get(value.id);
+      for (const entry of cached || []) {
+        const source = entry.source;
+        if (source.label === value.label && source.query === value.query && source.aliases.length === value.aliases.length &&
+            source.aliases.every((alias, index) => alias === value.aliases[index])) return entry.part;
+      }
+      if (!validText(value.label, 100) || !validText(value.query, 120) ||
+          value.aliases.some(alias => !validText(alias, 120))) return null;
+      const prepared = part(value.id, value.label, value.query, value.aliases, cleanPart);
+      if (cached) cached.push({ source: value, part: prepared });
+      else partCache.set(value.id, [{ source: value, part: prepared }]);
+      return prepared;
+    }
+    function claim(map, ranks, key, definition, rank) {
+      const previous = map.get(key);
+      const previousRank = ranks.get(key) ?? Infinity;
+      // Releases rank competing senses at build time. Legacy payloads without
+      // ranks retain their original order; the browser names no special nouns.
+      const preferred = !previous || rank < previousRank || rank === previousRank && rank !== Infinity &&
+        (definition.guideCount > previous.guideCount || definition.guideCount === previous.guideCount && definition.id < previous.id);
+      if (preferred) { map.set(key, definition); ranks.set(key, rank); }
+      return !previous;
+    }
+    if (payload?.version !== 1 || !Array.isArray(payload.archetypes)) return false;
+    for (const item of payload.archetypes) {
+      if (!item || !validText(item.id) || byId.has(item.id) || !validText(item.label, 100) ||
+          !Number.isInteger(item.guideCount) || item.guideCount <= 0 ||
+          !Array.isArray(item.aliases) || item.aliases.some(alias => !validText(alias)) ||
+          !Array.isArray(item.parts) || item.parts.length > 24) continue;
+      const preparedParts = [], partIDs = new Set();
+      let validParts = true;
+      for (const value of item.parts) {
+        const prepared = preparePart(value);
+        if (!prepared || partIDs.has(prepared.id)) { validParts = false; break; }
+        partIDs.add(prepared.id); preparedParts.push(prepared);
+      }
+      if (!validParts) continue;
+      const definition = Object.freeze({ id: item.id, label: item.label,
+        aliases: Object.freeze([...new Set([item.label, ...item.aliases])]),
+        parts: Object.freeze(preparedParts),
+        guideCount: item.guideCount, artUrl: artURL(item.artUrl),
+      });
+      next.push(definition); byId.set(definition.id, definition);
+      for (const alias of definition.aliases) {
+        const key = clean(alias);
+        const rank = item.aliasRanks && Object.hasOwn(item.aliasRanks, key) && Number.isSafeInteger(item.aliasRanks[key])
+          ? item.aliasRanks[key] : Infinity;
+        claim(exact, exactRanks, precise(alias), definition, rank);
+        if (claim(normalized, normalizedRanks, key, definition, rank)) {
+          for (const word of key.split(" ")) if (word.length >= 2) words.add(word);
+        }
+        if (definition.artUrl) {
+          for (let count = 3; count <= Math.min(key.length, 24); count++) {
+            const prefix = key.slice(0, count);
+            const rows = prefixes.get(prefix) || [];
+            if (rows.length < 2 && !rows.includes(definition)) rows.push(definition);
+            prefixes.set(prefix, rows);
+          }
+        }
+      }
+    }
+    for (const model of Array.isArray(payload.models) ? payload.models : []) {
+      const definition = byId.get(model?.nounId);
+      if (!definition || !validText(model.name)) continue;
+      const key = precise(model.name);
+      if (!exact.has(key)) exact.set(key, definition);
+    }
+    definitions = next; aliases = normalized; exactAliases = exact;
+    prefixArt = prefixes; nounWords = words;
+    window.dispatchEvent?.(new Event("mend:specifiersready"));
+    return true;
   }
-  const aliases = new Map();
-  for (const definition of definitions) {
-    Object.freeze(definition.parts);
-    Object.freeze(definition.aliases);
-    Object.freeze(definition);
-    for (const alias of definition.aliases) aliases.set(clean(alias), definition);
-  }
-  const resolve = subject => aliases.get(clean(subject)) || null;
 
   const artCache = new Map();
   const mounts = new WeakMap();
@@ -161,14 +172,9 @@
   function prefetch(subject) {
     const value = clean(subject);
     if (value.length < 3) return;
-    const exact = resolve(value);
+    const exact = resolve(subject);
     if (exact) { loadArt(exact, true); return; }
-    const matches = new Set();
-    for (const [alias, definition] of aliases) {
-      if (alias.startsWith(value) && definition.artUrl) matches.add(definition);
-      if (matches.size === 2) break;
-    }
-    for (const definition of matches) loadArt(definition);
+    for (const definition of prefixArt.get(value) || []) loadArt(definition);
   }
 
   window.addEventListener?.("mend:querychange", () => prefetch(window.mendHero?.query?.() || ""));
@@ -193,7 +199,7 @@
 
   function sourcedShape(descriptor, hit = false, inherited = { stroke: "none", width: 1.2 }, budget = { nodes: 0 }) {
     if (++budget.nodes > 1200) throw new Error("Diagram is too complex");
-    if (!Array.isArray(descriptor) || !shapeTags.has(descriptor[0])) throw new Error("Invalid bicycle shape");
+    if (!Array.isArray(descriptor) || !shapeTags.has(descriptor[0])) throw new Error("Invalid diagram shape");
     const [tag, attributes = {}, children = []] = descriptor;
     const stroke = attributes.stroke === undefined ? inherited.stroke : attributes.stroke;
     const requestedWidth = attributes["stroke-width"] === undefined ? inherited.width : Number(attributes["stroke-width"]);
@@ -201,7 +207,7 @@
     const node = svgNode(tag, {});
     for (const [key, value] of Object.entries(attributes)) {
       if (!shapeAttributes.has(key) || !["string", "number"].includes(typeof value) || /url\s*\(/i.test(String(value))) {
-        throw new Error("Invalid bicycle shape attribute");
+        throw new Error("Invalid diagram shape attribute");
       }
       if (hit && /^(?:fill|stroke|opacity|vector-effect)/.test(key)) continue;
       node.setAttribute(key, value);
@@ -222,7 +228,7 @@
         node.setAttribute("pointer-events", "stroke");
       }
     }
-    if (!Array.isArray(children)) throw new Error("Invalid bicycle shape children");
+    if (!Array.isArray(children)) throw new Error("Invalid diagram shape children");
     for (const child of children) node.append(sourcedShape(child, hit, { stroke, width }, budget));
     return node;
   }
@@ -231,7 +237,6 @@
     if (!art || typeof art.viewBox !== "string" || !Array.isArray(art.context) || !art.parts) return null;
     const box = art.viewBox.trim().split(/[\s,]+/).map(Number);
     if (box.length !== 4 || !box.every(Number.isFinite) || box[2] <= 0 || box[3] <= 0) return null;
-    if (definition.id === "bicycle" && !definition.parts.every(item => Array.isArray(art.parts[item.id]) && art.parts[item.id].length)) return null;
     try {
       const budget = { nodes: 0 };
       const svg = svgNode("svg", { class: "specifier-svg", viewBox: art.viewBox, role: "group", "aria-label": `${definition.label} parts` });
@@ -286,12 +291,12 @@
     const token = {};
     mounts.set(container, token);
     container.replaceChildren();
-    container.hidden = !definition;
-    if (!definition) return null;
+    container.hidden = !definition || !definition.parts.length;
+    if (!definition || !definition.parts.length) return null;
     container.setAttribute("aria-label", `${definition.label} parts and symptoms`);
     const groups = new Map(), options = new Map();
     const cached = definition.artUrl ? artCache.get(definition.artUrl)?.data : null;
-    let svg = diagramSVG(definition, definition.id === "bicycle" ? window.mendBicycleArt : cached, groups);
+    let svg = diagramSVG(definition, cached, groups);
     container.classList.toggle("is-list-only", !svg);
     const list = document.createElement("span");
     list.className = "specifier-list";
@@ -390,5 +395,8 @@
     };
   }
 
-  window.mendSpecifiers = Object.freeze({ resolve, nouns: Object.freeze([...aliases.keys()]), mount, prefetch });
+  window.mendSpecifiers = Object.freeze({ resolve, configure, mount, prefetch,
+    isWord: word => nounWords.has(precise(word)),
+    get nouns() { return Object.freeze([...aliases.keys()]); },
+  });
 })();

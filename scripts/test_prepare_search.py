@@ -1,9 +1,11 @@
 import base64
 import copy
+from contextlib import closing
 import gzip
 import hashlib
 import json
 from pathlib import Path
+import sqlite3
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -44,6 +46,47 @@ def fixture():
                       ["three", "Refrigerator Thermostat", "household", "guide", "Refrigerator"]],
             "search": {"version": 1, "groups": ["", "laptop\nnotebook", "fridge\nrefrigerator"],
                        "itemGroups": [1, 1, 2], "sources": [{"license": "CC0-1.0"}]}}
+
+
+class NounEnrichmentTests(unittest.TestCase):
+    def test_aliases_stay_on_linked_guides_and_part_aliases_require_direct_component(self):
+        index = fixture()
+        index["items"].append(["four", "MacBook A1708 Screen Repair", "technology", "guide", "MacBook A1708"])
+        index["search"]["itemGroups"].append(1)
+        index["archetypes"] = {"version": 1, "archetypes": [{
+            "id": "laptop", "aliases": ["laptop", "notebook", "Model A1709"],
+            "parts": [{"query": "battery", "aliases": ["power cell", "cells", "cell CR2032"]}],
+        }]}
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "catalog.sqlite"
+            with closing(sqlite3.connect(database)) as db:
+                db.executescript("CREATE TABLE items(id,title,device,kind); CREATE TABLE guide_nouns(guide_id,noun_id);")
+                db.executemany("INSERT INTO items VALUES(?,?,?,?)", [(row[0], row[1], row[4], row[3]) for row in index["items"]])
+                db.executemany("INSERT INTO guide_nouns VALUES(?,?)", [("one", "laptop"), ("two", "laptop"), ("four", "laptop")])
+                db.commit()
+            extra = search.noun_terms(index, database)
+            self.assertEqual(set(extra), {"one", "four"}, "Topic rows must not receive semantic postings")
+            self.assertEqual(extra["one"], {"laptop", "notebook", "power", "cell", "cells"})
+            self.assertEqual(extra["four"], {"laptop", "notebook"}, "A shared laptop noun cannot give every guide battery aliases")
+            postings = unpack(search.prepare_index(index, noun_records=extra))
+            self.assertEqual(postings["cell"], [0])
+            self.assertEqual(postings["notebook"], [0, 3, 5], "Keep old alias-group posting positions intact")
+            self.assertNotIn("a1709", postings, "Numeric aliases must not weaken the strict literal model gate")
+            self.assertNotIn("cr2032", postings)
+            self.assertNotIn("model", postings)
+
+    def test_link_missing_from_compact_index_is_rejected(self):
+        index = fixture()
+        index["archetypes"] = {"version": 1, "archetypes": [{"id": "noun", "aliases": ["object"], "parts": []}]}
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "catalog.sqlite"
+            with closing(sqlite3.connect(database)) as db:
+                db.executescript("CREATE TABLE items(id,title,device,kind); CREATE TABLE guide_nouns(guide_id,noun_id);")
+                db.execute("INSERT INTO items VALUES('missing','Unknown','Object','guide')")
+                db.execute("INSERT INTO guide_nouns VALUES('missing','noun')")
+                db.commit()
+            with self.assertRaisesRegex(ValueError, "absent from the catalog"):
+                search.noun_terms(index, database)
 
 
 class SearchPreparationTests(unittest.TestCase):

@@ -89,7 +89,10 @@ charges for those failures.
 
 ## Runtime and measurements
 
-`assets/specifier-pilot.js` supplies the small resident registry. Lists appear
+The original experiment supplied a small generated resident registry. The
+[current release pipeline](catalog-pipeline.md) replaces it with catalog-backed
+metadata and imports only approved artwork. Experimental compiler output now
+stays in `catalog-data/build/diagram-pilot/published/`. Lists appear
 synchronously. Diagrams use same-origin, content-hashed JSON fetched at most once
 per cached asset. Prefix prefetch and post-catalog idle warming reduce cold
 loads; there is no claim of zero network latency. Fetches are capped at two in
@@ -99,7 +102,8 @@ Failed artwork can be retried by refreshing.
 Lazy insertion preserves the connected list, its scroll position, selection, and
 native input focus. A stale response cannot replace a newer subject. Only mapped
 regions highlight; a list-only symptom does not dim every physical region.
-Go prepares JSON gzip and ETags at startup; hashed artifacts are immutable.
+The release builder prepares JSON gzip; Go caches its representations and ETags.
+Hashed artifacts are immutable.
 Static credits are generated from the same approved manifest on the unlinked
 `/credits` page, with notices retained in diagram metadata.
 

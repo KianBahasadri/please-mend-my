@@ -70,7 +70,7 @@ def update_credits(page: Path, manifest: dict) -> None:
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=root / "assets/art/manifest.json")
+    parser.add_argument("--manifest", type=Path, default=root / "catalog-data/build/diagram-pilot/published/art/manifest.json")
     parser.add_argument("--page", type=Path, default=root / "credits.html")
     args = parser.parse_args()
     update_credits(args.page, json.loads(args.manifest.read_text()))

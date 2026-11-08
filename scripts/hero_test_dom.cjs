@@ -105,6 +105,15 @@ class Element extends EventTarget {
     }
   }
   appendChild(child) { this.append(child); return child; }
+  insertBefore(child, reference) {
+    if (reference === null) { this.append(child); return child; }
+    if (!this.children.includes(reference)) throw new Error('Insertion reference is not a child');
+    if (child === reference) return child;
+    if (child.parentNode) child.parentNode.children.splice(child.parentNode.children.indexOf(child), 1);
+    this.children.splice(this.children.indexOf(reference), 0, child);
+    child.parentNode = this;
+    return child;
+  }
   replaceChildren(...children) { for (const child of this.children) child.parentNode = null; this.children = []; this.append(...children); }
   contains(target) { return target === this || this.children.some(child => child.contains?.(target)); }
   matches(selector) {

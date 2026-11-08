@@ -1,16 +1,16 @@
-The specifier registry lives in `assets/specifiers.js`, loaded before the hero
-controller. `resolve(subject)` maps local aliases to one definition; `nouns`
-exposes the supported subject vocabulary. `mount(container, subject, onSelect)`
-returns `sync(answer)` and `destroy()`. The registry previews and selects parts;
-only the hero writes the native answer. Unknown subjects hide the container.
-New diagrams use prepared geometry descriptors alongside their parts, canonical
-queries, and aliases. The renderer builds inline SVG from local data; published
-JSON artifacts need no catalog rebuild.
+The specifier controller lives in `assets/specifiers.js`, loaded before the hero.
+Its registry is populated from the active [catalog release](catalog-pipeline.md),
+not a fixed list of objects. `configure(payload)` builds resident aliases and
+literal model maps; `resolve(subject)` and `isWord(token)` are synchronous.
+`mount(container, subject, onSelect)` returns `sync(answer)` and `destroy()`.
+Only the hero writes the native answer. Unknown subjects hide the container.
 
-The [eight-subject pilot](diagram-pilot.md) adds a generated resident registry and
-lazy local JSON artwork. Its phone diagram maps screen, buttons, and speaker;
-the other seven experimental subjects retain lists. Source and final-byte review
-pins gate publication. The original synchronous bicycle path remains available.
+The worker includes the registry in its initial ready message. The page configures
+it before setting the hero vocabulary. Parts appear immediately; approved geometry
+loads from `/api/art/<sha256>.json` and preserves a connected list when inserted.
+The [eight-subject pilot](diagram-pilot.md) is retained as a build experiment and
+source-review record. Its reviewed phone artwork and existing bicycle geometry
+are inputs to the release, rather than separate runtime modules.
 
 The bicycle uses actual geometry from Al2 and contributors' [Bicycle diagram](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg),
 choosing its [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/),
@@ -22,10 +22,10 @@ The original files, source URLs, hashes, and license records are pinned in
 [`docs/references/bicycle/`](references/bicycle/).
 
 `scripts/prepare_bicycle_art.py` prepares safe monochrome geometry descriptors
-offline from those pinned originals. Its generated `assets/bicycle-art.js` loads
-before the registry and exposes `window.mendBicycleArt`. The registry builds
-interactive groups from that local data; no drawing is fetched or parsed from
-an external service during use. Regeneration and consistency checking run with:
+offline from those pinned originals. Its generated build fixture is
+`scripts/data/approved-bicycle-art.js`; the release builder emits hashed JSON
+geometry. The browser builds interactive groups from that local data; no drawing
+is fetched or parsed from an external service during use. Regeneration and consistency checking run with:
 
 ```sh
 python3 scripts/prepare_bicycle_art.py
@@ -69,7 +69,7 @@ devices; words inside broad aliases still carry their alias penalty. Bare
 `bike` plus a component resolves the Bicycle/Motorcycle ambiguity toward Bicycle;
 explicit dirt/motorcycle intent and exact titles retain priority.
 
-Local measurements used the unchanged 207,691-item `ac9690ea…` release. The Node
+Historical measurements below used the unchanged 207,691-item `ac9690ea…` release. The Node
 worker benchmark measures computation, excluding browser/network/paint. Targeted
 probes include a synthetic structured clone of the startup dictionary.
 

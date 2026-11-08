@@ -84,6 +84,24 @@ test('prepared aliases combine with title terms, prefixes work, and exact titles
   assert.equal(worker.fetches(), 1, 'queries must not make additional requests');
 });
 
+test('the worker sends release archetypes once with readiness and never refetches them per query', async () => {
+  const index = fixture();
+  index.archetypes = { version: 1, revision: index.revision, archetypes: [{
+    id: 'oewn-fixture-laptop-n', label: 'Laptop', aliases: ['laptop'], guideCount: 2,
+    parts: [{ id: 'battery', label: 'Battery', query: 'battery', aliases: ['battery'] }], artUrl: null,
+  }], models: [{ name: 'MacBook A2179', nounId: 'oewn-fixture-laptop-n' }] };
+  const worker = await workerFor(prepare(index));
+  assert.equal(typeof worker.ready.archetypesJSON, 'string');
+  assert.deepEqual(JSON.parse(worker.ready.archetypesJSON), index.archetypes);
+  assert.equal(worker.ready.archetypes, undefined, 'the object is not also copied across the worker boundary');
+  await worker.search('laptop battery');
+  await worker.search('MacBook A2179');
+  assert.equal(worker.fetches(), 1);
+  assert.equal(worker.messages.some(message => message.type === 'ready'), false);
+  const legacy = await workerFor(prepare(fixture()));
+  assert.equal(legacy.ready.archetypesJSON, '', 'legacy catalogs do not gain a hardcoded noun subset');
+});
+
 function symptomFixture() {
   const anaphylaxis = '00000000000000000001';
   const other = '00000000000000000002';

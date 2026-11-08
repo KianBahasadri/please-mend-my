@@ -24,12 +24,20 @@ class ReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.data, self.releases = self.root / "build", self.root / "releases"
         # Every mutable input is a tiny fixture, independent of source builds.
-        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES"):
+        for name in builder.PIPELINE_INPUT_NAMES:
             path = self.root / (name.lower() + ".py")
             path.write_text("# pinned fixture " + name + "\n")
             fixture = patch.object(builder, name, path)
             fixture.start()
             self.addCleanup(fixture.stop)
+        bicycle_sources = []
+        for number in range(2):
+            path = self.root / ("bicycle-source-" + str(number) + ".svg")
+            path.write_text("<svg/>")
+            bicycle_sources.append(path)
+        fixture = patch.object(builder, "BICYCLE_SOURCES", tuple(bicycle_sources))
+        fixture.start()
+        self.addCleanup(fixture.stop)
         self.ingest, self.wikimed = builder.INGEST, builder.WIKIMED
         self.space = patch.object(builder.shutil, "disk_usage", return_value=type("Space", (), {"free": 64 * 1024**3})())
         self.space.start()
@@ -86,7 +94,22 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(args[1:5], ["run", "--python", builder.PYTHON_VERSION, "--script"])
         script = self.script(args)
         self.commands.append(script)
-        if script == builder.INGEST:
+        if script == builder.SEED_NOUNS:
+            self.assertEqual(self.argument(args, "--data-dir"), self.data)
+            (self.data / "nouns").mkdir(exist_ok=True)
+            (self.data / "nouns/seed.sqlite").write_bytes(b"seed fixture")
+        elif script == builder.LINK_NOUNS:
+            self.assertEqual(self.argument(args, "--database"), self.data / "nouns/catalog.sqlite")
+            self.assertEqual(self.argument(args, "--seed-database"), self.data / "nouns/seed.sqlite")
+            self.assertTrue(self.argument(args, "--index").is_file())
+            (self.data / "nouns/catalog.sqlite").write_bytes(b"linked fixture")
+            (self.data / "nouns/gaps.json").write_text('{"unfilled":[]}')
+        elif script == builder.ARCHETYPES:
+            runtime = self.argument(args, "--runtime-dir")
+            self.assertEqual(self.argument(args, "--database"), self.data / "nouns/catalog.sqlite")
+            self.update_manifest(runtime, archetypes={"version": 1, "count": 3, "models": 0},
+                                 diagramCredits={"bytes": 0, "sha256": "e" * 64})
+        elif script == builder.INGEST:
             self.assertEqual(self.argument(args, "--data-dir"), self.data)
             self.write_runtime(self.data / "runtime", ["ifixit"])
         elif script == builder.ENRICH:
@@ -131,9 +154,10 @@ class ReleaseTests(unittest.TestCase):
     def test_publish_then_reuse_without_running_ingestion(self):
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command) as run:
             release = builder.build_release(self.data, self.releases)
-            self.assertEqual(run.call_count, 7)
-        self.assertEqual(self.commands, [builder.INGEST, builder.ENRICH, builder.WIKIMED, builder.FIRST_AID, builder.MERGE,
-                                         builder.SEARCH_INDEX])
+            self.assertEqual(run.call_count, 10)
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.INGEST, builder.ENRICH, builder.WIKIMED,
+                                         builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS,
+                                         builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual(release.name, builder.pipeline_key(self.data / "stage3_cache"))
         self.assertTrue((self.data / "runtime/source-build.json").is_file())
         self.assertTrue((self.data / "wikimed/runtime/manifest.json").is_file())
@@ -196,7 +220,7 @@ class ReleaseTests(unittest.TestCase):
             self.wikimed.write_text("# changed WikiMed archive pin\n")
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         self.assertEqual((self.data / "runtime/manifest.json").read_bytes(), ifixit_manifest)
         self.assertEqual((first / "index.json").read_bytes(), first_index)
         self.assertTrue((second / "ingest.json").is_file())
@@ -213,7 +237,7 @@ class ReleaseTests(unittest.TestCase):
             self.commands.clear()
             second = builder.build_release(self.data, self.releases)
         self.assertNotEqual(first, second)
-        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
         receipt = json.loads((second / "ingest.json").read_bytes())
         self.assertEqual(receipt["structuredGuides"]["processedItems"], 0)
         self.assertEqual(receipt["structuredGuides"]["rejectedItems"], 1)
@@ -288,7 +312,7 @@ class ReleaseTests(unittest.TestCase):
         self.commands.clear()
         with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
             builder.build_release(self.data, self.releases)
-        self.assertEqual(self.commands, [builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.SEARCH_INDEX])
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.WIKIMED, builder.FIRST_AID, builder.MERGE, builder.LINK_NOUNS, builder.ARCHETYPES, builder.SEARCH_INDEX])
 
     def test_incomplete_wikimed_cannot_reach_merge(self):
         previous = self.previous_release()
@@ -363,7 +387,7 @@ class ReleaseTests(unittest.TestCase):
 
     def test_pipeline_key_tracks_every_script_and_pinned_runtime(self):
         original = builder.pipeline_key(self.data / "stage3_cache")
-        for name in ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "MERGE", "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES"):
+        for name in builder.PIPELINE_INPUT_NAMES:
             with self.subTest(input=name):
                 path = getattr(builder, name)
                 data = path.read_bytes()
@@ -388,6 +412,57 @@ class ReleaseTests(unittest.TestCase):
                 builder.build_release(self.data, self.releases)
         self.assertFalse((self.releases / original_key).exists())
         self.assert_not_published(previous)
+
+    def test_repack_snapshot_uses_same_noun_stages_without_ingestion_or_body_reads(self):
+        source = self.root / "existing"
+        self.write_runtime(source, ["ifixit", "wikimed", "first-aid"])
+        before_manifest = (source / "manifest.json").read_bytes()
+        read = Path.read_bytes
+        def compact_only(path):
+            self.assertNotIn(path.parent.name, {"guides", "media"}, "Repacking must never parse raw bodies")
+            return read(path)
+        with patch.object(builder.subprocess, "run", side_effect=self.fake_command), patch.object(Path, "read_bytes", compact_only):
+            release = builder.build_release(self.data, self.releases, source_runtime=source)
+        self.assertEqual(self.commands, [builder.SEED_NOUNS, builder.LINK_NOUNS,
+                                         builder.ARCHETYPES, builder.SEARCH_INDEX])
+        self.assertEqual((source / "manifest.json").read_bytes(), before_manifest)
+        self.assertEqual((release / "guides/wikimed.json").stat().st_ino,
+                         (source / "guides/wikimed.json").stat().st_ino)
+        self.assertFalse((release / "gaps.json").exists())
+        self.assertFalse((release / "catalog.sqlite").exists())
+        self.assertEqual(release.stat().st_mode & 0o777, 0o755)
+        with patch.object(builder.subprocess, "run") as run:
+            self.assertEqual(builder.build_release(self.data, self.releases, source_runtime=source), release)
+            run.assert_not_called()
+
+    def test_repack_source_identity_changes_key(self):
+        source = self.root / "existing"
+        self.write_runtime(source, ["ifixit", "wikimed", "first-aid"])
+        key = builder.pipeline_key(self.data / "stage3_cache", source)
+        manifest = json.loads((source / "manifest.json").read_bytes())
+        manifest["extraSourceMetadata"] = "changed"
+        (source / "manifest.json").write_text(json.dumps(manifest))
+        self.assertNotEqual(builder.pipeline_key(self.data / "stage3_cache", source), key)
+
+    def test_processed_repack_rejects_changed_overlay_cache(self):
+        source = self.root / "existing"
+        self.write_runtime(source, ["ifixit", "wikimed", "first-aid"])
+        self.update_manifest(source, structuredGuides={"processedItems": 1, "cacheSha256": "different"})
+        with patch.object(builder.subprocess, "run", side_effect=self.fake_command):
+            with self.assertRaisesRegex(RuntimeError, "Processed source cache differs"):
+                builder.build_release(self.data, self.releases, source_runtime=source)
+        self.assertNotIn(builder.LINK_NOUNS, self.commands)
+        self.assertEqual(list(self.data.glob(".merge-*")), [])
+
+    def test_failed_archetype_stage_never_publishes(self):
+        def fail(args, **kwargs):
+            if self.script(args) == builder.ARCHETYPES:
+                raise subprocess.CalledProcessError(1, args)
+            return self.fake_command(args, **kwargs)
+        with patch.object(builder.subprocess, "run", side_effect=fail):
+            with self.assertRaises(subprocess.CalledProcessError):
+                builder.build_release(self.data, self.releases)
+        self.assert_not_published()
 
 
 class ConsoleKeyTests(unittest.TestCase):

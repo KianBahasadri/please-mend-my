@@ -2,7 +2,7 @@
 """Prepare local, attributed bicycle geometry from pinned reusable SVGs.
 
 No network, SVG interpretation, or arbitrary markup insertion occurs at runtime.
-Run normally to regenerate assets/bicycle-art.js; --check verifies exact bytes.
+Run normally to regenerate scripts/data/approved-bicycle-art.js; --check verifies exact bytes.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = ROOT / "docs/references/bicycle"
-OUTPUT = ROOT / "assets/bicycle-art.js"
+OUTPUT = ROOT / "scripts/data/approved-bicycle-art.js"
 PINNED = {
     "commons-bicycle-diagram.original.svg": "fb46ca1c99668629b8111776031bc5b09db9e17735f95642ab933461ada52605",
     "openclipart-bicycle.original.svg": "5e0d8b79821d231246e3b0616e0e12f52e903c9c4910bfd3023d6b83b3dc52e4",
@@ -208,7 +208,7 @@ def main() -> None:
     rendered = javascript(data)
     if args.check:
         if not OUTPUT.is_file() or OUTPUT.read_bytes() != rendered:
-            parser.error("assets/bicycle-art.js is stale; run this script without --check")
+            parser.error("scripts/data/approved-bicycle-art.js is stale; run this script without --check")
         print("Pinned sources and generated bicycle artwork match")
     else:
         OUTPUT.write_bytes(rendered)

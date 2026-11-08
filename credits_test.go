@@ -11,6 +11,8 @@ import (
 )
 
 func TestCreditsPageIsUnlinkedAndServedFromPreparedAssets(t *testing.T) {
+	directory, _, _ := archetypeFixture(t)
+	t.Setenv("CATALOG_DIR", directory)
 	handler := testHandler(t)
 	home := requestSite(handler, http.MethodGet, "/", "", "")
 	if strings.Contains(home.Body.String(), "/credits") {
@@ -30,10 +32,10 @@ func TestCreditsPageIsUnlinkedAndServedFromPreparedAssets(t *testing.T) {
 		for _, credit := range []string{
 			`name="robots" content="noindex"`,
 			"https://github.com/KianBahasadri/please-mend-my",
-			"Al2 and Wikimedia Commons contributors",
+			"Artist &lt;script&gt;alert(1)&lt;/script&gt;",
 			"https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg",
 			"https://creativecommons.org/licenses/by/3.0/",
-			"WRomey", "https://openclipart.org/detail/3891/bicycle",
+			"Second artist", "https://openclipart.org/detail/3891/bicycle",
 			"https://creativecommons.org/publicdomain/zero/1.0/",
 		} {
 			if !bytes.Contains(plain.Body.Bytes(), []byte(credit)) {

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "notices": [
+    {
+      "file": "OEWN-LICENSE.md",
+      "url": "https://raw.githubusercontent.com/globalwordnet/english-wordnet/dc343f2683279ecbb13fab4e2fd778d7b162d287/LICENSE.md",
+      "bytes": 19863,
+      "sha256": "672cc8b5663e8dc74c4b07a9dcf477193853575b119908fd3dc0aeeb60a9dbbb"
+    },
+    {
+      "file": "wordfreq-LICENSE.txt",
+      "url": "https://raw.githubusercontent.com/rspeer/wordfreq/master/LICENSE.txt",
+      "bytes": 675,
+      "sha256": "8990c551671a51765c4dfe9428f3e1d58dc327f49aca346a32d28cc0fcc7aa88"
+    },
+    {
+      "file": "wordfreq-NOTICE.md",
+      "url": "https://raw.githubusercontent.com/rspeer/wordfreq/master/NOTICE.md",
+      "bytes": 2891,
+      "sha256": "d9b104dafe63886af55e7cea7484824e32e12d4e1f57f319923dd643b36d6b15"
+    }
+  ]
+}

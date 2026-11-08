@@ -1,5 +1,6 @@
 The bicycle art reuses two published SVGs. Their original bytes are retained here;
-the browser receives only the offline-prepared geometry in `assets/bicycle-art.js`.
+the browser receives only the offline-prepared geometry in the selected catalog release.
+The byte-for-byte build fixture is `scripts/data/approved-bicycle-art.js`.
 
 “Bicycle diagram” by Al2 and Wikimedia Commons contributors:
 

@@ -1,6 +1,7 @@
 // Measures the real worker's search computation without opening a browser.
 const fs = require('node:fs');
 const os = require('node:os');
+const path = require('node:path');
 const vm = require('node:vm');
 const { performance } = require('node:perf_hooks');
 const { spawnSync } = require('node:child_process');
@@ -66,6 +67,36 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     throw new Error('Worker did not reply within 30 seconds');
   }
   const ready = await next('ready');
+  const workerToReadyMs = performance.now() - catalogStarted;
+  let registryPrepareMs = 0, registryCloneMs = 0, registryParseMs = 0, registryConfigureMs = 0,
+    registryLookupP95Ms = 0, residentRegistry, registryPayload;
+  if (ready.archetypesJSON || ready.archetypes) {
+    const registryStarted = performance.now();
+    // Mirror the worker's structured-clone boundary, then build the main-page
+    // synchronous alias/model maps. Geometry remains outside this payload.
+    const received = structuredClone(ready.archetypesJSON || ready.archetypes);
+    registryCloneMs = performance.now() - registryStarted;
+    const parseStarted = performance.now();
+    const payload = typeof received === 'string' ? JSON.parse(received) : received;
+    registryPayload = payload;
+    registryParseMs = performance.now() - parseStarted;
+    const page = vm.createContext({ window: {}, Event: class {} });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/specifiers.js'), 'utf8'), page);
+    const configureStarted = performance.now();
+    if (!page.window.mendSpecifiers.configure(payload)) throw new Error('Invalid resident archetype registry');
+    registryConfigureMs = performance.now() - configureStarted;
+    residentRegistry = page.window.mendSpecifiers;
+    registryPrepareMs = performance.now() - registryStarted;
+    const names = [...payload.archetypes.map(item => item.aliases[0] || item.label),
+      ...(payload.models || []).map(item => item.name)];
+    const lookups = [];
+    for (let offset = 0; offset < names.length; offset += Math.max(1, Math.floor(names.length / 1000))) {
+      const started = performance.now();
+      if (!residentRegistry.resolve(names[offset])) throw new Error('Published noun/model did not resolve: ' + names[offset]);
+      lookups.push(performance.now() - started);
+    }
+    registryLookupP95Ms = lookups.length ? percentiles(lookups).p95Ms : 0;
+  }
   const catalogToReadyMs = performance.now() - catalogStarted;
   const after = await settledMemory();
   const preparedHeapMiB = (after.heapUsed - before.heapUsed) / 1024 ** 2;
@@ -128,6 +159,14 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
     invertedIndex: ready.invertedIndex || false, termCount: ready.termCount || 0,
     indexJsonBytes: fs.statSync(indexPath).size,
     indexGzipBytes: fs.existsSync(packed) ? fs.statSync(packed).size : null,
+    archetypeCount: registryPayload?.archetypes?.length || 0,
+    modelCount: registryPayload?.models?.length || 0,
+    artCount: new Set((registryPayload?.archetypes || []).map(item => item.artUrl).filter(Boolean)).size,
+    registryJsonBytes: registryPayload ? Buffer.byteLength(JSON.stringify(registryPayload)) : 0,
+    registryPrepareMs: rounded(registryPrepareMs), registryCloneMs: rounded(registryCloneMs),
+    registryParseMs: rounded(registryParseMs),
+    registryConfigureMs: rounded(registryConfigureMs), registryLookupP95Ms,
+    workerToReadyMs: rounded(workerToReadyMs),
     workerLoadMs: rounded(ready.loadDuration), catalogReadParseMs: rounded(catalogReadParseMs),
     catalogToReadyMs: rounded(catalogToReadyMs), preparedHeapMiB: rounded(preparedHeapMiB),
     preparedExternalMiB: rounded(preparedExternalMiB), preparedArrayBufferMiB: rounded(preparedArrayBufferMiB),
@@ -139,6 +178,11 @@ async function benchmark(indexPath, sourcePath, firstOnlyQuery) {
 }
 
 (async () => {
+  if (invocation.length === 0) {
+    const directory = process.env.CATALOG_DIR || fs.readFileSync(path.join(__dirname, '../catalog-data/local-catalog.path'), 'utf8').trim();
+    console.log(JSON.stringify(await benchmark(path.join(directory, 'index.json'), path.join(__dirname, '../assets/search-worker.js')), null, 2));
+    return;
+  }
   if (invocation[0] === '--cold-query') {
     console.log(JSON.stringify(await benchmark(invocation[1], invocation[2], invocation[3])));
     return;

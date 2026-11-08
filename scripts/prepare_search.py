@@ -15,6 +15,7 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import sqlite3
 import stat
 import unicodedata
 
@@ -188,7 +189,66 @@ def guide_terms(guide_records):
     return result, literals
 
 
-def prepare_index(index, guide_records=None):
+def noun_terms(index, database):
+    """Expand aliases only on guides explicitly linked to their catalog noun.
+
+    A part alias requires direct title/device evidence for that part. Model and
+    numeric aliases never enter semantic expansion; their literal gate stays
+    separate from the word index.
+    """
+    if database is None:
+        return {}
+    registry = index.get("archetypes")
+    if not isinstance(registry, dict) or registry.get("version") != 1:
+        raise ValueError("Noun search enrichment requires the prepared archetype registry")
+    definitions = {}
+    for row in registry["archetypes"]:
+        alias_terms = set()
+        for alias in row["aliases"]:
+            if not any(char.isdigit() for char in alias):
+                alias_terms.update(tokens(alias))
+        parts = []
+        for part in row["parts"]:
+            query = tokens(part["query"])
+            aliases = set()
+            for alias in part["aliases"]:
+                if not any(char.isdigit() for char in alias):
+                    aliases.update(tokens(alias))
+            if query:
+                parts.append(({porter(term) for term in query}, aliases))
+        definitions[row["id"]] = alias_terms, parts
+    known = {row[0] for row in index["items"]}
+    expanded = defaultdict(set)
+    connection = sqlite3.connect(Path(database).resolve().as_uri() + "?mode=ro", uri=True)
+    try:
+        # Keep only one document's direct-token roots at a time. Creating token
+        # and stem sets for all 207k rows duplicates hundreds of MiB before the
+        # inverted postings have even been built.
+        current, roots = None, set()
+        rows = connection.execute(
+            "SELECT g.guide_id,g.noun_id,i.title,i.device FROM guide_nouns AS g "
+            "JOIN items AS i ON i.id=g.guide_id WHERE i.kind IN ('guide','article') "
+            "ORDER BY g.guide_id,g.noun_id")
+        for guide_id, noun_id, title, device in rows:
+            if guide_id not in known:
+                raise ValueError("Noun link refers to a guide absent from the catalog")
+            definition = definitions.get(noun_id)
+            if definition is None:
+                continue
+            if guide_id != current:
+                roots = {porter(term) for term in tokens(title) + tokens(device)}
+                current = guide_id
+            alias_terms, parts = definition
+            expanded[guide_id].update(alias_terms)
+            for query, aliases in parts:
+                if query <= roots:
+                    expanded[guide_id].update(aliases)
+    finally:
+        connection.close()
+    return expanded
+
+
+def prepare_index(index, guide_records=None, noun_records=None):
     """Return deterministic postings, optionally including v2 symptoms/materials."""
     items, categories, search = index.get("items"), index.get("categories"), index.get("search")
     if not isinstance(items, list) or not isinstance(categories, list) or not isinstance(search, dict):
@@ -211,6 +271,8 @@ def prepare_index(index, guide_records=None):
         if not isinstance(row, list) or len(row) < 5:
             raise ValueError("Search rows must retain the five-field catalog shape.")
         own = set(tokens(row[1])) | set(tokens(row[4])) | set(tokens(names.get(row[2], "")))
+        if noun_records is not None:
+            own.update(noun_records.get(row[0], ()))
         if extra and row[0] in extra:
             if row[0] not in unseen:
                 raise ValueError("Structured guide ID occurs more than once in the catalog.")
@@ -288,7 +350,7 @@ def load_guide_records(runtime, index, manifest):
     return records
 
 
-def prepare(data_dir, runtime=None):
+def prepare(data_dir, runtime=None, noun_database=None):
     """Prepare an unpublished completed runtime; never mutate a served release."""
     data_dir = Path(data_dir).resolve()
     runtime = Path(runtime).resolve() if runtime else data_dir / "runtime"
@@ -300,7 +362,8 @@ def prepare(data_dir, runtime=None):
             manifest.get("searchEnrichment", {}).get("version") != 1):
         raise ValueError("Inverted search preparation requires a completed unpublished enriched catalog.")
     records = load_guide_records(runtime, index, manifest)
-    prepared = prepare_index(index, records)
+    semantic = noun_terms(index, noun_database)
+    prepared = prepare_index(index, records, semantic)
     index["search"]["inverted"] = prepared
     body = json_bytes(index)
     packed = gzip.compress(body, compresslevel=9, mtime=0)
@@ -312,6 +375,7 @@ def prepare(data_dir, runtime=None):
                 "terms": len(prepared["terms"]), "stems": len(prepared["stemTerms"]),
                 "documents": prepared["documents"], "groups": prepared["groups"],
                 "structuredDocuments": len(records), "guideFields": ["symptoms", "materials"],
+                "nounDocuments": len(semantic),
                 "indexSha256": hashlib.sha256(body).hexdigest()}
     manifest.update({"runtimeComplete": True, "indexBytes": len(body), "indexGzipBytes": len(packed),
                      "searchIndex": metadata})
@@ -325,5 +389,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "catalog-data")
     parser.add_argument("--runtime-dir", type=Path, help="Unpublished runtime; never modify a live release.")
+    parser.add_argument("--noun-database", type=Path, help="Build-only noun/model links from all merged sources.")
     args = parser.parse_args()
-    prepare(args.data_dir, args.runtime_dir)
+    prepare(args.data_dir, args.runtime_dir, args.noun_database)
