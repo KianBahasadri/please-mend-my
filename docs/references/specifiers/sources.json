@@ -1,0 +1,537 @@
+{
+  "version": 1,
+  "archetypes": [
+    {
+      "id": "arm",
+      "candidates": [
+        {
+          "id": "arm-1daef4de0f37",
+          "title": "Human arm bones diagram.svg",
+          "author": "LadyofHats Mariana Ruiz Villarreal",
+          "source": "https://commons.wikimedia.org/wiki/File:Human_arm_bones_diagram.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/4/49/Human_arm_bones_diagram.svg",
+          "file": "arm-1daef4de0f375f47.original.svg",
+          "sha256": "1daef4de0f375f4764e0114d0e0f5271505181ca986a90bfab8d26e56aa5011e",
+          "bytes": 406117,
+          "license": "Public domain",
+          "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+          "revision": "2019-09-22T03:19:29Z",
+          "upstreamSha1": "1405602fa71d34b6ff92cc62f542c47091c04575",
+          "structure": {
+            "shapes": 555,
+            "groups": 157,
+            "labels": 23,
+            "viewBox": "0 17 870 753"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "upper limb anatomy diagram"
+        },
+        {
+          "id": "arm-20dfc2a29709",
+          "title": "Human arm bones diagram zh.svg",
+          "author": "File:Human arm bones diagram.svg : LadyofHats Mariana Ruiz Villarreal derivative work: GnolizX",
+          "source": "https://commons.wikimedia.org/wiki/File:Human_arm_bones_diagram_zh.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/4/4d/Human_arm_bones_diagram_zh.svg",
+          "file": "arm-20dfc2a297099671.original.svg",
+          "sha256": "20dfc2a297099671e374c372c56ecfc8b9fe0c5298fba3e78cf1b99a8720fcae",
+          "bytes": 409094,
+          "license": "Public domain",
+          "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+          "revision": "2019-06-16T04:39:45Z",
+          "upstreamSha1": "cf1f879d0e5b0a512d33fc2a2326421db560538c",
+          "structure": {
+            "shapes": 557,
+            "groups": 136,
+            "labels": 23,
+            "viewBox": null
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "human arm bones labeled"
+        }
+      ],
+      "queries": [
+        "human arm bones labeled",
+        "upper limb anatomy diagram"
+      ]
+    },
+    {
+      "id": "laptop",
+      "candidates": [
+        {
+          "id": "laptop-9decf7b0a5dc",
+          "title": "Black laptop.svg",
+          "author": "ilnanny",
+          "source": "https://commons.wikimedia.org/wiki/File:Black_laptop.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/5/5c/Black_laptop.svg",
+          "file": "laptop-9decf7b0a5dc8df4.original.svg",
+          "sha256": "9decf7b0a5dc8df47c644a7fe2c5f09f027a76516c8ae1fdfa8ac246f49a1318",
+          "bytes": 189650,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "revision": "2022-09-25T01:15:39Z",
+          "upstreamSha1": "74165e383860505f50dc5290e534ede64d2527d1",
+          "structure": {
+            "shapes": 344,
+            "groups": 7,
+            "labels": 0,
+            "viewBox": "0 0 512 512"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "laptop-5c40a3f1b97f",
+          "title": "Laptop (NIH BioArt 734 - 791300).svg",
+          "author": "Courtesy of NIAID Ryan Kissinger",
+          "source": "https://commons.wikimedia.org/wiki/File:Laptop_(NIH_BioArt_734_-_791300).svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/a/a3/Laptop_%28NIH_BioArt_734_-_791300%29.svg",
+          "file": "laptop-5c40a3f1b97f94c2.original.svg",
+          "sha256": "5c40a3f1b97f94c2e5515d2a489165d778abffde84d186f093042743b68a53ac",
+          "bytes": 4693,
+          "license": "Public domain",
+          "licenseUrl": "https://creativecommons.org/publicdomain/mark/1.0/",
+          "revision": "2026-09-11T18:59:18Z",
+          "upstreamSha1": "26453431c1e6de4c675a5f40093261e136e2b2c3",
+          "structure": {
+            "shapes": 16,
+            "groups": 8,
+            "labels": 0,
+            "viewBox": "0 0 500 500"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "laptop-93d549cd2d92",
+          "title": "Laptop 01.svg",
+          "author": "The original uploader was PhotoBox at English Wikipedia .",
+          "source": "https://commons.wikimedia.org/wiki/File:Laptop_01.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/9/96/Laptop_01.svg",
+          "file": "laptop-93d549cd2d921425.original.svg",
+          "sha256": "93d549cd2d92142592865381d34ab5159b17d8bbd5951e0c1d0d4085c4707a5b",
+          "bytes": 10538,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "revision": "2007-03-27T15:02:51Z",
+          "upstreamSha1": "2fef1c2982a8f11f888439446fb926869a7688d1",
+          "structure": {
+            "shapes": 13,
+            "groups": 2,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "laptop-e6adc16ea756",
+          "title": "Black laptop computer open frontal.svg",
+          "author": "OpenClipart-Vectors",
+          "source": "https://commons.wikimedia.org/wiki/File:Black_laptop_computer_open_frontal.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/4/42/Black_laptop_computer_open_frontal.svg",
+          "file": "laptop-e6adc16ea756d0f8.original.svg",
+          "sha256": "e6adc16ea756d0f8acf01e973f91557cb633eafd8b67be5f7f5b1150742c7c6f",
+          "bytes": 184973,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "revision": "2022-08-02T23:40:49Z",
+          "upstreamSha1": "60f9ea2d46912742da7f532a93bc41c583dfd3ab",
+          "structure": {
+            "shapes": 341,
+            "groups": 8,
+            "labels": 0,
+            "viewBox": "0 0 311.89108 267.84909"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        }
+      ],
+      "queries": [
+        "laptop diagram",
+        "laptop computer"
+      ]
+    },
+    {
+      "id": "phone",
+      "candidates": [
+        {
+          "id": "phone-36fd55f4de6a",
+          "title": "Smartphone 2 (layered)",
+          "author": "usr_share",
+          "source": "https://openclipart.org/detail/217392/smartphone-2-layered",
+          "download": "https://openclipart.org/download/217392",
+          "file": "phone-36fd55f4de6af960.original.svg",
+          "sha256": "36fd55f4de6af9606de5b30ed8cd53f15c585eb9bbeb9c8726d7b0aec274e005",
+          "bytes": 24386,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 27,
+            "groups": 9,
+            "labels": 1,
+            "viewBox": null
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "phone-5a0ba04afb81",
+          "title": "Smartphone (layered)",
+          "author": "usr_share",
+          "source": "https://openclipart.org/detail/216525/smartphone-layered",
+          "download": "https://openclipart.org/download/216525",
+          "file": "phone-5a0ba04afb81de1d.original.svg",
+          "sha256": "5a0ba04afb81de1d9d7e541a16066d5bbf31a98b2d6c23eec9194e45493399c5",
+          "bytes": 27847,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 31,
+            "groups": 13,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        }
+      ],
+      "queries": [
+        "smartphone diagram",
+        "mobile phone parts"
+      ]
+    },
+    {
+      "id": "car",
+      "candidates": [
+        {
+          "id": "car-4897b2368218",
+          "title": "Sedan-car.svg",
+          "author": "sheikh_tuhin",
+          "source": "https://commons.wikimedia.org/wiki/File:Sedan-car.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/4/43/Sedan-car.svg",
+          "file": "car-4897b23682186c59.original.svg",
+          "sha256": "4897b23682186c59835062a409abad80be16e81ef4dae5852eaff2c5f1e19cbc",
+          "bytes": 18418,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "revision": "2018-06-13T16:56:47Z",
+          "upstreamSha1": "1e9e0b49f82d215ccbb093dffaba216b81133ac8",
+          "structure": {
+            "shapes": 26,
+            "groups": 4,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "car-6b73cd989a55",
+          "title": "Skoda Superb Sedan Side View",
+          "author": "molumen",
+          "source": "https://openclipart.org/detail/328639/skoda-superb-sedan-side-view",
+          "download": "https://openclipart.org/download/328639",
+          "file": "car-6b73cd989a55409a.original.svg",
+          "sha256": "6b73cd989a55409a03338ce958eceb552b7508dda77f1f91d7828d4ff1715118",
+          "bytes": 28187,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 131,
+            "groups": 5,
+            "labels": 0,
+            "viewBox": "0 0 841.9 269.3"
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "car-983438823ee4",
+          "title": "car side view",
+          "author": "Anonymous",
+          "source": "https://openclipart.org/detail/9792/car-side-view",
+          "download": "https://openclipart.org/download/9792",
+          "file": "car-983438823ee40241.original.svg",
+          "sha256": "983438823ee402412603737b74addd129db04a0653f113939d40a1458946f707",
+          "bytes": 17408,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 52,
+            "groups": 1,
+            "labels": 0,
+            "viewBox": "0 0 229.591 95.33"
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        }
+      ],
+      "queries": [
+        "car parts diagram",
+        "car side view"
+      ]
+    },
+    {
+      "id": "stove",
+      "candidates": [
+        {
+          "id": "stove-fe1bc5ffe021",
+          "title": "Gas range.svg",
+          "author": "Paul Robinson",
+          "source": "https://commons.wikimedia.org/wiki/File:Gas_range.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/b/b4/Gas_range.svg",
+          "file": "stove-fe1bc5ffe0216165.original.svg",
+          "sha256": "fe1bc5ffe0216165459e2e3b253609fae27f26b5cc04293fd56c700cda59fbd3",
+          "bytes": 34073,
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "revision": "2007-09-19T20:14:11Z",
+          "upstreamSha1": "8b7d1122a7a26d069edfc8429c56fc30da116e55",
+          "structure": {
+            "shapes": 81,
+            "groups": 1,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "gas stove"
+        },
+        {
+          "id": "stove-b5a68d50f0d0",
+          "title": "Oven and range.svg",
+          "author": "Gary Gerbrandt",
+          "source": "https://commons.wikimedia.org/wiki/File:Oven_and_range.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/4/4a/Oven_and_range.svg",
+          "file": "stove-b5a68d50f0d018bf.original.svg",
+          "sha256": "b5a68d50f0d018bf7aaf84a5b0923ef9b3c0a197c61e61f3453f326711d38f27",
+          "bytes": 16059,
+          "license": "CC BY-SA 4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0/",
+          "revision": "2007-10-20T18:41:24Z",
+          "upstreamSha1": "e5173ea9d6c5eff81a665fcc630a318c9a05b6d1",
+          "structure": {
+            "shapes": 19,
+            "groups": 2,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "kitchen oven"
+        }
+      ],
+      "queries": [
+        "gas stove",
+        "kitchen oven"
+      ]
+    },
+    {
+      "id": "toilet",
+      "candidates": [
+        {
+          "id": "toilet-58dfcb94b305",
+          "title": "Gravity toilet valves at rest.svg",
+          "author": "Klork",
+          "source": "https://commons.wikimedia.org/wiki/File:Gravity_toilet_valves_at_rest.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/c/ce/Gravity_toilet_valves_at_rest.svg",
+          "file": "toilet-58dfcb94b3056309.original.svg",
+          "sha256": "58dfcb94b3056309d523db0662ddf5b7b7b5b5dab94c5425d0f016bc512a6bda",
+          "bytes": 8648,
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "revision": "2007-05-04T02:42:05Z",
+          "upstreamSha1": "7154efee262e6f79810cc83c9b9e73f616e67b92",
+          "structure": {
+            "shapes": 44,
+            "groups": 0,
+            "labels": 14,
+            "viewBox": "6816.5 6820.5 767 770"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "toilet-0158e07e40fa",
+          "title": "Gravity toilet valves handle down.svg",
+          "author": "Klork",
+          "source": "https://commons.wikimedia.org/wiki/File:Gravity_toilet_valves_handle_down.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/c/c1/Gravity_toilet_valves_handle_down.svg",
+          "file": "toilet-0158e07e40fa515d.original.svg",
+          "sha256": "0158e07e40fa515de6dfac893e71dbab5c13cd7cf213d122ce916a2fee3fd2ab",
+          "bytes": 33286,
+          "license": "CC BY-SA 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by-sa/3.0/",
+          "revision": "2007-05-04T03:03:22Z",
+          "upstreamSha1": "28e9b43b9bbe2264f7630d50fb2dbd138dc39215",
+          "structure": {
+            "shapes": 176,
+            "groups": 268,
+            "labels": 12,
+            "viewBox": "6816.5 6820.5 767 770"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "toilet-7e7212185595",
+          "title": "Cistern Flush Toilet diagram.svg",
+          "author": "Eawag: Swiss Federal Institute of Aquatic Science and Technology Technical drawings: designport, Paolo Monaco, Zurich See http://ecompendium.sswm.info/copyright",
+          "source": "https://commons.wikimedia.org/wiki/File:Cistern_Flush_Toilet_diagram.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/f/fb/Cistern_Flush_Toilet_diagram.svg",
+          "file": "toilet-7e7212185595f9f2.original.svg",
+          "sha256": "7e7212185595f9f232d1d502dc1321bc48904d3cd1cda6c3949433a0fbbdb54b",
+          "bytes": 23245,
+          "license": "CC BY 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+          "revision": "2017-09-29T20:23:23Z",
+          "upstreamSha1": "15f671b40b86af6cec0b88d7182679d6001827fd",
+          "structure": {
+            "shapes": 41,
+            "groups": 17,
+            "labels": 16,
+            "viewBox": "0 0 730 423"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "flush toilet diagram"
+        },
+        {
+          "id": "toilet-92f46e8aef6f",
+          "title": "Pour-flush Toilet diagram.svg",
+          "author": "Eawag: Swiss Federal Institute of Aquatic Science and Technology Technical drawings: designport, Paolo Monaco, Zurich See http://ecompendium.sswm.info/copyright",
+          "source": "https://commons.wikimedia.org/wiki/File:Pour-flush_Toilet_diagram.svg",
+          "download": "https://upload.wikimedia.org/wikipedia/commons/1/10/Pour-flush_Toilet_diagram.svg",
+          "file": "toilet-92f46e8aef6f40cf.original.svg",
+          "sha256": "92f46e8aef6f40cf545c50803a9764044dc391f4e351b1b5ddd38a3acc5ca91f",
+          "bytes": 12040,
+          "license": "CC BY 3.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/3.0/",
+          "revision": "2017-09-29T20:24:07Z",
+          "upstreamSha1": "150c0fa875346fd6dede86a6a89bddfbe509ac4d",
+          "structure": {
+            "shapes": 36,
+            "groups": 20,
+            "labels": 13,
+            "viewBox": "0 0 730 423"
+          },
+          "discovery": "MediaWiki generator=search + imageinfo/extmetadata",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler.",
+          "query": "flush toilet diagram"
+        }
+      ],
+      "queries": [
+        "flush toilet diagram",
+        "toilet tank parts"
+      ]
+    },
+    {
+      "id": "refrigerator",
+      "candidates": [
+        {
+          "id": "refrigerator-65449619c4b3",
+          "title": "Refrigerator",
+          "author": "Korbac",
+          "source": "https://openclipart.org/detail/217656/refrigerator",
+          "download": "https://openclipart.org/download/217656",
+          "file": "refrigerator-65449619c4b3d3b4.original.svg",
+          "sha256": "65449619c4b3d3b492cd054f074f29da4894ac2efd4ea9527dbd0215a1379162",
+          "bytes": 23830,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 29,
+            "groups": 1,
+            "labels": 0,
+            "viewBox": null
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "refrigerator-87a9f41eae52",
+          "title": "Fridge",
+          "author": "Machovka",
+          "source": "https://openclipart.org/detail/2386/fridge",
+          "download": "https://openclipart.org/download/2386",
+          "file": "refrigerator-87a9f41eae523474.original.svg",
+          "sha256": "87a9f41eae52347462d67f7a0fa9632a70c94016668f50c681bec3864cb412cc",
+          "bytes": 7564,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 12,
+            "groups": 2,
+            "labels": 0,
+            "viewBox": "0 0 495.75 887.13"
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        }
+      ],
+      "queries": [
+        "refrigerator diagram",
+        "refrigerator appliance"
+      ]
+    },
+    {
+      "id": "jeans",
+      "candidates": [
+        {
+          "id": "jeans-63eb6f0efbd2",
+          "title": "Blue jeans",
+          "author": "AngyPangy",
+          "source": "https://openclipart.org/detail/263802/blue-jeans",
+          "download": "https://openclipart.org/download/263802",
+          "file": "jeans-63eb6f0efbd215ba.original.svg",
+          "sha256": "63eb6f0efbd215ba9ab49617b7a0ce49df0fa2ee014bebba4653d67c9cf54230",
+          "bytes": 11838,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 15,
+            "groups": 4,
+            "labels": 0,
+            "viewBox": "0 0 312.45 600.03"
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        },
+        {
+          "id": "jeans-8548f3ed7c9a",
+          "title": "jeans-01",
+          "author": "yamachem",
+          "source": "https://openclipart.org/detail/202395/jeans01",
+          "download": "https://openclipart.org/download/202395",
+          "file": "jeans-8548f3ed7c9a29d6.original.svg",
+          "sha256": "8548f3ed7c9a29d619a43e4524df60faad798c163bc59ad44f527048b316ba30",
+          "bytes": 9455,
+          "license": "CC0 1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "licenseConfirmation": "https://openclipart.org/share",
+          "structure": {
+            "shapes": 21,
+            "groups": 2,
+            "labels": 0,
+            "viewBox": "0 0 1000 2000"
+          },
+          "discovery": "Openclipart detail page with explicit ImageObject CC0 license",
+          "adaptations": "None in pinned original; runtime adaptations recorded by compiler."
+        }
+      ],
+      "queries": [
+        "jeans trousers",
+        "trousers diagram"
+      ]
+    }
+  ]
+}
