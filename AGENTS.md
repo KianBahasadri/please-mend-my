@@ -98,3 +98,4 @@
 - Demo hardcoding only on demo branch; shared workdir now demo, main deploys from isolated worktree. Prodmain+allphysicalSVGs+≤10karticles Qwen authorized; reuse caches first.
 - HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.
 - Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloudfullsource refresh unit please-mend-my-source-refresh.service(c0f87db,5GiB/CPU2); retainslive207k until prepared-release.path validation/swap. MainCLI d2de752 pushed.
+- FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.

@@ -2,7 +2,7 @@
   "version": 1,
   "wordnet": {
     "name": "Open English WordNet 2025",
-    "url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025/english-wordnet-2025.xml.gz",
+    "url": "https://github.com/globalwordnet/english-wordnet/releases/download/2025-edition/english-wordnet-2025.xml.gz",
     "filename": "english-wordnet-2025.xml.gz",
     "bytes": 11363503,
     "sha256": "9ca6d1dcb75f822fdd66617f7d9da48142ace38dd544d6ad5e2feca1674ad3fe",
