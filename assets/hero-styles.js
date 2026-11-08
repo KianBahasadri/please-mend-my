@@ -30,9 +30,26 @@
 
   function stitches() {
     const svg = drawing("repair-stitches", [
-      ["path", { class: "repair-gap", d: "M0 50 13 53 28 48 40 52 55 48 69 52 83 48 100 51" }],
-      ["path", { class: "repair-thread", d: "M15 39 24 62 M24 39 15 62 M46 38 55 61 M55 38 46 61 M77 38 86 61 M86 38 77 61" }],
-      ["path", { class: "repair-thread-shadow", d: "M16 39 25 62 M47 38 56 61 M78 38 87 61" }],
+      ["path", {
+        class: "repair-thread",
+        d: "M 5 74 L 10 82 M 10 74 L 5 82 M 15 74 L 20 82 M 20 74 L 15 82 M 25 74 L 30 82 M 30 74 L 25 82 M 35 74 L 40 82 M 40 74 L 35 82 M 45 74 L 50 82 M 50 74 L 45 82 M 55 74 L 60 82 M 60 74 L 55 82 M 65 74 L 70 82 M 70 74 L 65 82 M 75 74 L 80 82 M 80 74 L 75 82 M 85 74 L 90 82 M 90 74 L 85 82 M 95 74 L 100 82 M 100 74 L 95 82"
+      }],
+      ["path", {
+        class: "repair-thread",
+        d: "M 100 82 Q 105 88 108 83 Q 111 77 114 84"
+      }],
+      ["path", {
+        class: "repair-needle",
+        d: "M 113.47 84.95 L 101.77 63.96 Q 100.16 60.25 102.79 63.33 L 116.53 83.05 Q 118.13 86.17 117.65 88.24 Q 115.58 87.76 113.47 84.95 Z"
+      }],
+      ["path", {
+        class: "repair-needle-eye",
+        d: "M 102.81 64.49 L 104.93 67.89"
+      }],
+      ["path", {
+        class: "repair-needle-glint",
+        d: "M 105.65 69.8 L 112.54 80.82"
+      }],
     ]);
     svg.setAttribute("preserveAspectRatio", "none");
     return svg;

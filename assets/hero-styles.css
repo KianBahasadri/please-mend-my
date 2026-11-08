@@ -2,6 +2,16 @@
    hero font; the input's native text, selection, wrapping and caret stay intact. */
 .hero-field { --mend-art-ready: 1; }
 
+:root {
+  --needle-metal: #b8b8b8;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --needle-metal: #8a8a8a;
+  }
+}
+
 :is(:root[data-theme="stitched"], [data-style="stitched"]) {
   --font: "Times New Roman", "Liberation Serif", serif;
   --weight: 400;
@@ -118,7 +128,7 @@
   vertical-align: baseline;
 }
 
-/* A ragged split repaired with three chunky X stitches. */
+/* Visible mending: a tailored baseline seam of fine cross-stitches with needle and thread. */
 .repair-stitches {
   position: absolute;
   inset: 0;
@@ -128,25 +138,36 @@
   pointer-events: none;
 }
 
-.repair-gap {
-  fill: none;
-  stroke: var(--paper);
-  stroke-width: 3.5;
-}
-
 .repair-thread {
   fill: none;
   stroke: var(--ink);
   stroke-width: 1.8;
   stroke-linecap: round;
-  paint-order: stroke;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
 }
 
-.repair-thread-shadow {
+.repair-needle {
+  fill: var(--needle-metal, #b8b8b8);
+  stroke: var(--ink);
+  stroke-width: 0.6;
+  vector-effect: non-scaling-stroke;
+}
+
+.repair-needle-eye {
   fill: none;
   stroke: var(--paper);
-  stroke-width: 0.4;
-  opacity: 0.8;
+  stroke-width: 1.2;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.repair-needle-glint {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 0.7;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
 }
 
 /* Inverted letters on a torn piece of tape. Shadows are static, tiny and local. */
