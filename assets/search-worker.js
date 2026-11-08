@@ -1,13 +1,10 @@
 "use strict";
 
-// The isolated demo can explicitly bypass persisted data without changing ranking.
-const directData = typeof URL === "function" && self.location?.href
-  ? new URL(self.location.href).searchParams.get("dataCache") === "off" : false;
 // Cache Storage is optional; private/older browsers retain the network path.
-if (!directData && typeof importScripts === "function") {
+if (typeof importScripts === "function") {
   try { importScripts("/assets/client-cache.js"); } catch {}
 }
-const clientCache = directData ? null : self.mendClientCache;
+const clientCache = self.mendClientCache;
 const candidateKey = typeof URL === "function" && self.location?.href
   ? new URL(self.location.href).searchParams.get("candidateKey") || "" : "";
 let catalogEntry;
@@ -1316,7 +1313,7 @@ async function loadCatalog(forceNetwork = false) {
     }
     try {
       response = await fetch("/api/catalog", { credentials: "same-origin", mode: "same-origin",
-        ...(attempt || directData ? { cache: "no-store" } : {}) });
+        ...(attempt ? { cache: "no-store" } : {}) });
     } catch (error) {
       failure = error;
     }

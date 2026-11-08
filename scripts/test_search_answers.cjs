@@ -6,9 +6,8 @@ const vm = require('node:vm');
 const { makeDOM } = require('./hero_test_dom.cjs');
 const settle = async () => { for (let pass = 0; pass < 24; pass++) await Promise.resolve(); };
 
-function answerUI({ initialGuide = '', deferred = [], abortable = false, cache, directData = false } = {}) {
+function answerUI({ initialGuide = '', deferred = [], abortable = false, cache } = {}) {
   const dom = makeDOM();
-  if (directData) dom.document.documentElement.dataset.demoData = 'direct';
   const ids = ['catalog-status', 'search-results', 'result-cards', 'result-count',
     'guide-panel', 'guide-body', 'guide-nav-error'];
   const elements = Object.fromEntries(ids.map(id => [id, dom.add('div', id)]));
@@ -66,20 +65,6 @@ function answerUI({ initialGuide = '', deferred = [], abortable = false, cache, 
     pop(id) { location.href = origin + '/' + (id ? '?guide=' + id : ''); dom.window.dispatchEvent(new dom.context.Event('popstate')); dom.flushFrames(); },
   });
 }
-
-test('demo direct data replaces the prefix answer without consulting a stale persistent cache', async () => {
-  let cacheReads = 0;
-  const ui = answerUI({ directData: true, cache: {
-    fetchGuide() { cacheReads++; throw Error('Stale catalog generation'); },
-  } });
-  assert.match(ui.workers[0].url, /dataCache=off/);
-  ui.ready(); ui.change('first prefix'); ui.result(['prefix']); await settle();
-  assert.equal(ui.title(), 'Answer prefix');
-  ui.change('complete subject'); ui.result(['complete', 'alternative']); await settle();
-  assert.equal(ui.title(), 'Answer complete');
-  assert.equal(cacheReads, 0);
-  assert.equal(ui.document.activeElement.id, 'response');
-});
 
 test('top answer renders inline without moving selection, prefetches 2–5 and offers 2–6', async () => {
   const ui = answerUI(); ui.ready(); ui.change('broken laptop');

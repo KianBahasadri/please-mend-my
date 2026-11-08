@@ -95,9 +95,9 @@
 - Both startup+per-edit lag confirmed. Per-edit: immediate post, reuse unchanged article DOM, early alternatives, tiny generation marker+nonblocking LRU;204JS pass. Prefix100 exact-rank parity;numeric-prefix scan narrowed. Startup split prototype2.68→1.94s/280→240MiB;pending safe background enrichment wiring.
 - Priority: loaded keypress→visible result, not network/startup. Startup split deferred. Fixes must be generic; repro words are tests only.
 - Loaded typing: dispatch before mirror sizing/SVG work; no textarea height collapse; unchanged highlights skip writes; pendingfirstanswer shows real indexed title; abortedcachelookup frees fetchslot. Extra650ms autofocus tested separately;213JS pass.
-- Demo-only hardcoding on demo; shared workdir demo, main deploys isolated. Manual local work now; bulk Qwen stopped by user, "resume" must not restart it.
+- Demo cache bypass removed; demo merged back to main. Shared workdir stays on demo; main deploys isolated. Manual local work; bulk Qwen stopped by user, "resume" must not restart it.
 - HTML no-transform preserves shell SHA through Cloudflare; injected analytics otherwise breaks offline shell caching.
 - Local fd7ef95a:435213items/101v2/61art; spokes6869abe5a8d19765ed03 v2/6steps. Cloud a49d8bc3:435213 prepared, unpromoted; live4084210 still207691.
 - Prod4084210 live;24shellSHA+apex/www+HEAD304 verified. Cloud refresh finished (5GiB/CPU2), no active jobs; prepared-release.path awaits validation/promotion. Keep live207k unchanged for local-demo work.
 - FreshhostOEWN URL: GitHubtag2025-edition (2025→404);same11363503B/SHA9ca6d1dc,verifieddownloadonEC2. LocalcachehidbadURL.
-- Demo workaround: data-demo-data=direct bypasses persisted index/guide cache; browser-resident ranking unchanged. Bug: stale first-letter article despite current alternatives; persistent-cache recovery still pending.
+- Stale first-letter article remains: persistent catalog/guide cache can show an old article while alternatives are current. Direct-data bypass removed; persistent-cache recovery still pending.

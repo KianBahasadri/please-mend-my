@@ -10,9 +10,7 @@
   const body = document.getElementById("guide-body");
   const navigationError = document.getElementById("guide-nav-error");
   const hero = window.mendHero;
-  // Demo branch: use the current local release rather than persisted data.
-  const directData = document.documentElement?.dataset?.demoData === "direct";
-  const clientCache = directData ? null : window.mendClientCache;
+  const clientCache = window.mendClientCache;
   const details = new Map();
   const prefetchedImages = new Set();
   const queue = [];
@@ -754,9 +752,9 @@
   } else if (typeof Worker === "undefined") {
     setStatus("This browser does not support local repair search. Please use a current browser.");
   } else {
-    worker = new Worker("/assets/search-worker.js" + (directData ? "?dataCache=off" : ""));
+    worker = new Worker("/assets/search-worker.js");
     connectWorker(worker);
-    window.mendClientCache?.registerShell?.().catch(() => {});
+    clientCache?.registerShell?.().catch(() => {});
     clientCache?.subscribe?.(event => {
       if (event?.type === "catalog-changed") refreshCatalog(event.etag);
     });
