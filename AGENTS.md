@@ -32,6 +32,7 @@
 - Prod: i-00b3468454b650217/64GiB; cloud-built 207691 items/679729 media; unchanged runs reuse; no corpus uploads.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
 - Local: http://127.0.0.1:8080; 207691 items/679729 media; catalog-data/releases/<pipeline SHA>; source SQLite in catalog-data/build/.
+- Local launch: set CATALOG_DIR from catalog-data/local-catalog.path + ADDR=127.0.0.1:8080; missing catalog env→503 despite healthy hero. Verify /api/catalog too.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
 - CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
 - TLS: origin ECC cert/key offrepo; X25519/P256 avoids measured 3s hybrid handshake. deploy/cloudflare.py inspect/origin-cert/sync.

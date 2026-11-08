@@ -68,15 +68,19 @@ controller contract and local performance results.
 Run locally with Go 1.25+:
 
 ```sh
-go run .
-# http://localhost:8080
+CATALOG_DIR="$(cat catalog-data/local-catalog.path)" &&
+  CATALOG_DIR="${CATALOG_DIR:?Select a completed catalog release}" ADDR=127.0.0.1:8080 go run .
+# http://127.0.0.1:8080
 ```
 
-Set `ADDR` to change the listening address, for example `ADDR=127.0.0.1:9000 go run .`.
+`catalog-data/local-catalog.path` remembers this checkout's selected complete
+release. After a first build, use the release directory printed by
+`scripts/build_catalog.py` as `CATALOG_DIR` and save that path for later launches.
+Set `ADDR` to change the listening address.
 
-Serve an ingested repair catalog locally with
-`CATALOG_DIR=./catalog-data/runtime ADDR=127.0.0.1:8080 go run .`.
-Build or audit that snapshot with the commands in [scripts/README.md](scripts/README.md).
+Always set `CATALOG_DIR`: a plain launch serves the hero but returns 503 for the
+repair library. Check `GET /api/catalog` as well as `/healthz` after restarting.
+Build that snapshot with the commands in [scripts/README.md](scripts/README.md).
 `GET /api/catalog` supplies the complete compact browser-search index;
 `GET /api/guides/{id}` supplies full guide/topic content, and `/media/{filename}`
 serves content-addressed local images. Catalog data stays outside the binary and Git.
