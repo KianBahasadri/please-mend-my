@@ -6,18 +6,18 @@ const clean = (value) => {
 };
 const words = (value) => value.match(/[\p{L}\p{N}]+/gu) || [];
 const conversational = new Set(["is", "are", "was", "were", "am", "seems", "feels", "has", "have", "does", "do", "did"]);
-const pronouns = new Set(["it", "this", "that", "they", "i", "we"]);
-const determiners = new Set(["my", "our", "your", "the", "a", "an"]);
+const pronouns = new Set(["it", "this", "that", "they", "i", "we", "he", "she", "his", "her"]);
+const determiners = new Set(["my", "our", "your", "the", "a", "an", "his", "her"]);
 const intensifiers = new Set(["fucking", "fuckin", "fucken", "damn", "damned", "goddamn", "goddamned", "frigging", "freaking"]);
-const contractions = new Set(["it's", "that's", "this's", "there's", "i'm", "you're", "we're", "they're"]);
+const contractions = new Set(["it's", "its", "that's", "thats", "this's", "there's", "i'm", "im", "you're", "youre", "we're", "they're", "theyre", "he's", "hes", "she's", "shes"]);
 const symptomPredicates = new Set(["hurts", "hurt", "aches", "ache", "bleeds", "bleed", "burns", "burn", "itches", "itch",
   "tingles", "tingle", "swells", "swell", "leaks", "leak", "rattles", "rattle", "freezes", "freeze", "crashes", "crash"]);
-const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'t$/;
+const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'?t$/;
 
 function searchPhrase(query) {
   // These are conversational constructions, not general English stopwords.
   // Keep symptom words (including bloody), negation and literal model tokens.
-  if (!/\b(?:it|this|that|there|they|i|we|you|my|our|your|the|a|an|is|are|was|were|am|seems|feels|has|have|does|do|did|fucking|fuckin|fucken|damn|damned|goddamn|goddamned|frigging|freaking|isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)['’\s,.!?]/.test(query + " ")) return query;
+  if (!/\b(?:it|this|that|there|they|i|we|you|he|she|his|her|hes|shes|my|our|your|the|a|an|is|are|was|were|am|seems|feels|has|have|does|do|did|fucking|fuckin|fucken|damn|damned|goddamn|goddamned|frigging|freaking|isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won|its|thats|im|youre|theyre|isnt|arent|wasnt|werent|dont|doesnt|didnt|hasnt|havent|cant|wont)['’\s,.!?]/.test(query + " ")) return query;
   const pieces = query.split(/\s+/);
   const keys = pieces.map(piece => piece.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, "").replaceAll("’", "'"));
   const kept = [];
@@ -131,6 +131,9 @@ let shortPrefixes;
 // Exact source concept names point to explicit anchor devices. Whole aliases
 // count here (bike -> Bicycle); a word inside "pedal cycle" is not a subject.
 const primarySubjects = new Map();
+// Compact release-backed aliases, without retaining the parts/art registry.
+const subjectAliases = new Map();
+const subjectProfiles = new Map();
 // "Bike" is a published alias of both Bicycle and Motorcycle. A component
 // request without explicit motor/dirt-bike intent uses the bicycle archetype.
 const bicycleParts = new Set(["chain", "master", "link", "tire", "tyre", "tube", "brake", "cable", "gear", "derailleur",
@@ -602,7 +605,146 @@ function broadSearch(query, list) {
   return best.sorted();
 }
 
+// Failure language is deliberately narrower than general English stopwords.
+// Only these secondary words can be relaxed; body parts, materials and other
+// specific symptoms remain required alongside the resolved subject.
+const failureWords = new Set("not no never start starts starting work works working dead broken unresponsive lethargic lethargy boot boots booting turn turns turning on power powered respond responds responding run runs running function functioning anymore suddenly just really completely totally help stopped stop stops will would can to".split(" "));
+const failureTerms = ["unresponsive", "lethargic", "lethargy", "emergency", "first", "aid", "cpr", "resuscitate", "resuscitation", "revive", "triage", "jump", "start", "battery", "troubleshoot", "troubleshooting", "diagnose", "diagnostic", "dead", "broken"];
+const diagnosticTitle = /\b(?:troubleshoot(?:ing)?|diagnos(?:e|is|ing|tic)|first aid|emergency|unresponsive|letharg(?:y|ic)|jump[ -]?start|not (?:working|starting)|won'?t (?:start|turn)|dead|broken)\b/;
+const performanceTitle = /\b(?:teach|trick|pretend|play dead|playing dead|game|joke|costume)\b/;
+const preparednessTitle = /\b(?:kits?|disasters?|plans?|treats|prepare|prepared|preparing|preparation|preparedness)\b/;
+const normalizeSubject = value => words(clean(value)).join(" ");
+
+function prepareSubjects(registry) {
+  const ranks = new Map();
+  for (const row of registry?.version === 1 && Array.isArray(registry.archetypes) ? registry.archetypes : []) {
+    if (!row || typeof row.id !== "string" || typeof row.label !== "string" || !Array.isArray(row.aliases) || !(row.guideCount > 0)) continue;
+    const subject = { id: row.id, label: normalizeSubject(row.label), guideCount: row.guideCount };
+    for (const alias of [row.label, ...row.aliases]) {
+      if (typeof alias !== "string" || alias.length > 160 || /\p{N}/u.test(alias)) continue;
+      const key = normalizeSubject(alias);
+      if (!key || key.length < 2) continue;
+      const rank = Number.isSafeInteger(row.aliasRanks?.[key]) ? row.aliasRanks[key] : Infinity;
+      const previous = subjectAliases.get(key), previousRank = ranks.get(key) ?? Infinity;
+      if (!previous || rank < previousRank || rank === previousRank && rank !== Infinity &&
+          (subject.guideCount > previous.guideCount || subject.guideCount === previous.guideCount && subject.id < previous.id)) {
+        subjectAliases.set(key, subject); ranks.set(key, rank);
+      }
+    }
+  }
+  for (const name of primarySubjects.keys()) {
+    const key = normalizeSubject(name);
+    if (key.length >= 2 && !/\p{N}/u.test(key) && !subjectAliases.has(key)) {
+      subjectAliases.set(key, { id: key, label: key, guideCount: 0 });
+    }
+  }
+}
+
+function failureContext(query, tokens) {
+  if (/\p{N}/u.test(query) || !/\b(?:dead|broken|unresponsive|lethargic|stopped|not|no)\b/.test(query)) return null;
+  if (/\b(?:not|no|never)\s+(?:dead|broken|unresponsive|lethargic)\b/.test(query)) return null;
+  const failing = /\b(?:dead|broken|unresponsive|lethargic|stopped)\b/.test(query) ||
+    /\b(?:not|no)\s+(?:\w+\s+)?(?:start|starting|work|working|boot|booting|turn|turning|power|respond|responding|run|running|function|functioning)\b/.test(query);
+  if (!failing) return null;
+  // Longest prepared noun phrase wins. Prefer its earliest occurrence on ties;
+  // conversational prefixes were already removed by searchPhrase().
+  let result;
+  for (let width = Math.min(tokens.length - 1, 6); width > 0 && !result; width--) {
+    for (let start = 0; start + width <= tokens.length; start++) {
+      const subjectWords = tokens.slice(start, start + width), alias = subjectWords.join(" ");
+      if (subjectWords.every(word => failureWords.has(word))) continue;
+      const subject = subjectAliases.get(alias);
+      if (!subject) continue;
+      const secondary = [...tokens.slice(0, start), ...tokens.slice(start + width)];
+      if (!secondary.some(word => failureWords.has(word))) continue;
+      result = { subject, alias, words: subjectWords, query,
+        required: secondary.filter(word => !failureWords.has(word)) };
+      break;
+    }
+  }
+  return result || null;
+}
+
+function subjectEvidencePattern(context) {
+  // Names contain only prepared letter/number words. Match the same boundaries
+  // as normalizeSubject without re-tokenizing every candidate's title/device.
+  const alternatives = [...new Set([context.alias, context.subject.label])]
+    .map(name => words(name).join("[^\\p{L}\\p{N}]+"));
+  return new RegExp("(?:^|[^\\p{L}\\p{N}])(?:" + alternatives.join("|") + ")(?=$|[^\\p{L}\\p{N}])", "u");
+}
+
+function subjectProfile(context) {
+  const cached = subjectProfiles.get(context.alias);
+  if (cached) return cached;
+  // Exact postings only: a subject must never widen to prefixes/typos when
+  // symptoms are relaxed. No raw guides or external source calls are involved.
+  const lists = context.words.map(token => resolveToken(token, false, true))
+    .sort((a, b) => a.documents.length - b.documents.length);
+  const documents = [], categories = new Map(), subjectPattern = subjectEvidencePattern(context);
+  for (const doc of lists[0]?.documents || []) {
+    const entry = entries[doc];
+    if (!actionable(entry) || !lists.every(list => list.quality[doc])) continue;
+    documents.push(doc);
+    if (subjectPattern.test(entry.title + " " + entry.device)) {
+      categories.set(entry.row[2], (categories.get(entry.row[2]) || 0) + 1);
+    }
+  }
+  // A dominant category grounded in literal title/device evidence fences out
+  // cross-domain alias collisions (for example a phone alias containing car).
+  // Unknown/ambiguous domains remain unfiltered rather than guessed by noun.
+  const ordered = [...categories].sort((a, b) => b[1] - a[1]);
+  const evidence = ordered.reduce((sum, row) => sum + row[1], 0);
+  const category = ordered[0]?.[1] >= 3 && ordered[0][1] / evidence >= .65 ? ordered[0][0] : null;
+  const profile = { documents: Uint32Array.from(documents.filter(doc => !category || entries[doc].row[2] === category)), category };
+  profile.members = new Set(profile.documents);
+  subjectProfiles.set(context.alias, profile);
+  if (subjectProfiles.size > 32) subjectProfiles.delete(subjectProfiles.keys().next().value);
+  return profile;
+}
+
+function symptomFallback(context) {
+  const profile = subjectProfile(context);
+  if (!profile.documents.length) return [];
+  const required = context.required.map(token => tokenPlan(token, false, true));
+  if (required.some(plan => !plan.matches.size)) return [];
+  // Stream the small failure-word posting lists into the resident subject
+  // scope once; do not binary-probe every symptom for every subject document.
+  const hits = new Map();
+  for (const token of failureTerms) {
+    const term = lowerBound(inverted.terms, token);
+    if (inverted.terms[term] !== token) continue;
+    for (let at = inverted.postings.offsets[term]; at < inverted.postings.offsets[term + 1]; at++) {
+      const doc = inverted.postings.values[at];
+      if (doc >= entries.length) break;
+      if (profile.members.has(doc)) hits.set(doc, (hits.get(doc) || 0) + 1);
+    }
+  }
+  const startup = /\b(?:not|no)\s+(?:\w+\s+)?(?:start|starting|boot|booting|turn|turning|power|respond|responding)\b/.test(context.query);
+  const best = shortlist();
+  for (const [doc, count] of hits) {
+    if (!required.every(plan => [...plan.matches.keys()].some(term => postingHas(term, doc) ||
+        itemGroups[doc] && postingHas(term, entries.length + itemGroups[doc])))) continue;
+    const entry = entries[doc];
+    const diagnostic = diagnosticTitle.test(entry.title);
+    const general = /\b(?:troubleshoot(?:ing)?|first aid|cpr|resuscitat\w*|reviv\w*|triage|unresponsive|letharg(?:y|ic))\b/.test(entry.title) ||
+      /\bemergency\b/.test(entry.title) && /\b(?:care|medical|injur\w*|sick|ill|cpr|resuscitat\w*|reviv\w*)\b/.test(entry.title);
+    const starts = /\b(?:jump[ -]?start|(?:not|no|won'?t|does not|will not) (?:start|boot|turn|power|respond))\b/.test(entry.title);
+    let score = Math.min(6, count) * 12 + Math.max(0, 100 - entry.title.length);
+    if (diagnostic) score += 100;
+    if (general) score += 650;
+    if (starts) score += startup ? 900 : 350;
+    if (entry.row[3] === "article") score += 30;
+    if (performanceTitle.test(entry.title) || preparednessTitle.test(entry.title) || /\b(?:hack|modify|modding)\b/.test(entry.title)) score -= 1000;
+    if (entry.device === context.subject.label || entry.device === context.alias) score += 70;
+    best.add(doc, score);
+  }
+  return best.sorted();
+}
+
 function indexedSearch(query, tokens) {
+  const failure = failureContext(query, tokens);
+  const profile = failure ? subjectProfile(failure) : null;
+  const anchored = profile?.members;
   if (!tokens.length) return query ? [] : firstActionable();
   if (RESULT_LIMIT === 100 && tokens.length === 1 && tokens[0] === query && shortPrefixes?.has(query)) {
     return shortPrefixes.get(query);
@@ -637,7 +779,7 @@ function indexedSearch(query, tokens) {
     const best = shortlist();
     for (const doc of lists[0].documents) {
       const entry = entries[doc];
-      if (!actionable(entry)) continue;
+      if (!actionable(entry) || anchored && !anchored.has(doc)) continue;
       let penalty = 0, matches = true, literal = false, primary = false;
       for (const list of lists) {
         if (!list.quality[doc]) { matches = false; break; }
@@ -673,6 +815,8 @@ function indexedSearch(query, tokens) {
       if (primary && tokens.length > 1 && score < 900) {
         score = Math.min(900, score + (bicycleContext?.has(entry.device) ? 650 : 450));
       }
+      if (failure && diagnosticTitle.test(entry.title)) score += 220;
+      if (failure && performanceTitle.test(entry.title)) score -= 800;
       best.add(doc, score - penalty * 100);
     }
     return best.sorted();
@@ -680,7 +824,11 @@ function indexedSearch(query, tokens) {
   const literal = intersect(false);
   // A typo can exist as a rare literal elsewhere in the vocabulary. Retry only
   // an empty intersection so it cannot suppress otherwise valid results.
-  return literal.length ? literal : intersect(true);
+  if (literal.length) return literal;
+  // Natural failure terms need semantic diagnostics, not global fuzzy scans of
+  // common words such as start/working after their strict intersection fails.
+  if (failure) return symptomFallback(failure);
+  return intersect(true);
 }
 
 function legacySearch(query, literalQuery = "") {
@@ -850,6 +998,7 @@ async function loadCatalog() {
     }
     // A JSON string crosses the worker boundary without deep-cloning thousands
     // of nested part arrays on the main thread. Parse it once in the page.
+    prepareSubjects(catalog.archetypes);
     const archetypesJSON = catalog.archetypes ? JSON.stringify(catalog.archetypes) : "";
     delete catalog.archetypes;
     ready = true;

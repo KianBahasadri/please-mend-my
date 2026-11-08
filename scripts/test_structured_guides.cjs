@@ -242,26 +242,29 @@ test('a steps array dispatches to structured rendering without an explicit versi
   assert.deepEqual(ui.htmlWrites, []);
 });
 
-test('prefetched v2 and legacy cards open synchronously without fetching twice', async () => {
+test('top v2 and legacy answers render inline without moving the native input focus', async () => {
   for (const detail of [structured(), { id: ID, title: 'Legacy', html: '<p>Ready</p>', images: [] }]) {
     const ui = guideUI(detail);
     ui.ready(); ui.prefetch(); await settle();
     assert.equal(ui.requests.length, 1);
-    assert.equal(ui.elements['guide-panel'].hidden, true);
+    assert.equal(ui.elements['guide-panel'].hidden, false);
+    assert.equal(ui.elements['search-results'].hidden, false);
+    assert.equal(ui.document.activeElement, ui.elements.response, 'automatic answers keep typing focus');
+    assert.equal(ui.find('.guide-title').textContent, detail.title);
     ui.open();
-    assert.equal(ui.elements['guide-panel'].hidden, false, 'already-prefetched content commits during the click');
+    assert.equal(ui.elements['guide-panel'].hidden, false, 'cached answer remains available during explicit navigation');
     assert.equal(ui.find('.guide-title').textContent, detail.title);
     assert.equal(ui.requests.length, 1);
     assert.equal(ui.window.mendSearchStats.cachedOpenMs.length, 1);
   }
 });
 
-test('pending guide content retains search cards and emits no loading status', async () => {
+test('pending first answer stays blank and emits no loading status', async () => {
   const ui = guideUI(structured(), { deferred: true });
   ui.ready(); ui.prefetch(); ui.open(); await settle();
   assert.equal(ui.elements['guide-panel'].hidden, true);
   assert.equal(ui.elements['search-results'].hidden, false);
-  assert.equal(ui.elements['result-cards'].children.length, 1);
+  assert.equal(ui.elements['result-cards'].children.length, 0);
   assert.equal(ui.elements['catalog-status'].textContent, '');
   assert.equal(ui.elements['guide-body'].textContent, '');
   ui.release(); await settle();

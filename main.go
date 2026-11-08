@@ -43,6 +43,7 @@ type staticAsset struct {
 type siteHandler struct {
 	assets  map[string]*staticAsset
 	catalog *catalogHandler
+	preview *diagramPreview
 }
 
 func newHandler(catalogDirectory string) (*siteHandler, error) {
@@ -121,10 +122,14 @@ func prepareStaticAsset(name, contentType, cacheControl string, body []byte) (*s
 }
 
 func (handler *siteHandler) Close() error {
+	var err error
 	if handler.catalog != nil {
-		return handler.catalog.root.Close()
+		err = handler.catalog.root.Close()
 	}
-	return nil
+	if handler.preview != nil {
+		err = errors.Join(err, handler.preview.root.Close())
+	}
+	return err
 }
 
 func newRepresentation(body []byte) representation {
@@ -146,6 +151,10 @@ func (handler *siteHandler) ServeHTTP(w http.ResponseWriter, request *http.Reque
 		if request.Method != http.MethodHead {
 			_, _ = w.Write([]byte("ok\n"))
 		}
+		return
+	}
+	if handler.preview != nil && (request.URL.Path == "/diagram-preview" || strings.HasPrefix(request.URL.Path, "/diagram-preview/")) {
+		handler.preview.ServeHTTP(w, request)
 		return
 	}
 	if request.URL.Path == "/api/catalog" || request.URL.Path == "/api/archetypes" || strings.HasPrefix(request.URL.Path, "/api/art/") || strings.HasPrefix(request.URL.Path, "/api/guides/") || strings.HasPrefix(request.URL.Path, "/media/") {
@@ -277,6 +286,12 @@ func serve(ctx context.Context) error {
 		return fmt.Errorf("prepare static assets: %w", err)
 	}
 	defer handler.Close()
+	if directory := os.Getenv("DIAGRAM_PREVIEW_DIR"); directory != "" {
+		handler.preview, err = openDiagramPreview(directory)
+		if err != nil {
+			return fmt.Errorf("prepare local diagram preview: %w", err)
+		}
+	}
 	address := os.Getenv("ADDR")
 	if address == "" {
 		address = ":8080"

@@ -44,12 +44,14 @@ Composition, hidden documents, and open guides cancel pending settlement.
 
 `mend:querychange` searches the combined editable text immediately, coalescing
 edits within one animation frame and rejecting stale worker replies. There is
-no search debounce or dictionary-dependent wait. Empty queries and unanswered
-clarifications hide cards immediately; committed answers search immediately.
+no search debounce or dictionary-dependent wait. Empty queries hide the answer
+immediately; blank clarification answers still search the first subject.
 IME preedit waits for commitment. `mend:settle` handles clarification transitions
 and explicit shortcuts; live results never wait for that event. Subjects without
 a specifier can show results during the clarification pause. Registered subjects
-hide cards immediately when their blank clarification opens.
+keep the best answer visible when their blank clarification opens. Search displays
+the first guide centered below the workspace without hiding the hero or taking
+its caret; the next four guides are prefetched and five alternatives form a side list.
 
 Part selection focuses the answer and tries a native `insertText` edit to retain
 undo history where supported, falling back to `setRangeText` if the edit was not

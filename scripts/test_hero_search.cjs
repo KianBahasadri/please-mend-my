@@ -81,7 +81,7 @@ async function searchUI({ heroAvailable = true, initialQuery = '', terms = [] } 
   return ui;
 }
 
-test('bike controls appear immediately, hide unspecific results and preserve first focus until the pause', async () => {
+test('bike controls and noun search appear immediately while first focus remains until the pause', async () => {
   const ui = await searchUI(); ui.ready();
   const width = ui.response.clientWidth;
   ui.change('bik'); ui.flushFrames();
@@ -98,12 +98,17 @@ test('bike controls appear immediately, hide unspecific results and preserve fir
   assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
   assert.equal(ui.document.activeElement, ui.response, 'instant display never interrupts the first field');
   assert.equal(ui.response.selectionStart, ui.response.value.length);
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.elements['search-results'].hidden, false);
   ui.flushFrames();
-  assert.equal(ui.searches().length, 1, 'opening an unanswered question cancels results without another query');
+  assert.equal(ui.searches().length, 2, 'opening an unanswered question still searches the noun');
+  assert.equal(ui.searches().at(-1).query, 'bike');
   ui.results(stale, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
-  assert.equal(ui.elements['search-results'].hidden, true, 'a pre-question response cannot reopen blank specifics');
+  assert.equal(ui.elements['search-results'].hidden, false, 'a pre-question reply cannot replace the newer noun search');
   assert.equal(ui.elements['result-cards'].children.length, 0);
+  ui.results(ui.searches().at(-1).requestId, [['example', 'Bicycle repair', 'technology', 'guide', 'Bicycle']]);
+  await settleArt();
+  assert.equal(ui.elements['guide-panel'].hidden, false, 'the noun best answer renders with a blank second field');
+  assert.equal(ui.document.activeElement, ui.response);
   assert.equal(ui.response.clientWidth, width, 'underneath specifier does not change first-line width');
   assert.equal(ui.workspace.parentNode.contains(ui.question), true);
   assert.equal(ui.workspace.contains(ui.question), false, 'question stays outside the split workspace');
@@ -111,7 +116,7 @@ test('bike controls appear immediately, hide unspecific results and preserve fir
   ui.advance(1); assert.equal(ui.document.activeElement, ui.clarification);
 });
 
-test('SVG and list selections write the native answer and reveal cards immediately; clear hides again', async () => {
+test('SVG and list selections search immediately and clearing specifics returns to the noun answer', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('bike');
   await settleArt();
   ui.clickPart('chain', true);
@@ -126,17 +131,20 @@ test('SVG and list selections write the native answer and reveal cards immediate
   ui.clickPart('chain');
   assert.equal(ui.clarification.value, '');
   assert.equal(ui.window.mendHero.isAwaitingSpecifics(), true);
-  assert.equal(ui.elements['search-results'].hidden, true);
-  assert.equal(ui.searches().length, count);
+  assert.equal(ui.elements['search-results'].hidden, false);
+  assert.equal(ui.searches().length, count + 1);
+  assert.equal(ui.searches().at(-1).query, 'bike');
   assert.equal(ui.option('chain').classList.contains('is-selected'), false);
   ui.clickPart('pedals');
   assert.equal(ui.clarification.value, 'pedal');
   assert.equal(ui.searches().at(-1).query, 'bike pedal');
   const stale = ui.searches().at(-1).requestId;
   ui.answer('');
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.elements['search-results'].hidden, false);
   ui.results(stale);
-  assert.equal(ui.elements['search-results'].hidden, true, 'a stale response cannot reopen cleared specifics');
+  assert.equal(ui.elements['search-results'].hidden, false, 'clearing specifics keeps the noun search active');
+  ui.flushFrames();
+  assert.equal(ui.searches().at(-1).query, 'bike');
   assert.equal(ui.option('pedals').classList.contains('is-selected'), false);
 });
 
@@ -211,7 +219,7 @@ test('car to carpet and bike to bikes continue in the first field while specifie
   assert.equal(ui.document.activeElement, ui.response);
   ui.advance(1);
   assert.equal(ui.question.textContent, "What's wrong with your bikes?");
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.elements['search-results'].hidden, false);
 });
 
 test('startup searches the latest edit immediately without waiting for clarification timing', async () => {
@@ -225,11 +233,12 @@ test('startup searches the latest edit immediately without waiting for clarifica
   pending.ready();
   assert.equal(pending.searches().at(-1).query, 'broken phone', 'index readiness immediately searches the current text');
   const noun = await searchUI(); noun.change('bike'); noun.advance(100); noun.ready();
-  assert.equal(noun.searches().length, 0, 'known controls do not wait for the worker or leak unspecific cards');
+  assert.equal(noun.searches().length, 1, 'known controls and noun search both resume at readiness');
+  assert.equal(noun.searches()[0].query, 'bike');
   assert.equal(noun.question.textContent, "What's wrong with your bike?");
   noun.advance(279); assert.equal(noun.document.activeElement, noun.response);
   noun.advance(1); assert.equal(noun.document.activeElement, noun.clarification);
-  assert.equal(noun.elements['search-results'].hidden, true);
+  assert.equal(noun.elements['search-results'].hidden, false);
 });
 
 test('catalog recovery clears the stale error and preserves the current hero state', async () => {
@@ -247,10 +256,10 @@ test('catalog recovery clears the stale error and preserves the current hero sta
     assert.equal(ui.elements['result-count'].textContent, '', 'failed startup notice must disappear too');
     assert.equal(ui.response.value, value, 'recovery preserves the native field');
     assert.equal(ui.document.activeElement, focused, 'recovery preserves focus');
-    if (text === 'broken laptop') {
+    if (text) {
       assert.equal(ui.searches().at(-1).query, text, 'the settled query resumes when the catalog recovers');
     } else {
-      assert.equal(ui.searches().length, 0, 'empty input and unanswered specifics stay blank');
+      assert.equal(ui.searches().length, 0, 'empty overall input stays blank');
       assert.equal(ui.elements['search-results'].hidden, true);
     }
   }
@@ -270,7 +279,7 @@ test('full-phrase Enter/Tab and noun punctuation settle immediately without rewr
   ui.event(ui.response, 'input', { inputType: 'insertText', data: '?', bubbles: true });
   assert.equal(ui.response.value, 'please, mend my bike?');
   assert.equal(ui.question.textContent, "What's wrong with your bike?");
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.elements['search-results'].hidden, false);
   ui.answer('chain'); ui.key(ui.clarification, 'Enter'); ui.flushFrames();
   assert.equal(ui.searches().at(-1).query, 'bike? chain');
 });
@@ -282,12 +291,12 @@ test('empty answer Backspace dissolves and immediately searches the suppressed n
   assert.equal(ui.specifierContainer.hidden, true);
   assert.equal(ui.document.activeElement, ui.response);
   ui.flushFrames(); assert.equal(ui.searches().at(-1).query, 'bike');
-  ui.advance(1000); assert.equal(ui.searches().length, 1);
+  ui.advance(1000); assert.equal(ui.searches().length, 2);
   assert.equal(ui.question.textContent, '');
   ui.change('');
   assert.equal(ui.elements['search-results'].hidden, true);
   assert.equal(ui.elements['result-cards'].children.length, 0);
-  ui.advance(2000); assert.equal(ui.searches().length, 1);
+  ui.advance(2000); assert.equal(ui.searches().length, 2);
 });
 
 test('pending edits retain displayed results but reject old replies and never steal focused cards', async () => {
@@ -306,11 +315,12 @@ test('pending edits retain displayed results but reject old replies and never st
   ui.change('bike'); card.focus(); ui.advance(380);
   assert.equal(ui.question.textContent, "What's wrong with your bike?");
   assert.equal(ui.document.activeElement, card, 'showing controls never hijacks a focused card');
-  assert.equal(ui.searches().length, beforeBike);
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.searches().length, beforeBike + 1);
+  assert.equal(ui.searches().at(-1).query, 'bike');
+  assert.equal(ui.elements['search-results'].hidden, false);
 });
 
-test('composition searches only committed text immediately and hidden/reading views cancel pending work', async () => {
+test('composition searches only committed text immediately and hidden pages cancel pending work', async () => {
   const ui = await searchUI(); ui.ready();
   ui.event(ui.response, 'compositionstart'); ui.change('broken laptop'); ui.advance(2000);
   assert.equal(ui.searches().length, 0);
@@ -322,7 +332,7 @@ test('composition searches only committed text immediately and hidden/reading vi
   ui.document.visibilityState = 'visible'; ui.event(ui.document, 'visibilitychange');
   ui.document.body.classList.add('reading'); await Promise.resolve(); ui.advance(1000);
   assert.equal(ui.question.textContent, '');
-  assert.equal(ui.searches().length, 1);
+  assert.equal(ui.searches().length, 2, 'visible inline reading no longer blocks local search');
 });
 
 test('index readiness during composition waits for same-value commit in either field', async () => {
@@ -347,7 +357,7 @@ test('index readiness during composition waits for same-value commit in either f
 test('return from an open guide searches and restores the native answer caret immediately', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('bike'); ui.advance(380); ui.clickPart('chain');
   ui.clickGuide(); for (let pass = 0; pass < 12; pass++) await Promise.resolve();
-  assert.equal(ui.document.body.classList.contains('reading'), true);
+  assert.equal(ui.document.body.classList.contains('reading'), false, 'the inline answer never hides the hero');
   assert.equal(ui.elements['guide-panel'].hidden, false);
   const prior = ui.searches().length;
   ui.event(ui.elements['close-guide'], 'click'); ui.flushFrames();
@@ -366,7 +376,7 @@ test('list-only nouns narrow cleanly and unsupported nouns never get empty SVG b
   ui.change('relationship'); ui.advance(380);
   assert.equal(ui.specifierContainer.hidden, true);
   assert.equal(ui.question.textContent, "What's wrong with your relationship?");
-  assert.equal(ui.elements['search-results'].hidden, true);
+  assert.equal(ui.elements['search-results'].hidden, false);
 });
 
 test('a cached older page without the hero controller searches the editable suffix immediately', async () => {
@@ -378,7 +388,7 @@ test('a cached older page without the hero controller searches the editable suff
 });
 
 
-test('a stale cached worker cannot create topic or unknown-kind cards in the UI', async () => {
+test('a stale cached worker cannot make topics or unknown kinds into inline answers', async () => {
   const ui = await searchUI(); ui.ready(); ui.change('broken laptop'); ui.advance(380);
   ui.results(ui.searches().at(-1).requestId, [
     ['topic', 'Laptop topic', 'technology', 'topic', 'Laptop'],
@@ -386,12 +396,12 @@ test('a stale cached worker cannot create topic or unknown-kind cards in the UI'
     ['unknown', 'Unknown kind', 'technology', 'device', 'Laptop'],
     ['example', 'Laptop article', 'technology', 'article', 'Laptop'],
   ]);
-  const cards = ui.elements['result-cards'].querySelectorAll('.repair-card');
-  assert.equal(cards.length, 2);
-  assert.deepEqual(cards.map(card => card.dataset.resultIndex), [1, 3], 'original worker positions stay intact');
-  assert.ok(cards.every(card => card.dataset.guideId === 'example'));
-  for (let pass = 0; pass < 12; pass++) await Promise.resolve();
-  assert.deepEqual(ui.requests, ['/api/guides/example'], 'only actionable visible cards are prefetched');
+  await settleArt();
+  assert.equal(ui.elements['guide-panel'].hidden, false);
+  assert.equal(ui.elements['guide-body'].querySelector('.guide-title').textContent, 'Example guide');
+  assert.equal(ui.elements['result-cards'].children.length, 0, 'duplicate IDs do not create alternate answers');
+  assert.deepEqual(ui.requests, ['/api/guides/example'], 'only the actionable answer is fetched');
+  assert.equal(ui.document.activeElement, ui.response, 'automatic answers preserve typing focus');
 });
 
 
@@ -416,12 +426,13 @@ test('part selection uses native insertText undo when available and safely falls
       ui.event(ui.clarification, 'input', { inputType: 'insertText', data: text, bubbles: true });
       return mode === 'native';
     };
+    const searchesBeforePart = ui.searches().length;
     ui.clickPart('chain');
     assert.equal(ui.clarification.value, 'chain', mode);
     assert.equal(ui.clarification.selectionStart, 5);
     assert.equal(ui.clarification.selectionEnd, 5);
-    assert.equal(ui.searches().length, 1, 'native input plus callback publishes one immediate search');
-    assert.equal(ui.searches()[0].query, 'bike chain');
+    assert.equal(ui.searches().length, searchesBeforePart + 1, 'native input plus callback publishes one immediate search after the noun baseline');
+    assert.equal(ui.searches().at(-1).query, 'bike chain');
     assert.equal(commands, mode === 'unsupported' ? 0 : 1);
     assert.equal(fallbackEdits, ['native', 'false-after-edit'].includes(mode) ? 0 : 1, mode);
     if (undo.length) {
@@ -429,7 +440,9 @@ test('part selection uses native insertText undo when available and safely falls
       ui.event(ui.clarification, 'input', { inputType: 'historyUndo', bubbles: true });
       assert.equal(ui.clarification.value, '');
       assert.equal(ui.window.mendHero.query(), 'bike');
-      assert.equal(ui.elements['search-results'].hidden, true);
+      assert.equal(ui.elements['search-results'].hidden, false);
+      ui.flushFrames();
+      assert.equal(ui.searches().at(-1).query, 'bike');
       assert.equal(ui.option('chain').classList.contains('is-selected'), false);
     }
   }
@@ -446,8 +459,9 @@ test('late resident nouns mount without a synchronous caret move or unspecific s
   assert.equal(ui.specifierContainer.hidden, false);
   assert.equal(ui.document.activeElement, ui.response, 'configuration itself never moves the native caret');
   assert.deepEqual([ui.response.selectionStart, ui.response.selectionEnd], selection);
-  assert.equal(ui.elements['search-results'].hidden, true);
-  assert.equal(ui.searches().length, 0);
+  assert.equal(ui.elements['search-results'].hidden, false);
+  assert.equal(ui.searches().length, 1);
+  assert.equal(ui.searches()[0].query, 'bike');
   ui.advance(0);
   assert.equal(ui.document.activeElement, ui.clarification, 'the already elapsed idle deadline runs separately');
 });
@@ -468,7 +482,7 @@ test('model-backed clarification preserves literal user text throughout part sel
     ui.change(model);
     assert.equal(ui.question.textContent, `What's wrong with your ${model}?`);
     assert.equal(ui.document.activeElement, ui.response);
-    assert.equal(ui.elements['search-results'].hidden, true);
+    assert.equal(ui.elements['search-results'].hidden, false);
     assert.equal(ui.response.value, 'please, mend my ' + model);
     ui.key(ui.response, 'Enter');
     assert.equal(ui.document.activeElement, ui.clarification);
@@ -491,7 +505,7 @@ test('JSON registry transport and cached object workers configure the same synch
     assert.equal(ui.question.textContent, "What's wrong with your bike?", transport);
     assert.equal(ui.document.activeElement, ui.response, 'readiness preserves the current native caret');
     assert.equal(ui.specifierContainer.hidden, false);
-    assert.equal(ui.elements['search-results'].hidden, true);
+    assert.equal(ui.elements['search-results'].hidden, false);
     ui.clickPart('chain');
     assert.equal(ui.searches().at(-1).query, 'bike chain', transport);
   }
@@ -511,7 +525,7 @@ test('malformed registry transport falls back to a cached object or ordinary sea
     assert.equal(ui.elements['catalog-status'].hidden, true);
     if (legacy) {
       assert.equal(ui.question.textContent, "What's wrong with your bike?");
-      assert.equal(ui.elements['search-results'].hidden, true);
+      assert.equal(ui.elements['search-results'].hidden, false);
     } else {
       assert.equal(ui.question.textContent, '');
       assert.equal(ui.searches().at(-1).query, 'bike');

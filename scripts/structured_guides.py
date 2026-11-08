@@ -57,7 +57,8 @@ def cache_key(raw, model, prompt_version=PROMPT_VERSION, *, config=None):
 
 def _validate(value, schema, path):
     kind = schema["type"]
-    expected = {"object": dict, "array": list, "string": str}[kind]
+    expected = {"object": dict, "array": list, "string": str,
+                "integer": int, "boolean": bool}[kind]
     if type(value) is not expected:
         raise ValueError(path + " must be " + kind)
     if "enum" in schema and value not in schema["enum"]:
@@ -72,10 +73,15 @@ def _validate(value, schema, path):
             raise ValueError(path + " has too many items")
         for number, item in enumerate(value):
             _validate(item, schema["items"], path + "[" + str(number) + "]")
-    elif not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", len(value)):
-        raise ValueError(path + " has an invalid length")
-    elif schema.get("minLength", 0) and not value.strip():
-        raise ValueError(path + " cannot be blank")
+    elif kind == "string":
+        if not schema.get("minLength", 0) <= len(value) <= schema.get("maxLength", len(value)):
+            raise ValueError(path + " has an invalid length")
+        if schema.get("minLength", 0) and not value.strip():
+            raise ValueError(path + " cannot be blank")
+    elif kind == "integer":
+        if ("minimum" in schema and value < schema["minimum"] or
+                "maximum" in schema and value > schema["maximum"]):
+            raise ValueError(path + " is outside the allowed range")
 
 
 def validate_content(content):

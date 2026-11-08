@@ -10,7 +10,6 @@
   const body = document.getElementById("guide-body");
   const navigationError = document.getElementById("guide-nav-error");
   const hero = window.mendHero;
-  const categoryNames = new Map();
   const details = new Map();
   const prefetchedImages = new Set();
   const queue = [];
@@ -27,85 +26,10 @@
   let latestSource;
   let searchFrame = 0;
   let pendingSearch;
-  let resultTotal = 0;
-  let displayedRequest = 0;
-  let rangeSerial = 0;
-  let requestedStart = -1;
-  let requestedCount = 0;
-  let scrollFrame = 0;
-  let pendingFocus = null;
-  let resultsScrollY = 0;
+  let choices = [];
+  let explicitNavigation = false;
   const composingInputs = new Set();
-
-  const searchBlocked = () => composingInputs.size > 0 || document.visibilityState === "hidden" ||
-    document.body.classList.contains("reading");
-
-  function geometry() {
-    const css = getComputedStyle(cards);
-    const columns = Number(css.getPropertyValue("--columns")) || 3;
-    const gap = parseFloat(css.columnGap) || 13.6;
-    const height = parseFloat(css.getPropertyValue("--card-height")) || 208;
-    const step = height + gap;
-    // The worker ranks at most 100 matches; ordinary-height scroll tracks keep
-    // every result reachable without the former catalog-sized scaling layer.
-    const totalHeight = Math.max(0, Math.ceil(resultTotal / columns) * step - gap);
-    const top = cards.getBoundingClientRect().top + scrollY;
-    const offset = Math.max(0, Math.min(scrollY - top, Math.max(0, totalHeight - innerHeight)));
-    return { columns, gap, step, totalHeight, top, offset,
-      width: (cards.clientWidth - gap * (columns - 1)) / columns };
-  }
-
-  function positionCards(layout = geometry()) {
-    cards.style.height = `${layout.totalHeight}px`;
-    for (const card of cards.children) {
-      const index = Number(card.dataset.resultIndex);
-      card.style.width = `${layout.width}px`;
-      card.style.left = `${index % layout.columns * (layout.width + layout.gap)}px`;
-      card.style.top = `${Math.floor(index / layout.columns) * layout.step}px`;
-    }
-  }
-
-  function prefetchVisible() {
-    if (currentGuide !== null || results.hidden) return;
-    const visible = new Set();
-    for (const card of cards.children) {
-      const bounds = card.getBoundingClientRect();
-      if (bounds.bottom > 0 && bounds.top < innerHeight) visible.add(card.dataset.guideId);
-    }
-    for (let index = queue.length - 1; index >= 0; index -= 1) {
-      const record = queue[index];
-      if (visible.has(record.id) || record.id === currentGuide || record.id === pendingGuide) continue;
-      queue.splice(index, 1);
-      details.delete(record.id);
-      record.reject(new Error("This result is no longer visible."));
-    }
-    for (const id of visible) loadDetail(id);
-  }
-
-  function updateWindow() {
-    scrollFrame = 0;
-    if (!resultTotal || results.hidden || currentGuide !== null) return;
-    const layout = geometry();
-    const firstRow = Math.max(0, Math.floor(layout.offset / layout.step) - 3);
-    const start = firstRow * layout.columns;
-    const amount = Math.min(60, (Math.ceil(innerHeight / layout.step) + 6) * layout.columns);
-    positionCards(layout);
-    if (displayedRequest === requestId && (start !== requestedStart || amount !== requestedCount)) {
-      requestedStart = start;
-      requestedCount = amount;
-      rangeSerial += 1;
-      worker.postMessage({ type: "range", requestId: displayedRequest, rangeId: rangeSerial, start, count: amount });
-    }
-    prefetchVisible();
-  }
-
-  function scheduleWindow() {
-    if (!scrollFrame) scrollFrame = requestAnimationFrame(updateWindow);
-  }
-
-  window.addEventListener("scroll", scheduleWindow, { passive: true });
-  window.addEventListener("resize", scheduleWindow);
-  window.addEventListener("mend:layout", scheduleWindow);
+  const searchBlocked = () => composingInputs.size > 0 || document.visibilityState === "hidden";
 
   const query = () => hero ? hero.query() : input.value.slice(Number(input.dataset.promptLength)).trim();
   const node = (tag, className, text) => {
@@ -136,17 +60,23 @@
   }
 
   function hideResults() {
+    cancelPendingGuide();
+    currentGuide = null;
+    choices = [];
     document.body.classList.remove("searching");
     results.hidden = true;
+    panel.hidden = true;
+    body.replaceChildren();
     cards.replaceChildren();
-    resultTotal = 0;
-    cards.style.height = "0px";
-    requestedStart = -1;
+    count.textContent = "";
+    count.hidden = true;
+    pruneQueue(new Set());
   }
 
   function runSearch(force = false) {
+    if (explicitNavigation && !force) return;
     const text = query();
-    if (!text || hero?.isAwaitingSpecifics?.()) {
+    if (!text) {
       invalidateSearch();
       hideResults();
       return;
@@ -157,21 +87,28 @@
 
   function executeSearch(text) {
     requestId += 1;
-    pendingFocus = null;
     document.body.classList.add("searching");
-    results.hidden = currentGuide !== null;
     inputAt = performance.now();
-    if (!ready) {
-      results.hidden = true;
-      return;
-    }
-    const layout = geometry();
-    pendingSearch = { type: "search", requestId, query: text, count: Math.min(60, (Math.ceil(innerHeight / layout.step) + 6) * layout.columns) };
+    if (!ready) return;
+    // The worker still ranks the best 100. The inline UI needs only the first
+    // answer and five alternatives, avoiding card layout/range round trips.
+    results.hidden = false;
+    pendingSearch = { type: "search", requestId, query: text, count: 6 };
     if (!searchFrame) searchFrame = requestAnimationFrame(() => {
       searchFrame = 0;
       if (searchBlocked()) { pendingSearch = null; return; }
       worker.postMessage(pendingSearch);
     });
+  }
+
+  function pruneQueue(wanted) {
+    for (let index = queue.length - 1; index >= 0; index--) {
+      const record = queue[index];
+      if (wanted.has(record.id) || record.id === currentGuide || record.id === pendingGuide) continue;
+      queue.splice(index, 1);
+      details.delete(record.id);
+      record.reject(new Error("This answer is no longer requested."));
+    }
   }
 
   function cacheImages(detail) {
@@ -185,16 +122,23 @@
     }
   }
 
-  function loadDetail(id) {
+  function loadDetail(id, priority = false) {
     let record = details.get(id);
-    if (record) return record;
+    if (record?.state === "error") { details.delete(id); record = null; }
+    if (record) {
+      if (priority && record.state === "queued") {
+        const index = queue.indexOf(record);
+        if (index > 0) { queue.splice(index, 1); queue.unshift(record); }
+      }
+      return record;
+    }
     let resolve, reject;
     const promise = new Promise((accept, fail) => { resolve = accept; reject = fail; });
     // Background prefetch failures are surfaced only if that item is opened.
     promise.catch(() => {});
     record = { id, promise, resolve, reject, data: null, state: "queued" };
     details.set(id, record);
-    queue.push(record);
+    if (priority) queue.unshift(record); else queue.push(record);
     pump();
     return record;
   }
@@ -230,65 +174,32 @@
     }
   }
 
-  function renderWindow(items, start) {
+  function renderPossibilities() {
     const fragment = document.createDocumentFragment();
-    items.forEach((row, offset) => {
-      const [id, title, categoryId, kind, device] = row;
-      if (kind !== "guide" && kind !== "article") return;
-      const card = node("a", "repair-card");
-      card.href = guideHref(id);
-      card.title = title;
-      card.dataset.guideId = id;
-      card.dataset.resultIndex = start + offset;
-      card.setAttribute("role", "listitem");
-      card.setAttribute("aria-posinset", start + offset + 1);
-      card.setAttribute("aria-setsize", resultTotal);
-      const label = kind === "guide" ? "Repair guide" : "Repair article";
-      card.append(node("p", "card-meta", `${categoryNames.get(categoryId) || categoryId} · ${label}`), node("h2", "", title));
-      if (device && device !== title) card.append(node("p", "card-device", device));
-      fragment.append(card);
-    });
-    const focused = document.activeElement?.closest(".repair-card")?.dataset.guideId;
+    for (const row of choices.slice(1, 6)) {
+      const link = node("a", "answer-possibility", row[1]);
+      link.href = guideHref(row[0]);
+      link.dataset.guideId = row[0];
+      link.setAttribute("role", "listitem");
+      if (row[0] === currentGuide) link.setAttribute("aria-current", "true");
+      fragment.append(link);
+    }
     cards.replaceChildren(fragment);
-    cards.dataset.total = resultTotal;
-    cards.dataset.start = start;
-    cards.dataset.end = start + items.length;
-    positionCards();
-    const nextFocus = pendingFocus !== null
-      ? cards.querySelector(`[data-result-index="${pendingFocus}"]`)
-      : focused ? cards.querySelector(`[data-guide-id="${focused}"]`) : null;
-    if (nextFocus) { nextFocus.focus({ preventScroll: true }); pendingFocus = null; }
-    prefetchVisible();
+    count.textContent = choices.length > 1 ? "Other possibilities" : "";
+    count.hidden = choices.length <= 1;
   }
 
-  function renderCards(message) {
-    if (message.requestId !== requestId) return;
+  function renderAnswers(message) {
+    if (message.requestId !== requestId || explicitNavigation || !query()) return;
     stats.searchMs.push(message.duration);
-    resultTotal = message.total;
-    displayedRequest = requestId;
-    rangeSerial += 1;
-    requestedStart = 0;
-    requestedCount = pendingSearch.count;
-    count.textContent = message.total ? `${message.total.toLocaleString()} ${message.total === 1 ? "match" : "matches"}` : "";
-    renderWindow(message.items, 0);
-    updateWindow();
-    stats.inputToResultsMs.push(performance.now() - inputAt);
+    const seen = new Set();
+    const rows = message.items.filter(row => (row[3] === "guide" || row[3] === "article") &&
+      !seen.has(row[0]) && seen.add(row[0])).slice(0, 6);
+    if (!rows.length) { hideResults(); return; }
+    pruneQueue(new Set(rows.slice(0, 5).map(row => row[0])));
+    showGuide(rows[0][0], false, { automatic: true, rows, searchRequest: message.requestId });
+    for (const row of rows.slice(1, 5)) loadDetail(row[0]);
   }
-
-  cards.addEventListener("keydown", (event) => {
-    if (event.key !== "Tab") return;
-    const card = event.target.closest(".repair-card");
-    if (!card) return;
-    const next = Number(card.dataset.resultIndex) + (event.shiftKey ? -1 : 1);
-    if (next < 0 || next >= resultTotal) return;
-    const mounted = cards.querySelector(`[data-result-index="${next}"]`);
-    if (mounted) return;
-    event.preventDefault();
-    pendingFocus = next;
-    const layout = geometry();
-    window.scrollTo(0, layout.top + Math.floor(next / layout.columns) * layout.step);
-    scheduleWindow();
-  });
 
   const strings = (value) => Array.isArray(value)
     ? value.filter((item) => typeof item === "string" && item.trim()) : [];
@@ -447,7 +358,7 @@
     return content;
   }
 
-  function renderGuide(detail) {
+  function renderGuide(detail, focusHeading = false) {
     body.removeAttribute("aria-busy");
     const fragment = document.createDocumentFragment();
     const heading = node("h1", "guide-title", detail.title || "Repair guide");
@@ -479,75 +390,78 @@
       related.append(list); fragment.append(related);
     }
     body.replaceChildren(fragment);
-    heading.focus({ preventScroll: true });
+    if (focusHeading) heading.focus({ preventScroll: true });
   }
 
-  function commitGuide(id, detail, addHistory) {
-    if (currentGuide === null) resultsScrollY = scrollY;
+  function commitGuide(id, detail, addHistory, options) {
     currentGuide = id;
     pendingGuide = null;
     navigationError.hidden = true;
-    document.body.classList.add("reading");
+    document.body.classList.remove("reading");
+    document.body.classList.add("searching");
     panel.hidden = false;
-    results.hidden = true;
+    results.hidden = false;
+    document.getElementById("close-guide").hidden = !explicitNavigation;
+    if (options.rows) choices = options.rows;
     if (addHistory) history.pushState({ guide: id }, "", guideHref(id));
-    window.scrollTo(0, 0);
-    renderGuide(detail);
+    renderGuide(detail, !options.automatic);
+    renderPossibilities();
+    if (options.automatic) stats.inputToResultsMs.push(performance.now() - inputAt);
+    window.dispatchEvent(new Event("mend:layout"));
   }
 
   function cancelPendingGuide() {
-    if (pendingGuide !== null) viewVersion += 1;
+    viewVersion += 1;
     pendingGuide = null;
     navigationError.hidden = true;
   }
 
-  function showGuide(id, addHistory = true) {
+  function showGuide(id, addHistory = true, options = {}) {
+    if (typeof id !== "string" || !id) return;
     const started = performance.now();
     const version = ++viewVersion;
+    if (!options.automatic) {
+      explicitNavigation = true;
+      invalidateSearch();
+    }
     pendingGuide = id;
     navigationError.hidden = true;
-    const record = loadDetail(id);
+    const record = loadDetail(id, true);
+    const valid = () => version === viewVersion && (!options.automatic ||
+      options.searchRequest === requestId && !explicitNavigation && query() &&
+      !searchBlocked());
     if (record.data) {
-      commitGuide(id, record.data, addHistory);
+      if (valid()) commitGuide(id, record.data, addHistory, options);
       stats.cachedOpenMs.push(performance.now() - started);
       return;
     }
-    // Prioritize a clicked page over other cards still waiting for a fetch slot.
-    if (record.state === "queued") {
-      const index = queue.indexOf(record);
-      if (index > 0) { queue.splice(index, 1); queue.unshift(record); }
-    }
-    // Keep the current results or guide intact until the requested content is ready.
+    // Keep the prior answer and alternatives until the replacement is ready.
+    // Changing/clearing input invalidates this selection before any old fetch
+    // resolves; automatic rendering never focuses or scrolls the page.
     record.promise.then((detail) => {
-      if (version === viewVersion) commitGuide(id, detail, addHistory);
+      if (valid()) commitGuide(id, detail, addHistory, options);
     }).catch((error) => {
-      if (version !== viewVersion) return;
+      if (!valid()) return;
       pendingGuide = null;
+      // Automatic prefetch errors stay quiet; explicit navigation offers retry.
+      if (options.automatic) return;
       const message = node("span", "", error.message);
       const retry = node("button", "text-button", "Try again");
       retry.type = "button";
-      retry.addEventListener("click", () => { details.delete(id); showGuide(id, addHistory); });
+      retry.addEventListener("click", () => { details.delete(id); showGuide(id, addHistory, options); });
       navigationError.replaceChildren(message, document.createTextNode(" "), retry);
       navigationError.hidden = false;
     });
   }
 
   function closeGuide(addHistory = true) {
-    currentGuide = null;
-    pendingGuide = null;
-    viewVersion += 1;
-    navigationError.hidden = true;
-    document.body.classList.remove("reading");
-    panel.hidden = true;
-    body.removeAttribute("aria-busy");
-    window.dispatchEvent(new Event("mend:layout"));
+    explicitNavigation = false;
+    cancelPendingGuide();
+    document.getElementById("close-guide").hidden = true;
     if (addHistory) history.pushState({}, "", location.pathname);
-    if (hero) hero.focus();
-    else input.focus({ preventScroll: true });
+    if (hero) hero.focus(); else input.focus({ preventScroll: true });
     hero?.settle?.();
     runSearch(true);
-    window.scrollTo(0, resultsScrollY);
-    scheduleWindow();
   }
 
   document.addEventListener("click", (event) => {
@@ -560,6 +474,11 @@
   });
 
   const queryChanged = () => {
+    if (explicitNavigation) {
+      explicitNavigation = false;
+      history.replaceState?.({}, "", location.pathname);
+      document.getElementById("close-guide").hidden = true;
+    }
     cancelPendingGuide();
     invalidateSearch();
     runSearch();
@@ -568,7 +487,7 @@
   else input.addEventListener("input", queryChanged);
   window.addEventListener("mend:settle", () => runSearch());
   for (const field of [input, document.getElementById("clarification-response")].filter(Boolean)) {
-    field.addEventListener("compositionstart", () => { composingInputs.add(field); invalidateSearch(); });
+    field.addEventListener("compositionstart", () => { composingInputs.add(field); cancelPendingGuide(); invalidateSearch(); });
     field.addEventListener("compositionend", () => {
       composingInputs.delete(field);
       // The committed value can equal the last preedit value, so the hero may
@@ -605,7 +524,6 @@
         count.textContent = "";
         latestSource = data.source;
         stats.indexLoadMs = data.loadDuration;
-        for (const item of data.categories) categoryNames.set(item.id, item.name);
         // Cached workers may still send the earlier object representation.
         let archetypes = data.archetypes;
         const encoded = typeof data.archetypesJSON === "string" ? data.archetypesJSON
@@ -619,10 +537,7 @@
         hero?.setVocabulary?.(data.terms || []);
         runSearch();
         window.dispatchEvent(new Event("mend:catalogready"));
-      } else if (data.type === "results") renderCards(data);
-      else if (data.type === "range" && data.requestId === requestId && data.rangeId === rangeSerial) {
-        renderWindow(data.items, data.start);
-      }
+      } else if (data.type === "results") renderAnswers(data);
       else if (data.type === "error") {
         setStatus(data.message);
         count.textContent = "The repair library could not be loaded. Refresh to try again.";

@@ -39,16 +39,20 @@ catalog; no local corpus, SQLite database, or response cache is uploaded.
 SVG batch experiments use the same local metadata and reusable source tools:
 
 ```sh
-python3 scripts/run_bounded.py --memory-mib 8192 -- uv run --python 3.12.12 python scripts/diagram_batch.py run --limit 300 --concurrency 128 --discovery-workers 32 --geometry-workers 2
+python3 scripts/run_bounded.py --memory-mib 8192 -- uv run --python 3.12.12 python scripts/diagram_batch.py run --limit 10 --concurrency 128 --discovery-workers 16 --geometry-workers 2 --work-dir catalog-data/build/diagram-batch-10
 ```
 
 `OPENROUTER_API_KEY` is read from the ignored root `.env`. `--offline` replays
 validated response and source caches without upstream calls. `prepare`,
-`taxonomy`, `discover`, `digest`, `map`, and `compile` resume individual phases;
+`taxonomy`, `discover`, `digest`, `map`, `compile`, and `verify` resume individual phases;
 `--phase secondary` selects the coverage-gated follow-up. Outputs, source pins,
 geometry, contact sheets, accounting, and `report.json` stay in
-`catalog-data/build/diagram-batch-300/`. A processed noun is not an accepted SVG.
-The batch does not mutate a served release or bypass visual approval.
+`catalog-data/build/diagram-batch-10/`. Numbered candidate images and independent
+per-part VLM checks are pinned in their cache identities. A processed noun or
+automated visual pass is not an accepted SVG. Report the 10-item pass rate and
+cost before expanding; a larger run needs authorization. The batch does not
+mutate a served release or bypass visual approval. Historical 300-item evidence
+remains in `catalog-data/build/diagram-batch-300/`.
 
 Pinned inputs:
 
@@ -165,9 +169,11 @@ so inflections such as `battery`/`batteries` and `repair`/`repairing` share matc
 Numeric identifiers are never stemmed.
 
 The browser worker intersects posting lists and keeps the best 100 matches using
-bounded ranking. The page provides continuous scrolling through those results,
-mounts at most 60 cards, and prefetches only visible cards. There is no Show more
-or Clear search control, and an empty result set has no status copy.
+bounded ranking. The page renders the first guide inline, prefetches ranks two
+through five, and offers ranks two through six in a side list. The centered
+article keeps the hero editable; the prior answer remains until its replacement
+is ready. Empty clarification answers still search the first subject.
+There is no Show more or Clear search control, and empty results stay blank.
 Search supports word prefixes while typing and bounded
 typo matching through a compact word trie: one Levenshtein edit for 5–7 letters,
 two for words of at least 8 letters. Typo recovery applies to ASCII letter words

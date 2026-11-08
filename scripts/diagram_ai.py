@@ -26,6 +26,7 @@ from structured_guides import _validate
 
 # Immutable cache-format identity, retained independently of the retired runner.
 PROMPT_VERSION = "diagram-pilot-v1"
+VISION_VERSION = "set-of-mark-v2"
 
 def read_json(path):
     return json.loads(Path(path).read_bytes())
@@ -66,8 +67,10 @@ def cache_key(stage, prepared, schema, model, config, *, system_prompt):
         "systemPromptSha256": digest_bytes(system_prompt.encode()),
         "compilerVersion": COMPILER_VERSION, "configuration": config}))
 
-def completion(payload, key, schema, timeout=120):
+def completion(payload, key, schema, timeout=None):
     """Use the existing credential/error conventions with a separate schema."""
+    if timeout is None:
+        timeout = 300 if payload.get('reasoning', {}).get('enabled') else 120
     try:
         key = validate_api_key(key)
         if not key:
@@ -87,6 +90,8 @@ def completion(payload, key, schema, timeout=120):
         raise APIError("OpenRouter connection failed (" + type(error).__name__ + ")", retryable=True) from None
     if len(body) > 4_000_000:
         raise APIError("OpenRouter response exceeds size bound")
+    envelope = {}
+    choice = {}
     try:
         envelope = json.loads(body)
         choices = envelope.get("choices")
@@ -98,14 +103,25 @@ def completion(payload, key, schema, timeout=120):
         result = json.loads(message["content"])
         validate_schema(result, schema)
     except (ValueError, KeyError, TypeError, AttributeError):
-        raise APIError("OpenRouter returned incomplete, refused, or schema-invalid output") from None
+        finish = choice.get('finish_reason') if isinstance(choice, dict) else None
+        error = APIError("OpenRouter returned incomplete, refused, or schema-invalid output",
+                         finish_reason=finish if isinstance(finish, str) else None)
+        # Rejected content is never cached, but numerical provider usage is
+        # still accounting evidence. In particular, length failures are billed.
+        error.usage = numerical_usage(envelope.get('usage')) if isinstance(envelope, dict) else {}
+        raise error from None
     return result, numerical_usage(envelope.get("usage"))
 
 async def batch(stage, jobs, work, *, model=DEFAULT_MODEL, api_key=None, concurrency=40, transport=completion):
     if type(concurrency) is not int or not 1 <= concurrency <= 128:
         raise ValueError("Concurrency must be 1..128")
-    config = {"maxTokens": 8192 if stage == "mapping" else 4096, "temperature": 0,
-              "reasoningEnabled": False, "strict": True, "requireParameters": True}
+    vision = stage in {"mapping", "verification"}
+    config = {"maxTokens": 8192 if vision else 4096, "temperature": 0,
+              "reasoningEnabled": vision, "strict": True, "requireParameters": True}
+    if vision:
+        # Taxonomy identities deliberately stay stable; old low-detail mapping
+        # responses cannot replay as numbered high-detail visual evidence.
+        config.update(visionVersion=VISION_VERSION, imageDetail="high")
     pool = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="diagram-ai")
     semaphore = asyncio.Semaphore(concurrency)
     started = time.perf_counter()
@@ -115,7 +131,16 @@ async def batch(stage, jobs, work, *, model=DEFAULT_MODEL, api_key=None, concurr
         nonlocal active, peak, calls
         prepared, schema = job["input"], job["schema"]
         system_prompt = job["systemPrompt"]
-        key = cache_key(stage, prepared, schema, model, config, system_prompt=system_prompt)
+        image_pins = []
+        for item in job.get('images', []):
+            body = Path(item['path']).read_bytes()
+            if digest_bytes(body) != item['sha256'] or len(body) > 1_000_000:
+                raise ValueError('Mapping preview differs from its SHA pin or size bound')
+            image_pins.append({'id': item['id'], 'sha256': item['sha256']})
+        if len(image_pins) > 16:
+            raise ValueError('Vision request exceeds sixteen pinned images')
+        cache_input = {**prepared, '_pinnedImages': image_pins} if image_pins else prepared
+        key = cache_key(stage, cache_input, schema, model, config, system_prompt=system_prompt)
         path = Path(work) / "cache" / stage / (key + ".json")
         record = None
         try:
@@ -136,14 +161,19 @@ async def batch(stage, jobs, work, *, model=DEFAULT_MODEL, api_key=None, concurr
             if digest_bytes(body) != image["sha256"] or len(body) > 1_000_000:
                 raise ValueError("Mapping preview differs from its SHA pin or size bound")
             user_content.extend([{"type": "text", "text": "Candidate image: " + image["id"]},
-                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(body).decode(), "detail": "low"}}])
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(body).decode(), "detail": "high" if vision else "low"}}])
         payload = {"model": model, "messages": [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_content if job.get("images") else canonical(prepared).decode()}],
             "temperature": config["temperature"], "max_tokens": config["maxTokens"],
-            "reasoning": {"enabled": False}, "provider": {"require_parameters": True},
+            "reasoning": {"enabled": vision, **({"exclude": True} if vision else {})}, "provider": {"require_parameters": True},
             "response_format": {"type": "json_schema", "json_schema": {"name": "diagram_" + stage, "strict": True, "schema": schema}}}
         attempted = 0
+        failed_usage = {}
+        reported_failures = 0
+
+        def failure_accounting():
+            return {'failedUsage': failed_usage, 'reportedFailureAttempts': reported_failures}
         async with semaphore:
             for attempt in range(3):
                 try:
@@ -155,14 +185,22 @@ async def batch(stage, jobs, work, *, model=DEFAULT_MODEL, api_key=None, concurr
                     try:
                         validate_schema(content, schema)
                     except (ValueError, TypeError):
-                        raise APIError("Completion failed independent local schema validation") from None
+                        error = APIError("Completion failed independent local schema validation")
+                        error.usage = numerical_usage(usage)
+                        raise error from None
                     record = {"version": 1, "cacheKey": key, "model": model, "configuration": config,
-                              "inputSha256": digest_bytes(canonical(prepared)), "content": content, "usage": usage}
+                              "inputSha256": digest_bytes(canonical(cache_input)), "content": content, "usage": usage}
                     save(path, record)
-                    return {"id": job["id"], "cacheKey": key, "apiCalls": attempted, "cached": False, "content": content, "usage": usage}
+                    return {"id": job["id"], "cacheKey": key, "apiCalls": attempted, "cached": False,
+                            "content": content, "usage": usage, **failure_accounting()}
                 except APIError as error:
+                    reported = numerical_usage(getattr(error, 'usage', {}))
+                    for name, value in reported.items():
+                        failed_usage[name] = failed_usage.get(name, 0) + value
+                    reported_failures += int('cost' in reported)
                     if not error.retryable or attempt == 2:
-                        return {"id": job["id"], "cacheKey": key, "apiCalls": attempted, "cached": False, "error": str(error)}
+                        return {"id": job["id"], "cacheKey": key, "apiCalls": attempted, "cached": False,
+                                "error": str(error), 'finishReason': error.finish_reason, **failure_accounting()}
                     await asyncio.sleep(max(error.retry_after, 2 ** attempt))
     try:
         results = await asyncio.gather(*(run(job) for job in jobs))

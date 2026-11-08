@@ -16,6 +16,7 @@ import subprocess
 import xml.etree.ElementTree as ET
 
 VERSION = "diagram-svg-v1"
+PREVIEW_VERSION = "true-aspect-v2"
 NS = "http://www.w3.org/2000/svg"
 INKSCAPE = "http://www.inkscape.org/namespaces/inkscape"
 GEOMETRY = {"d", "cx", "cy", "r", "rx", "ry", "x", "y", "width", "height", "points", "x1", "x2", "y1", "y2"}
@@ -466,11 +467,25 @@ def compile_art(subject, source, mapping, digest, leaves, *, omit_geometry_parts
     return payload
 
 
+def preview_size(box):
+    if len(box) != 4 or not all(math.isfinite(value) for value in box) or min(box[2:]) <= 0:
+        raise ValueError("Preview requires a finite positive viewBox")
+    # Fit the *viewport* to the drawing, not the drawing to a fixed 16:10
+    # viewport. Thin portrait/landscape diagrams otherwise lose most VLM detail
+    # to letterboxing. Pixel area stays bounded for malformed/extreme ratios.
+    ratio = box[2] / box[3]
+    if not 1 / 20 <= ratio <= 20:
+        raise ValueError("Preview aspect ratio exceeds 20:1 bound")
+    scale = min(720 / box[2], 720 / box[3])
+    return max(1, round(box[2] * scale)), max(1, round(box[3] * scale))
+
+
 def render_preview(art, output, highlight=None, *, dark=False):
     """Render only sanitized generated geometry; never execute a browser."""
     ink, paper = ("#fafafa", "#030303") if dark else ("#111111", "#fafafa")
     box = list(map(float, art["viewBox"].split()))
-    root = ET.Element("{" + NS + "}svg", {"viewBox": art["viewBox"], "width": "720", "height": "450"})
+    width, height = preview_size(box)
+    root = ET.Element("{" + NS + "}svg", {"viewBox": art["viewBox"], "width": str(width), "height": str(height)})
     root.append(ET.Element("{" + NS + "}rect", {"x": str(box[0]), "y": str(box[1]), "width": str(box[2]), "height": str(box[3]), "fill": paper}))
     context = ET.SubElement(root, "{" + NS + "}g", {"opacity": ".3"})
     for descriptor in art["context"]:

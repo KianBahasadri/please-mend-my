@@ -862,3 +862,46 @@ test('an older cached page without artwork hooks retains the complete native inp
     assert.equal(dom.window.mendHero.query(), 'relationship!');
   }
 });
+
+test('apostrophe-less filler and failure contractions agree with hero completion without rewriting input', async () => {
+  for (const [raw, marked] of [['its arm', "it's arm"], ['thats laptop', "that's laptop"],
+    ['im my arm', "i'm my arm"], ['youre my laptop', "you're my laptop"], ['theyre my arm', "they're my arm"],
+    ['hes my arm', "he's my arm"], ['shes my laptop', "she's my laptop"], ['his arm', 'his arm'], ['her laptop', 'her laptop'],
+    ['he is my arm', 'he is my arm'], ['she has my laptop', 'she has my laptop']]) {
+    for (const value of [raw, marked]) {
+      const dom = await heroFor(); dom.type(dom.response, value); dom.key(dom.response, 'Enter');
+      assert.equal(dom.visible(), true, value);
+      assert.equal(dom.question.textContent, `What's wrong with your ${value.endsWith('arm') ? 'arm' : 'laptop'}?`);
+      assert.equal(dom.window.mendHero.query(), value);
+    }
+  }
+  for (const raw of ['dog he is lethargic', "dog he's lethargic", 'dog hes lethargic',
+    "dog she isn't lethargic", 'dog she isnt lethargic']) {
+    const dom = await heroFor(); dom.type(dom.response, raw); dom.key(dom.response, 'Enter'); dom.advance(2000);
+    assert.equal(dom.visible(), false, raw);
+    assert.equal(dom.window.mendHero.query(), raw);
+  }
+  for (const plain of ['wont', 'cant', 'dont', 'doesnt', 'didnt', 'isnt', 'arent', 'wasnt', 'hasnt', 'havent']) {
+    const dom = await heroFor(); const raw = 'arm ' + plain + ' working';
+    dom.type(dom.response, raw); dom.key(dom.response, 'Enter'); dom.advance(2000);
+    assert.equal(dom.visible(), false, plain);
+    assert.equal(dom.window.mendHero.query(), raw);
+  }
+});
+
+test('inline answer text permits native selection while actual background retains the hero caret', async () => {
+  const dom = await heroFor(); dom.type(dom.response, 'broken arm');
+  const panel = dom.add('section', 'guide-panel'), prose = dom.document.createElement('p');
+  panel.append(prose);
+  const reading = dom.event(prose, 'pointerdown', { button: 0, bubbles: true });
+  assert.equal(reading.defaultPrevented, false, 'answer prose drag must be selectable');
+  dom.response.blur();
+  await Promise.resolve();
+  assert.equal(dom.document.activeElement, dom.document.body, 'the blur microtask cannot steal focus during a prose drag');
+  const background = dom.event(dom.document.body, 'pointerdown', { button: 0, bubbles: true });
+  assert.equal(background.defaultPrevented, true);
+  assert.equal(dom.document.activeElement, dom.response);
+  dom.response.blur();
+  await Promise.resolve();
+  assert.equal(dom.document.activeElement, dom.response, 'ordinary blur protection resumes after a background/input interaction');
+});

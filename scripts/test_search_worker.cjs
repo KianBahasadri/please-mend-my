@@ -917,3 +917,134 @@ test('permanent HTTP failures and invalid catalog payloads are never retried', a
 });
 
 module.exports = { workerFor, prepare };
+
+test('unpunctuated contractions match apostrophized search while preserving negation', async () => {
+  const index = fixture();
+  index.items = [
+    ['negative', 'Laptop Not Working', 'technology', 'guide', 'Laptop'],
+    ['positive', 'Laptop Working', 'technology', 'guide', 'Laptop'],
+    ['arm', 'Broken arm', 'health', 'article', ''],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: [0, 0, 0] };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    for (const [plain, marked] of [['wont', "won't"], ['cant', "can't"], ['dont', "don't"],
+      ['doesnt', "doesn't"], ['didnt', "didn't"], ['isnt', "isn't"], ['arent', "aren't"],
+      ['wasnt', "wasn't"], ['hasnt', "hasn't"], ['havent', "haven't"]]) {
+      const result = await worker.search('laptop ' + plain + ' working');
+      assert.deepEqual(Array.from(result.items, row => row[0]), ['negative'], plain);
+      assert.deepEqual(Array.from(result.items, row => row[0]),
+        Array.from((await worker.search('laptop ' + marked + ' working')).items, row => row[0]), plain);
+    }
+    for (const [plain, marked] of [['its', "it's"], ['thats', "that's"], ['im', "i'm"], ['youre', "you're"], ['theyre', "they're"]]) {
+      assert.deepEqual(Array.from((await worker.search('arm ' + plain + ' broken')).items, row => row[0]), ['arm'], plain);
+      assert.deepEqual(Array.from((await worker.search('arm ' + marked + ' broken')).items, row => row[0]), ['arm'], marked);
+    }
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+function failureFixture() {
+  const items = [
+    ['dog-aid', 'Dog Emergency First Aid', 'animals', 'article', 'Dog'],
+    ['dog-flu', 'How to Diagnose Dog Flu', 'animals', 'guide', 'Dog'],
+    ['car-start', 'How to Jump Start a Car', 'vehicles', 'guide', 'Car'],
+    ['car-battery', 'Car Battery Repair', 'vehicles', 'guide', 'Car'],
+    ['car-trouble', 'Car Troubleshooting', 'vehicles', 'article', 'Car'],
+    ['laptop-trouble', 'Laptop Troubleshooting', 'technology', 'article', 'Laptop'],
+    ['laptop-hack', 'How to Hack a Dead Laptop Battery', 'technology', 'guide', 'Laptop'],
+    ['wrong-subject', 'Phone Not Working', 'technology', 'guide', 'Phone'],
+    ['arm', 'Broken arm', 'health', 'article', ''],
+    ['model', 'MacBook A2179 Battery Repair', 'technology', 'guide', 'MacBook A2179'],
+    ['dog-niche', 'Dog Paw Repair', 'animals', 'guide', 'Dog'],
+    ['dog-treats', 'Healthy Emergency Dog Treats', 'animals', 'guide', 'Dog'],
+    ['car-kit', 'Car Emergency Kit', 'vehicles', 'guide', 'Car'],
+    ['dog-paw-aid', 'Dog Paw Emergency First Aid', 'animals', 'article', 'Dog'],
+    ['dog-cpr', 'How to Perform CPR on a Dog', 'animals', 'guide', 'Dog'],
+  ];
+  return { version: 1, revision: 'failure-fixture', source: {}, categories: [
+    { id: 'animals', name: 'Animals' }, { id: 'vehicles', name: 'Vehicles' },
+    { id: 'technology', name: 'Technology' }, { id: 'health', name: 'Health' },
+  ], items,
+    search: { version: 1, groups: ['', 'dog\ndogs', 'car\nautomobile', 'laptop\nnotebook'],
+      itemGroups: [1, 1, 2, 2, 2, 3, 3, 2, 0, 3, 1, 1, 2, 1, 1] },
+    archetypes: { version: 1, revision: 'failure-fixture', archetypes: ['dog', 'car', 'laptop', 'arm'].map(label => ({
+      id: 'noun-' + label, label, aliases: [label], guideCount: 5, parts: [], artUrl: null,
+    })), models: [] },
+  };
+}
+
+test('empty failure intersections relax symptoms within mandatory subject and prefer general diagnosis', async () => {
+  const worker = await workerFor(prepare(failureFixture()));
+  for (const [query, expected] of [['dog wont start', 'dog-aid'], ['car wont start', 'car-start'],
+    ['laptop wont start', 'laptop-trouble'], ['dog not working', 'dog-aid']]) {
+    const result = await worker.search(query);
+    assert.equal(result.items[0]?.[0], expected, query);
+    assert.equal(result.items.some(row => row[0] === 'wrong-subject'), false, query);
+    if (query.startsWith('dog')) assert.ok(result.items.some(row => row[0] === 'dog-cpr'), 'available CPR guide participates in triage fallback');
+    assert.ok(result.items.every(row => ['guide', 'article'].includes(row[3])));
+  }
+  assert.equal(worker.fetches(), 1, 'fallback uses resident metadata/postings only');
+});
+
+test('failure fallback retains specific symptoms and numeric intent and never reverses not-broken', async () => {
+  const worker = await workerFor(prepare(failureFixture()));
+  for (const query of ['arm isnt broken', "arm isn't broken", 'laptop A2178 wont start',
+    'laptop A2179 wont start', 'unknownsubject wont start', 'laptop missingwidget wont start']) {
+    assert.equal((await worker.search(query)).total, 0, query);
+  }
+  assert.deepEqual(Array.from((await worker.search('dog paw wont start')).items, row => row[0]), ['dog-paw-aid']);
+  assert.equal((await worker.search('MacBook A2179 Battery Repair')).items[0][0], 'model');
+  assert.equal((await worker.search('Dog Paw Repair')).items[0][0], 'dog-niche', 'strict exact title remains authoritative');
+});
+
+
+test('he/she pronouns and contractions normalize identically without dropping clinical negation', async () => {
+  const index = fixture();
+  index.items = [
+    ['symptom', 'Lethargic Dog', 'animals', 'guide', 'Dog'],
+    ['negated', 'Dog Not Lethargic', 'animals', 'guide', 'Dog'],
+  ];
+  index.search = { version: 1, groups: [''], itemGroups: [0, 0] };
+  for (const catalog of [index, prepare(index)]) {
+    const worker = await workerFor(catalog);
+    for (const [plain, marked] of [['dog hes lethargic', "dog he's lethargic"],
+      ['dog shes lethargic', "dog she's lethargic"],
+      ['dog he isnt lethargic', "dog he isn't lethargic"],
+      ['dog she isnt lethargic', "dog she isn't lethargic"]]) {
+      assert.deepEqual(Array.from((await worker.search(plain)).items, row => row[0]),
+        Array.from((await worker.search(marked)).items, row => row[0]), plain);
+    }
+    for (const query of ['dog he isnt lethargic', 'dog she isnt lethargic']) {
+      assert.deepEqual(Array.from((await worker.search(query)).items, row => row[0]), ['negated'], query);
+    }
+    for (const query of ['his dog lethargic', 'her dog lethargic', 'dog hes lethargic', 'dog shes lethargic']) {
+      assert.equal((await worker.search(query)).total, 2, query);
+    }
+    assert.equal(worker.fetches(), 1);
+  }
+});
+
+
+test('subject category evidence preserves normalized Unicode word/brand boundaries without per-row tokenization', () => {
+  const context = vm.createContext({ self: {}, performance: { now: () => 0 },
+    fetch: () => new Promise(() => {}), postMessage() {} });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8'), context);
+  for (const [alias, label, text] of [
+    ['dog', 'canine', 'Underdog dogma'], ['dog', 'canine', "Dog's emergency care"],
+    ['car', 'automobile', 'Discard cardboard repair'], ['car', 'automobile', 'Automobile battery'],
+    ['road bike', 'bicycle', 'Road-bike chain'], ['road bike', 'bicycle', 'Road bikes chain'],
+    ['resume', 'resume', 'Résumé formatting'], ['arm', 'arm', 'Firearm disassembly'],
+    ['αβ', 'αβ', 'αβγ'], ['αβ', 'αβ', 'Part αβ replacement'],
+    ['macbook air', 'laptop', 'MacBook Air'], ['macbook air', 'laptop', 'MacBook Airways'],
+  ]) {
+    Object.assign(context, { inputAlias: alias, inputLabel: label, inputText: text });
+    const result = vm.runInContext(`(() => {
+      const alias = normalizeSubject(inputAlias), label = normalizeSubject(inputLabel);
+      const normalized = " " + normalizeSubject(inputText) + " ";
+      return [subjectEvidencePattern({ alias, subject: { label } }).test(clean(inputText)),
+        normalized.includes(" " + alias + " ") || normalized.includes(" " + label + " ")];
+    })()`, context);
+    assert.equal(result[0], result[1], text);
+  }
+});

@@ -210,7 +210,7 @@ def validate_views(views, parts):
             "coverage": round(len(mapped) / len(physical), 5) if physical else 0}}
 
 
-def write_review_sheet(art, output, title=""):
+def write_review_sheet(art, output, title="", *, panel_labels=None):
     """One bounded PNG: complete drawing plus every individual highlighted part.
 
     One librsvg process renders all panels. No browser or source SVG is loaded.
@@ -239,7 +239,7 @@ def write_review_sheet(art, output, title=""):
         x, y = (offset % columns) * cell_width, header + (offset // columns) * cell_height
         label = ET.SubElement(root, "{" + NS + "}text", {"x": str(x + 12), "y": str(y + 22),
                              "fill": "#fafafa", "font-family": "sans-serif", "font-size": "14"})
-        label.text = highlighted if highlighted is not None else "Complete drawing"
+        label.text = (panel_labels or {}).get(highlighted, highlighted) if highlighted is not None else "Complete drawing"
         panel = ET.SubElement(root, "{" + NS + "}svg", {"x": str(x + 10), "y": str(y + 32),
                               "width": str(cell_width - 20), "height": str(cell_height - 45),
                               "viewBox": art["viewBox"], "preserveAspectRatio": "xMidYMid meet"})
@@ -249,7 +249,7 @@ def write_review_sheet(art, output, title=""):
         for identifier, shapes in art["parts"].items():
             group = ET.SubElement(panel, "{" + NS + "}g", {"opacity": "1" if identifier == highlighted else ".10" if highlighted else ".8"})
             for descriptor in _descriptors(shapes):
-                group.append(_descriptor_xml(descriptor, ink="#fafafa", paper="#101010"))
+                group.append(_descriptor_xml(descriptor, ink="#80ffcc" if identifier == highlighted else "#fafafa", paper="#101010"))
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     svg = output.with_suffix(".svg")
@@ -257,3 +257,128 @@ def write_review_sheet(art, output, title=""):
     subprocess.run(["rsvg-convert", "-o", str(output), str(svg)], check=True, capture_output=True, timeout=45)
     return {"panels": len(panels), "width": width, "height": height, "parts": parts,
             "requiresVisualReview": True}
+
+
+def candidate_groups(digest, leaves, *, limit=24):
+    """Number real source regions without inventing geometric proxy boxes.
+
+    Prefer meaningful groups, then spread remaining leaves spatially. Exact
+    descendant sets are deduplicated. Large silhouette groups/background paths
+    and sub-pixel strokes are excluded *before* the model sees candidate IDs.
+    The complete sanitized drawing remains context, not an assignable part.
+    """
+    if type(limit) is not int or not 3 <= limit <= 36:
+        raise ValueError('candidate limit must be 3..36')
+    if len(leaves) > MAX_SHAPES:
+        raise ValueError('candidate leaves exceed shape bound')
+    all_box = _union([_box(leaf.get('bbox')) for leaf in leaves if _box(leaf.get('bbox'))])
+    area = _area(all_box)
+    if not area:
+        raise ValueError('candidate groups require finite measurable bounds')
+    vb = digest.get('viewBox', [])
+    if len(vb) != 4 or min(vb[2:]) <= 0:
+        raise ValueError('candidate groups require a finite positive viewBox')
+    candidates, seen = [], set()
+    for node in digest.get('nodes', []):
+        box = _box(node.get('bbox'))
+        if not box or not _area(box) or _area(box) / area > .75:
+            continue
+        descendants = [leaf for leaf in leaves if leaf['key'] == node['key']
+                       or leaf['key'].startswith(node['key'] + '.')
+                       or leaf['key'].startswith(node['key'] + '@')]
+        keys = tuple(leaf['key'] for leaf in descendants)
+        if not keys or keys in seen:
+            continue
+        # A long leader line is not a useful assembly. Keep thin physical groups
+        # such as a chain when they have several visible shapes or a label, but
+        # reject individually near-invisible low-opacity / tiny-stroke leaves.
+        visible = False
+        for leaf in descendants:
+            attrs = leaf['ast'][1]
+            try:
+                opacity = float(attrs.get('opacity', 1))
+                fill_alpha = opacity * float(attrs.get('fill-opacity', 1))
+                stroke_alpha = opacity * float(attrs.get('stroke-opacity', 1))
+                width = float(str(attrs.get('stroke-width', '1')).removesuffix('px'))
+            except (ValueError, TypeError, OverflowError):
+                continue
+            leaf_box = _box(leaf.get('bbox'))
+            # Paper-colored cutouts do not respond to currentColor highlights.
+            # Keep that geometry as drawing context, never as an unlit mark.
+            filled = attrs.get('fill', 'currentColor') not in {'none', 'var(--paper)'} and fill_alpha >= .08 and _area(leaf_box) / area >= .00005
+            stroked = attrs.get('stroke', 'none') not in {'none', 'var(--paper)'} and stroke_alpha >= .12 and width * 720 / max(vb[2:]) >= .6
+            visible |= filled or stroked
+        if not visible:
+            continue
+        seen.add(keys)
+        named = bool(node.get('label') or (node.get('id') and not str(node['id']).startswith(('path', 'rect', 'g', 'shape'))))
+        group = len(keys) > 1
+        candidates.append({'node': node['key'], 'sourceId': node.get('id', '')[:100],
+            'sourceLabel': node.get('label', '')[:120], 'shapeCount': len(keys),
+            'leafKeys': list(keys), 'bbox': box, '_priority': (int(named), int(group), -abs(len(keys) - 8))})
+    candidates.sort(key=lambda item: (item['_priority'], item['node']), reverse=True)
+    chosen = []
+    # Group-first coverage, then disjoint regions before nested refinements.
+    # A bounded list avoids hundreds of images on unstructured technical art.
+    for disjoint in (True, False):
+        covered = {key for item in chosen for key in item['leafKeys']}
+        for item in candidates:
+            if item in chosen or (disjoint and set(item['leafKeys']) & covered):
+                continue
+            chosen.append(item)
+            covered.update(item['leafKeys'])
+            if len(chosen) == limit:
+                break
+        if len(chosen) == limit:
+            break
+    for number, item in enumerate(chosen, 1):
+        item['candidate'] = number
+        del item['_priority']
+    return chosen
+
+
+def write_candidate_sheets(digest, leaves, directory, *, title='', limit=24):
+    """Render paginated 12-mark sheets with a stable number→treePath manifest."""
+    groups = candidate_groups(digest, leaves, limit=limit)
+    if len(groups) < 3:
+        raise ValueError('Fewer than three useful candidate regions')
+    directory = Path(directory)
+    images = []
+    for page, start in enumerate(range(0, len(groups), 12), 1):
+        batch = groups[start:start + 12]
+        # Candidate memberships can overlap (ancestor/child refinements); the
+        # existing review renderer has disjoint part buckets, so one tile per
+        # candidate is generated in a bounded paginated source document below.
+        output = directory / ('candidates-' + str(page) + '.png')
+        _write_candidate_page(digest, leaves, batch, output, title)
+        images.append(output)
+    return {'groups': groups, 'images': images}
+
+
+def _write_candidate_page(digest, leaves, groups, output, title):
+    columns, cw, ch, header = 3, 340, 235, 42
+    panels = [None, *groups]
+    width, height = columns * cw, math.ceil(len(panels) / columns) * ch + header
+    root = ET.Element('{' + NS + '}svg', {'viewBox': f'0 0 {width} {height}',
+        'width': str(width), 'height': str(height)})
+    ET.SubElement(root, '{' + NS + '}rect', {'width': str(width), 'height': str(height), 'fill': '#101010'})
+    heading = ET.SubElement(root, '{' + NS + '}text', {'x': '12', 'y': '27', 'fill': '#fafafa',
+        'font-family': 'sans-serif', 'font-size': '17'})
+    heading.text = str(title)[:110] + ' — numbered source regions'
+    for offset, mark in enumerate(panels):
+        x, y = (offset % columns) * cw, header + (offset // columns) * ch
+        caption = ET.SubElement(root, '{' + NS + '}text', {'x': str(x + 12), 'y': str(y + 22),
+            'fill': '#fafafa', 'font-family': 'sans-serif', 'font-size': '14'})
+        caption.text = 'Complete drawing' if mark is None else 'Candidate ' + str(mark['candidate'])
+        panel = ET.SubElement(root, '{' + NS + '}svg', {'x': str(x + 10), 'y': str(y + 32),
+            'width': str(cw - 20), 'height': str(ch - 45),
+            'viewBox': ' '.join(str(value) for value in digest['viewBox']), 'preserveAspectRatio': 'xMidYMid meet'})
+        keys = set(mark['leafKeys']) if mark else set()
+        for leaf in leaves:
+            selected = leaf['key'] in keys
+            bucket = ET.SubElement(panel, '{' + NS + '}g', {'opacity': '1' if selected else '.12' if mark else '.7'})
+            bucket.append(_descriptor_xml(leaf['ast'], ink='#80ffcc' if selected else '#fafafa', paper='#101010'))
+    output = Path(output); output.parent.mkdir(parents=True, exist_ok=True)
+    svg = output.with_suffix('.svg')
+    ET.ElementTree(root).write(svg, encoding='utf-8', xml_declaration=True)
+    subprocess.run(['rsvg-convert', '-o', str(output), str(svg)], check=True, capture_output=True, timeout=45)

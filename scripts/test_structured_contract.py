@@ -2,7 +2,7 @@
 from copy import deepcopy
 import unittest
 
-from structured_guides import (CONTENT_SCHEMA, cache_key, make_v2, raw_digest,
+from structured_guides import (CONTENT_SCHEMA, _validate, cache_key, make_v2, raw_digest,
                                source_assets, validate_content, validate_v2)
 
 
@@ -28,6 +28,19 @@ def content_guide():
 
 
 class StructuredContractTests(unittest.TestCase):
+    def test_boolean_and_bounded_integer_evidence_are_strictly_typed(self):
+        number = {"type": "integer", "minimum": 1, "maximum": 36}
+        for value in (1, 36):
+            _validate(value, number, "candidate")
+        for value in (0, 37, True, False, 1.0, "1", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                _validate(value, number, "candidate")
+        for value in (True, False):
+            _validate(value, {"type": "boolean"}, "objectMatches")
+        for value in (0, 1, "true", None):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                _validate(value, {"type": "boolean"}, "objectMatches")
+
     def test_preserves_source_identity_dates_credit_and_raw_input(self):
         raw, content = raw_guide(), content_guide()
         before = deepcopy(raw)

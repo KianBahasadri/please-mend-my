@@ -20,8 +20,10 @@ The browser dispatches v2/steps payloads to a text-only renderer, with tools,
 materials, safety notes, symptoms, checkable steps, local images, and copyable
 commands. Existing sanitized HTML uses the legacy renderer. Source credits and
 licenses remain, and source-provided further references share the metadata row.
-The existing visible-card prefetch and synchronous cached-open path apply to
-both formats; current results stay visible until requested content is ready.
+The first ranked guide renders inline while the hero remains visible and
+editable; ranks two through five are prefetched and two through six are available
+as alternatives. Both formats share this path. Automatic answers do not move
+focus, and the current answer stays visible until its replacement is ready.
 
 ## Inputs and validation
 

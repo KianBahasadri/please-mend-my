@@ -20,13 +20,13 @@
   // Keep object recognition aligned with the worker's conversational search
   // contract. Only the displayed question is cleaned; typed input/query is not.
   const conversational = new Set(["is", "are", "was", "were", "am", "seems", "feels", "has", "have", "does", "do", "did"]);
-  const pronouns = new Set(["it", "this", "that", "they", "i", "we"]);
-  const determiners = new Set(["my", "our", "your", "the", "a", "an"]);
+  const pronouns = new Set(["it", "this", "that", "they", "i", "we", "he", "she", "his", "her"]);
+  const determiners = new Set(["my", "our", "your", "the", "a", "an", "his", "her"]);
   const intensifiers = new Set(["fucking", "fuckin", "fucken", "damn", "damned", "goddamn", "goddamned", "frigging", "freaking"]);
-  const contractions = new Set(["it's", "that's", "this's", "there's", "i'm", "you're", "we're", "they're"]);
+  const contractions = new Set(["it's", "its", "that's", "thats", "this's", "there's", "i'm", "im", "you're", "youre", "we're", "they're", "theyre", "he's", "hes", "she's", "shes"]);
   const symptomPredicates = new Set(["hurts", "hurt", "aches", "ache", "bleeds", "bleed", "burns", "burn", "itches", "itch",
     "tingles", "tingle", "swells", "swell", "leaks", "leak", "rattles", "rattle", "freezes", "freeze", "crashes", "crash"]);
-  const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'t$/;
+  const negativeContraction = /^(?:isn|aren|wasn|weren|don|doesn|didn|hasn|haven|can|won)'?t$/;
   for (const group of [conversational, pronouns, determiners, intensifiers, contractions]) {
     for (const word of group) notSubjects.add(word);
   }
@@ -43,6 +43,7 @@
   let specifier = null;
   let registryPending = false;
   let lastAwaiting = false;
+  let selectingAnswer = false;
   const curatedWords = new Set([...symptomPredicates, ...conversational,
     ...pronouns, ...determiners, ...contractions,
     ..."broken damaged pain swelling numbness bleeding battery screen chain tire tube brake derailleur wheel handlebar seat pedal fork light leak leaking cracked frozen slow charging carpet".split(" ")]);
@@ -337,7 +338,7 @@
     state.set(input, { prefix, previous: prefix, composing: false });
     input.value = prefix;
     input.dataset.promptLength = String(prefix.length);
-    input.addEventListener("focus", () => { active = input; clampSelection(input); });
+    input.addEventListener("focus", () => { selectingAnswer = false; active = input; clampSelection(input); });
     input.addEventListener("select", () => clampSelection(input));
     input.addEventListener("pointerup", () => clampSelection(input));
     input.addEventListener("keyup", () => clampSelection(input));
@@ -408,7 +409,7 @@
     }
     input.addEventListener("blur", () => {
       queueMicrotask(() => {
-        if (document.hasFocus() && document.activeElement === document.body && !document.body.classList.contains("reading")) focus();
+        if (!selectingAnswer && document.hasFocus() && document.activeElement === document.body && !document.body.classList.contains("reading")) focus();
       });
     });
   }
@@ -417,8 +418,12 @@
     if (state.has(document.activeElement)) clampSelection(document.activeElement);
   });
   document.addEventListener("pointerdown", (event) => {
-    if (document.body.classList.contains("reading") || event.button !== 0 ||
-        event.target.closest(".topic-specifier, [data-part], a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
+    if (event.button !== 0) return;
+    // A prose drag can blur the textarea onto <body>. Keep that interaction
+    // native instead of moving focus back in its queued blur microtask.
+    selectingAnswer = Boolean(event.target.closest("#guide-panel"));
+    if (document.body.classList.contains("reading") ||
+        event.target.closest("#guide-panel, .topic-specifier, [data-part], a, button, input, textarea, select, summary, [tabindex], [contenteditable]")) return;
     event.preventDefault();
     focus();
   }, { capture: true });

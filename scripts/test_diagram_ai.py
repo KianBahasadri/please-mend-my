@@ -1,5 +1,7 @@
 """Immutable remote cache, strict schemas, and actual executor concurrency."""
 import asyncio
+from contextlib import contextmanager
+import json
 from pathlib import Path
 import tempfile
 import threading
@@ -78,6 +80,98 @@ class DiagramAITests(unittest.TestCase):
         receipt = asyncio.run(ai.batch("mapping", [job], self.root, api_key="test", transport=transport))
         self.assertIn("error", receipt["entries"][0])
         self.assertEqual(list((self.root / "cache").rglob("*.json")) if (self.root / "cache").exists() else [], [])
+
+    def test_vision_settings_and_actual_image_pins_invalidate_mapping_cache(self):
+        schema = _object({'answer': _text(100, 1)})
+        image = self.root / 'numbered.png'
+        image.write_bytes(b'first numbered contact sheet')
+        job = {'id': 'object', 'input': {}, 'schema': schema, 'systemPrompt': PROMPT,
+               'images': [{'id': 'candidates', 'path': str(image),
+                           'sha256': ai.digest_bytes(image.read_bytes())}]}
+        calls = []
+        def transport(payload, *_):
+            calls.append(payload)
+            return {'answer': 'valid'}, {'cost': .001}
+        first = asyncio.run(ai.batch('mapping', [job], self.root, api_key='test', transport=transport))
+        payload = calls[0]
+        self.assertTrue(payload['reasoning']['enabled'])
+        self.assertEqual(payload['messages'][1]['content'][-1]['image_url']['detail'], 'high')
+        self.assertEqual(payload['max_tokens'], 8192)
+        old_key = first['entries'][0]['cacheKey']
+        offline = asyncio.run(ai.batch('mapping', [job], self.root, api_key=None, transport=transport))
+        self.assertEqual(offline['cacheHits'], 1)
+        image.write_bytes(b'different lit region')
+        with self.assertRaisesRegex(ValueError, 'SHA pin'):
+            asyncio.run(ai.batch('mapping', [job], self.root, api_key=None, transport=transport))
+        job['images'][0]['sha256'] = ai.digest_bytes(image.read_bytes())
+        changed = asyncio.run(ai.batch('mapping', [job], self.root, api_key=None, transport=transport))
+        self.assertNotEqual(changed['entries'][0]['cacheKey'], old_key)
+        self.assertEqual(changed['cacheHits'], 0)
+        self.assertEqual(len(calls), 1)
+
+    def test_taxonomy_keeps_legacy_identity_and_no_reasoning(self):
+        schema = _object({'answer': _text(100, 1)})
+        job = {'id': 'object', 'input': {}, 'schema': schema, 'systemPrompt': PROMPT}
+        calls = []
+        def transport(payload, *_):
+            calls.append(payload)
+            return {'answer': 'valid'}, {}
+        receipt = asyncio.run(ai.batch('taxonomy', [job], self.root, api_key='test', transport=transport))
+        config = {'maxTokens': 4096, 'temperature': 0, 'reasoningEnabled': False,
+                  'strict': True, 'requireParameters': True}
+        expected = ai.cache_key('taxonomy', {}, schema, ai.DEFAULT_MODEL, config, system_prompt=PROMPT)
+        self.assertEqual(receipt['entries'][0]['cacheKey'], expected)
+        self.assertEqual(calls[0]['reasoning'], {'enabled': False})
+
+    def test_vision_transport_timeout_and_rejected_response_usage_are_preserved(self):
+        schema = _object({'answer': _text(100, 1)})
+        payload = {'model': ai.DEFAULT_MODEL, 'reasoning': {'enabled': True}}
+        envelope = {'model': ai.DEFAULT_MODEL, 'choices': [{'finish_reason': 'length',
+            'message': {'content': ''}}], 'usage': {'cost': .02, 'completion_tokens': 8192}}
+        timeouts = []
+        @contextmanager
+        def response(request, *, timeout):
+            timeouts.append(timeout)
+            class Body:
+                def read(self, _):
+                    return json.dumps(envelope).encode()
+            yield Body()
+        with patch.object(ai, 'urlopen', response):
+            with self.assertRaises(ai.APIError) as result:
+                ai.completion(payload, 'test-key', schema)
+            self.assertEqual(result.exception.finish_reason, 'length')
+            self.assertEqual(result.exception.usage['cost'], .02)
+            payload['reasoning']['enabled'] = False
+            envelope['choices'][0].update(finish_reason='stop', message={'content': '{"answer":"valid"}'})
+            self.assertEqual(ai.completion(payload, 'test-key', schema)[0], {'answer': 'valid'})
+        self.assertEqual(timeouts, [300, 120])
+
+    def test_success_after_retries_retains_unreported_attempts_and_known_failure_usage(self):
+        schema = _object({'answer': _text(100, 1)})
+        job = {'id': 'object', 'input': {}, 'schema': schema, 'systemPrompt': PROMPT}
+        async def no_wait(*_):
+            return None
+        for report_first in (False, True):
+            with self.subTest(report_first=report_first):
+                calls = []
+                def transport(*_):
+                    calls.append(1)
+                    if len(calls) < 3:
+                        error = ai.APIError('Transient provider error', retryable=True)
+                        if report_first and len(calls) == 1:
+                            error.usage = {'cost': .002, 'completion_tokens': 50}
+                        raise error
+                    return {'answer': 'valid'}, {'cost': .003, 'total_tokens': 100}
+                work = self.root / str(report_first)
+                with patch.object(ai.asyncio, 'sleep', no_wait):
+                    result = asyncio.run(ai.batch('mapping', [job], work, api_key='test', transport=transport))
+                self.assertEqual(result['apiCalls'], 3)
+                accounting = diagrams.lifetime_accounting(work)
+                self.assertEqual(accounting['knownApiCalls'], 3)
+                self.assertEqual(accounting['failedAttemptsWithUnreportedUsage'], 1 if report_first else 2)
+                self.assertEqual(accounting['failedAttemptsWithReportedUsage'], int(report_first))
+                self.assertAlmostEqual(accounting['acceptedUsage']['cost'], .003)
+                self.assertAlmostEqual(accounting['reportedUsage']['cost'], .005 if report_first else .003)
 
     def test_transport_pool_really_supports_forty_requests(self):
         schema = _object({"answer": _text(100, 1)})

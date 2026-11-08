@@ -433,13 +433,15 @@
           </h1>
           <p id="catalog-status" class="catalog-status" role="status" hidden></p>
         </section>
-        <section id="search-results" class="search-results" aria-label="Repair search results" hidden>
-          <div id="result-cards" class="result-cards" role="list"></div>
-          <div class="results-heading"><p id="result-count" aria-live="polite"></p></div>
-        </section>
-        <section id="guide-panel" class="guide-panel" aria-label="Repair guide" hidden>
-          <button id="close-guide" class="text-button back-button" type="button">← Back to results</button>
-          <div id="guide-body"></div>
+        <section id="search-results" class="search-results" aria-label="Repair answers" hidden>
+          <section id="guide-panel" class="guide-panel" aria-label="Best answer" hidden>
+            <button id="close-guide" class="text-button back-button" type="button" hidden>← Back to search</button>
+            <div id="guide-body"></div>
+          </section>
+          <aside class="other-possibilities" aria-label="Other possibilities">
+            <p id="result-count" class="possibilities-label" hidden></p>
+            <div id="result-cards" class="possibilities-list" role="list" aria-label="Other possibilities"></div>
+          </aside>
         </section>
         <p id="guide-nav-error" class="guide-error" role="alert" hidden></p>
       </div>

@@ -72,6 +72,28 @@ class DiagramBatchTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 batch.validate_taxonomy(value)
 
+    def test_brand_and_os_dominance_rejects_contradictory_senses_but_not_real_computers(self):
+        examples = [{'title': brand + ' Screen Replacement', 'device': brand + ' A123'}
+                    for brand in ('HP Pavilion', 'Toshiba Satellite', 'Acer Iconia', 'ASUS', 'Lenovo')]
+        for label, definition in [('pavilion', 'a large and sumptuous tent'),
+                                  ('satellite', 'man-made equipment that orbits the earth'),
+                                  ('tablet', 'a slab of stone suitable for bearing an inscription'),
+                                  ('screen', 'a silvered surface on which pictures are projected'),
+                                  ('display', 'a visual representation of something')]:
+            with self.subTest(label=label):
+                rejected = batch.sense_rejection({'label': label, 'definition': definition,
+                                                 'domain': 'artifact'}, examples)
+                self.assertEqual(rejected['observedFamily'], 'computing')
+        windows = [{'title': 'How to activate Windows ' + str(n), 'device': ''} for n in range(4)]
+        self.assertIsNotNone(batch.sense_rejection({'label': 'window', 'domain': 'artifact',
+            'definition': 'a framework containing glass windowpanes built into a wall'}, windows))
+        self.assertIsNone(batch.sense_rejection({'label': 'laptop', 'domain': 'artifact',
+            'definition': 'a portable computer small enough to use in your lap'}, examples))
+        self.assertIsNone(batch.sense_rejection({'label': 'pavilion', 'domain': 'artifact',
+            'definition': 'a large sumptuous tent'}, [{'title': 'Repair tent canopy', 'device': ''}] * 4))
+        self.assertIsNone(batch.sense_rejection({'label': 'pavilion', 'domain': 'artifact',
+            'definition': 'a large sumptuous tent'}, examples[:2]), 'weak evidence stays for taxonomy review')
+
     def test_offline_normalization_recovers_apostrophes_orphan_views_and_keeps_raw(self):
         value = content()
         value['parts'][-1].update(id="won't-start")
@@ -167,6 +189,115 @@ class DiagramBatchTests(unittest.TestCase):
         self.assertEqual(view['status'], 'list-only')
         self.assertIsNone(view['artUrl'])
         self.assertIn('Compile gate', view['reason'])
+
+    def test_numbered_mapping_converts_only_pinned_regions_and_rejects_unknown_or_repeated_numbers(self):
+        target = subject()
+        source = {'id': 'source', 'title': 'Wheelbarrow', 'sha256': 'pin'}
+        candidate = {'source': source, 'images': [], 'candidateGroups': [
+            {'candidate': 1, 'node': '0.3', 'sourceId': 'wheel', 'sourceLabel': 'Wheel', 'shapeCount': 2}],
+            'digest': {'version': 'fixture', 'viewBox': [0, 0, 100, 100], 'labels': []}}
+        digests = {'views': {'noun-barrow/exterior': {'candidates': [candidate]}}}
+        for numbers in ([1], [2], [1, 1]):
+            with self.subTest(numbers=numbers):
+                def transport(*_):
+                    return {'selectedSource': 'source', 'reason': 'Lit wheel region', 'groupMap': [
+                        {'candidate': number, 'part': 'wheel', 'confidence': 'high'} for number in numbers]}, {'cost': .01}
+                run = self.root / ('mapping-' + '-'.join(map(str, numbers)))
+                receipt = batch.run_mapping({'archetypes': [target]}, digests, run,
+                    api_key='fake', transport=transport)
+                entry = receipt['entries'][0]
+                if numbers == [1]:
+                    self.assertEqual(entry['content']['groupMap'][0]['node'], '0.3')
+                    self.assertEqual(entry['markedContent']['groupMap'][0]['candidate'], 1)
+                else:
+                    self.assertNotIn('content', entry)
+                    self.assertIn('numbered candidate', entry['error'])
+                self.assertEqual(batch.lifetime_accounting(run)['knownApiCalls'], 1,
+                                 'converted receipts must not double-count paid responses')
+
+    def test_visual_verification_prunes_bad_parts_and_replays_frozen_evidence_offline(self):
+        target = subject()
+        target['parts'].insert(3, {'id': 'axle', 'label': 'Axle', 'query': 'axle', 'aliases': [],
+                                   'kind': 'physical', 'viewId': 'exterior'})
+        target.update(viewId='exterior', viewLabel='Exterior', viewParts=target['parts'][:4], previouslyMapped=[])
+        leaves = [{'key': '0.' + str(i), 'bbox': [i * .22, .1, .15, .2],
+            'ast': ['rect', {'x': str(i * 22), 'y': '10', 'width': '15', 'height': '20',
+                             'fill': 'currentColor', 'data-source-id': '0.' + str(i)}]} for i in range(4)]
+        leaves_path = self.root / 'leaves.json'; batch.ai.save(leaves_path, leaves)
+        source = {'id': 'source', 'sha256': 'source-pin', 'title': 'Barrow', 'author': 'Artist',
+                  'source': 'https://example.org/source', 'license': 'CC0', 'licenseUrl': 'https://example.org/license'}
+        digest = {'viewBox': [0, 0, 100, 100], 'nodes': [{'key': leaf['key'], 'bbox': leaf['bbox']} for leaf in leaves]}
+        candidate = {'source': source, 'digest': digest, 'leavesPath': str(leaves_path)}
+        mapping = {'selectedSource': 'source', 'reason': 'Fixture physical parts', 'groupMap': [
+            {'node': leaf['key'], 'part': part['id'], 'confidence': 'high'}
+            for leaf, part in zip(leaves, target['viewParts'])]}
+        receipt = {'entries': [{'id': 'noun-barrow/exterior', 'content': mapping}]}
+        taxonomy = {'archetypes': [target]}
+        digests = {'views': {'noun-barrow/exterior': {'candidates': [candidate]}}}
+        calls = []
+        def render_preview(art, output, *args, **kwargs):
+            Path(output).write_bytes(batch.canonical(art))
+        def review_sheet(art, output, **kwargs):
+            Path(output).write_bytes(batch.canonical(art))
+        def transport(payload, *_):
+            calls.append(payload)
+            return {'objectMatches': True, 'reason': 'Actual wheelbarrow visible', 'parts': [
+                {'part': name, 'verdict': 'fail' if name == 'axle' else 'pass',
+                 'reason': 'Wrong nearby region' if name == 'axle' else 'Actual assembly visible'}
+                for name in ('wheel', 'handle', 'tray', 'axle')]}, {'cost': .02}
+        with patch.object(batch, 'render_preview', side_effect=render_preview), \
+             patch('review_diagram_batch.write_review_sheet', side_effect=review_sheet):
+            compiled = batch.run_compile(taxonomy, digests, receipt, self.root)
+            view = compiled['archetypes'][0]['views'][0]
+            self.assertEqual(view['status'], 'needs-visual-review')
+            result = batch.run_verification(taxonomy, digests, compiled, receipt, self.root,
+                api_key='fake', transport=transport)
+            view = result['archetypes'][0]['views'][0]
+            self.assertEqual(view['status'], 'visual-pass')
+            self.assertEqual(view['mappedParts'], ['handle', 'tray', 'wheel'])
+            self.assertEqual(view['omittedGeometryParts'], ['axle'])
+            self.assertFalse(view['visualVerification']['publicationApproval'])
+            self.assertTrue(view['requiresHumanApproval'])
+            art = batch.read(view['artPath'])
+            self.assertIn(leaves[3]['ast'], art['context'], 'failed geometry remains unclickable context')
+            self.assertEqual(set(art['parts']), {'wheel', 'handle', 'tray'})
+            # Restore original pre-prune compile before checking the exact cached evidence.
+            replay_compiled = batch.run_compile(taxonomy, digests, receipt, self.root)
+            replay = batch.run_verification(taxonomy, digests, replay_compiled, receipt, self.root,
+                api_key=None, transport=transport)
+            self.assertEqual(replay['archetypes'][0]['views'][0]['status'], 'visual-pass')
+            self.assertEqual(len(calls), 1)
+        self.assertFalse((self.root / 'archetypes.json').exists())
+
+    def test_visual_gate_rejects_wrong_object_and_fewer_than_three_passes(self):
+        target = subject()
+        taxonomy = {'archetypes': [target]}
+        wanted = ['wheel', 'handle', 'tray']
+        for case in ('wrong-object', 'two-passed', 'duplicate-part', 'missing-part'):
+            with self.subTest(case=case):
+                directory = self.root / case; directory.mkdir()
+                image = directory / 'highlights.png'; image.write_bytes(b'compiled highlight evidence')
+                art_path = directory / 'art.json'; art_path.write_bytes(b'compiled-art')
+                compiled = {'archetypes': [{'id': 'noun-barrow', 'views': [{
+                    'id': 'exterior', 'status': 'needs-visual-review', 'mappedParts': wanted[:],
+                    'previewDir': str(directory), 'artPath': str(art_path), 'artSha256': 'art-pin',
+                    'sourceSha256': 'source-pin', 'mappingSha256': 'mapping-pin'}]}]}
+                checks = [{'part': name, 'verdict': 'fail' if case == 'two-passed' and name == 'tray' else 'pass',
+                           'reason': 'Visible region review'} for name in wanted]
+                if case == 'duplicate-part':
+                    checks[-1]['part'] = 'wheel'
+                if case == 'missing-part':
+                    checks.pop()
+                def transport(*_):
+                    return {'objectMatches': case != 'wrong-object', 'parts': checks,
+                            'reason': 'Fixture verification'}, {}
+                with patch.object(batch, 'compile_view', side_effect=AssertionError('insufficient geometry cannot compile')):
+                    result = batch.run_verification(taxonomy, {'views': {}}, compiled, {'entries': []}, directory,
+                        api_key='fake', transport=transport)
+                view = result['archetypes'][0]['views'][0]
+                self.assertEqual(view['status'], 'list-only')
+                self.assertEqual(view['mappedParts'], [])
+                self.assertFalse(view['visualVerification']['publicationApproval'])
 
     def test_final_report_keeps_no_usable_diagram_as_list_only(self):
         primary = {'archetypes': [{'id': 'noun-barrow', 'label': 'wheelbarrow', 'parts': content()['parts'],

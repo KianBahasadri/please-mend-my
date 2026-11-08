@@ -17,11 +17,12 @@ retained in [references/specifiers/](references/specifiers/) and
 
 ## Current build tools
 
-- `diagram_batch.py`: metadata-only archetype selection, taxonomy, primary and
-  coverage-gated secondary passes, compilation receipts and lifetime accounting.
+- `diagram_batch.py`: metadata-only sense filtering, taxonomy, numbered-region
+  mapping, primary/secondary passes, per-part visual verification and accounting.
 - `diagram_ai.py`: strict-schema Qwen requests, bounded concurrency, complete
-  response caches and resumable accounting. Its historical cache-format identity
-  stays unchanged so previously paid responses replay without new calls.
+  response caches and resumable accounting. Taxonomy keeps its historical cache
+  identity; set-of-mark mapping and verification use new high-detail, reasoning
+  configurations, with image hashes included in their input identities.
 - `diagram_discovery.py`: generic Commons/Openclipart search, provider-specific
   concurrency limits, licensed source metadata, immutable original byte pins.
 - `diagram_svg.py`: shared XML security checks, SVG reference expansion, geometric
@@ -32,7 +33,7 @@ Python 3.12.12, Inkscape and librsvg's `rsvg-convert` are build tools only. No
 browser is launched. Runtime search/interaction never invokes Qwen or an upstream
 art provider. The source/response caches and diagnostic images stay outside Git.
 Run the [bounded batch command](../scripts/README.md), or resume an individual
-`prepare`, `taxonomy`, `discover`, `digest`, `map`, or `compile` phase. `--offline`
+`prepare`, `taxonomy`, `discover`, `digest`, `map`, `compile`, or `verify` phase. `--offline`
 forbids upstream requests. The same scripts work against a cloud-built catalog.
 
 Remote Qwen concurrency is capped at 128. Discovery independently limits Commons
@@ -56,6 +57,27 @@ geometry, nearly identical or whole-object regions and insufficient bounds.
 These checks are triage, not proof of correct part names. Every accepted drawing
 still needs visual inspection, with exact source, mapping, compiler and final
 artifact hashes retained. Existing reviewed art is preserved independently.
+
+The 10-item set-of-mark experiment filters contradictory catalog/WordNet senses
+before taxonomy. It renders bounded numbered source regions individually,
+excluding whole-object silhouettes and nearly invisible geometry. Mapping uses
+those visible marks rather than asking the model to infer paths from coordinates;
+the compiler resolves accepted candidate numbers to pinned tree paths.
+Monochrome previews preserve the source viewBox aspect ratio.
+
+A separate cached VLM pass checks each compiled highlighted part and whether the
+drawing depicts the requested object. Failed or uncertain regions lose their
+interactive mapping; at least three verified physical parts must remain and pass
+geometry checks. The frozen pre-prune art and highlight sheet remain as evidence.
+Automated visual passes are provisional test results, never publication approval.
+
+To inspect rejected candidates locally, run `python3 scripts/prepare_diagram_preview.py`
+and start the Go server with `DIAGRAM_PREVIEW_DIR` pointing to
+`catalog-data/build/diagram-preview`. The unlinked `/diagram-preview/` gallery
+shows local source PNGs, numbered regions and available compiled mappings from
+both experiment batches, with source and license links. It exports no raw SVGs
+and leaves the approved registry and selected catalog unchanged. The route is
+absent when the environment variable is unset.
 
 ## Local 300-archetype run
 

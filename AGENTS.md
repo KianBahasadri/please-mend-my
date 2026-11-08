@@ -1,4 +1,5 @@
 - Persistent session memory: read/update each session; log reqs/bugs tersely.
+- "resume"=quota restored after abrupt cutoff; check agents+saved work, continue unfinished tasks (agents may be cut off too).
 - Public: KianBahasadri/please-mend-my.
 - index.html; run locally; never open/reopen a browser unless asked.
 - Work locally; pause prod deploys until explicitly requested again.
@@ -6,12 +7,12 @@
 - Tab title mirrors first hero line live, raw suffix; empty→prompt; answer excluded.
 - Underline editable areas+idle floaters. Non-specifier question + idle answer-focus: known trailing word≥2→380ms, unknown/model→1000ms; Enter/Tab/?.!/part/guide return→0; clear→hide now. Bare noun→hero "What's wrong with your <noun>?" + blank answer; phrases skip. Keep typed punctuation (noun end/no selection/mobile); no added comma/repeated noun/it's. Empty Backspace→1/end, suppress reopen. Protect prompt/question; one native caret; typed-only search.
 - Ctrl/Meta+A and mouse/keyboard selection target only the editable suffix; never select/edit the fixed prefix.
-- Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
+- Background clicks retain textbox focus/caret/selection; links/controls usable. Inline guide prose selection native; exempt panel in pointer+blur refocus guards.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
 - Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/blueprint/cutpaper; spareparts retired. Inert fixed-prefix art, native suffix/caret; match floaters.
 - Same white/dark palette; rainbow+Matrix explicit exceptions; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
-- Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Generic SVG controller assets/specifiers.js; release-backed registry; no empty SVG box.
+- Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer still searches first noun. Generic SVG controller assets/specifiers.js; release-backed registry; no empty SVG box.
 - Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
 - Approved art: pinned bicycle+phone JSON in scripts/data/archetype-art.json; phone camera rejected. Legacy pilot/compiler retired; diagram_svg only AST compiler, diagram_ai cached transport. Source/map/compiler/art hashes+visual gate. See docs/diagram-pilot.md.
@@ -62,11 +63,11 @@
 - Roadmap: aggregate broad raw corpora → heuristic de-fluff filter → batch LLM restructuring into a uniform clean schema (tools, safety, steps, search symptoms) using Qwen 3.6 35B A3B with structured output. Direct wikiHow scraping avoided in favor of offline/NLP datasets with procedural extraction.
 - Modular interactive tool system planned: LLM entry rebuilding can optionally attach dynamic widgets (chat_agent for relationships/coaching, document_analyzer for resume/code review, vision_inspector for rashes/plants, diagnostic_tree for symptom triage) on top of standardized static guides.
 - Public index: actual English text only; quarantine non-English articles, preserve raw source; don't mistake brands for language.
-- Serve full browser-resident index; instant local search cards below input; prefetch visible cards' server content for cached instant opens. Measure search/open latency; no literal zero-network-latency claims.
-- Search every edit immediately: 0 debounce, independent of clarification pause; IME waits for commit. Awaiting specifics→hide cards; clear answer→deselect/hide now; keep prior cards until fresh results.
+- Serve full browser-resident index; centered inline best answer below visible full-width hero/specifier; prefetch2–5, other possibilities2–6 as right-side list (stack narrow). Keep prior answer until new #1 ready; only whole-query clear→hide; preserve caret/history/direct guide links. Measure search/open latency; no zero-network-latency claims.
+- Search every edit immediately: 0 debounce, independent of clarification pause; IME waits for commit. Empty second/awaiting specifics still searches first noun; clearing answer deselects, retains best answer until noun result ready.
 - Never show loading text/spinners; retain current results until prefetched content is ready.
 - No Browse library/category-filter buttons; typing searches all categorized items.
-- Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.
+- Rank best100 browser-side; inline #1 replaces virtual cards; no Show more/Clear search. No typing-focus steals.
 - Build0–4: pinned OEWN+wordfreq nouns/edges/frequency→ALL merged-source noun/model links→build-only gaps→filled archetypes/parts/approved art→hashed release. No raw-guide scans; no fixed noun subset. Runtime registry/search+credits from release; /api/archetypes, /api/art/<sha>.json; no corpus art in assets/Git. Gate full Go/Python/JS tests+before/after bytes/startup/memory/query benchmarks.
 - Local25477e31…: 57566 seeded/17092 filled,12310 models,2 approved art; 412075/435213 linked; 100 cachedv2. New App13229+WikiHow214293; CSV1 malformed+1071 empty, App9107 foreign quarantined; raw kept.
 - Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.
@@ -78,3 +79,6 @@
 - Reload local user service after finished frontend changes; verify /api/catalog+served asset hashes; never auto-open browser.
 - Cleanup gate:216Py/143JS/Go pass;2art runtimeSHA unchanged; offline0network. Newcandidate set→newmappingcachekey/list-only offline; never silently reuse mismatched evidence.
 - Further cleanup wrapped: dead topic ranking/huge-scroll/queue Set removed; startup registry local; shared JSON/SHA; obsolete validator retired. Preserve compatibility/provenance;216Py/143JS+60query exact-rank comparison pass.
+- Contractions sans apostrophe equal punctuated; pronouns include he/she/his/her, contractions he's/hes/she's/shes; retain negation. Zero strict matches+resolved subject+failure phrase→subject-mandatory diagnostic synonym fallback; preserve numeric/model intent.
+- SVG10 test authorized only: metadata sense gate→bounded numbered candidate sheets→high-detail/reasoning mapping→per-part VLM prune (≥3valid); true aspect; new cache identity. Report visual pass/cost before expansion; no art publish.
+- Show even rejected/unapproved diagrams locally at /diagram-preview with source/numbered/highlight PNGs+reasons; scratch-only gallery, main art registry unchanged.

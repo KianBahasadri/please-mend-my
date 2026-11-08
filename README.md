@@ -29,8 +29,9 @@ immediately; typed punctuation remains intact. Clearing an input hides the
 corresponding UI immediately.
 
 Registered bare subjects such as `bike` reveal `What's wrong with your bike?`
-and a blank native answer beneath it immediately. Once clarification opens,
-cards stay hidden until that answer has content. The first line and question
+and a blank native answer beneath it immediately. The best answer for the
+first subject stays visible while the second field is blank; typing specifics
+narrows it immediately. The first line and question
 retain the full container width; a workspace below pairs the answer with a
 bicycle diagram and a scrollable parts list. Diagram and list highlights follow
 hover, focus, selection, and matching typed answers. Selecting a part fills the
@@ -50,7 +51,7 @@ Backspace on an already-empty answer returns to the end of the first line and
 suppresses reopening. The protected prompt/question and single native caret are
 preserved. Full phrases such as `broken arm` use the first line alone. Search
 combines only the editable answers locally. Returning from a guide settles
-immediately. Only guides and articles appear as cards; topic files and direct
+immediately. Only guides and articles become search answers; topic files and direct
 `?guide=<id>` links remain available. Bicycle component matches favor actual
 bicycle procedures over shared alias collisions and unrelated dirt-bike guides.
 Each font keeps its size when the full question fits; otherwise the hero scales
@@ -60,11 +61,24 @@ keep their priority. Complete title matches also win when the query reorders the
 words, so `arm broken` favors `Broken arm` over a detailed eyeglasses repair.
 Conversational filler and intensifiers are removed before local lookup, so
 `arm it's broken` searches like `arm broken` and `fucking dick` like `dick`.
+Unpunctuated contractions such as `its`, `wont`, and `doesnt` follow the same
+rules as their apostrophized forms, retaining negation. Failure phrases with no
+strict matches can fall back to diagnostic guides while retaining their subject.
 Negation, symptoms, numeric model identifiers, and exact title priority remain.
 The hero uses those same filler rules when deciding whether to ask a follow-up:
 `fucking dick` supports Enter just like `dick`, while the original input remains
 editable and the question uses the cleaned subject.
 The tab title follows the first hero line immediately, including its typed text.
+
+Search displays the highest-ranked guide inline below the visible hero and
+specifier. Structured steps and original HTML share the existing renderer.
+The article is centered below the full-width hero. The next four guides are
+prefetched; a right-side “Other possibilities” list offers ranks two through six
+and stacks below the article on narrow screens. Automatic answers preserve the
+native typing focus and keep the previous answer visible until the new payload
+arrives. Clearing the whole query hides it immediately; an empty second field
+still searches the first subject. Direct guide links and
+browser history remain available; no loading text or spinner appears.
 
 Check the hero and search interactions without opening a browser:
 
