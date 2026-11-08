@@ -87,5 +87,7 @@
 - Hierarchical search: offline OEWN is-a+model→noun links; exact subject/model first, parent discount, compatible superclass fallback with part/symptom mandatory. No handpicked subjects; include person senses; browser-only.
 - Localinline c5d44f3: centeredarticle+sidepossibilities, blanksecondsearchesnoun;157JS/232Py/Go pass; gallery351placements/18oldmaps.
 - SVG10 two passes:33calls/28accepted,$.109089 reported ($.0928486 accepted+$.0162404 rejected);3oldfailchargesunknown.1numericview/verification hit8Klength;0retained,partpassN/A.141MiBpeakretry; no moreAIcalls withoutrequest.
-- Devicecache: wholecatalog CacheStorage cache-first+sessionETag HEAD/revalidate; guidesLRU500 generationfenced/purgeonrelease; SWcoherentshell/offline. Prepare replacementworkerbehindactiveone; preservetyping, no per-keynetwork. Measurestartup;65MBparse/prep≠≤20ms guarantee.
+- Devicecache: wholecatalog CacheStorage cache-first+sessionETag HEAD/revalidate; guidesLRU500 generationfenced/purgeonrelease; SWcoherentshell/offline. Prepare replacementworkerbehindactiveone; preservetyping, no per-keynetwork. Measurestartup;73MBparse/prep≠≤20ms guarantee.
 - Inherited symptom/part evidence=rawtitle/device+v2structuredTerms;nevergeneratedaliases. No-match edits retainpriorarticle,dropalternatives;wholeclearhides.
+- Startup: consider systematic first-keystroke/core vs deferred-enrichment split; measure benefit, preserve whole-catalog browser search+generation coherence; no curated subsets.
+- Local5b gates246Py/199JS/Go;61art+24shellverified;HEAD304. Initialqueryp95~11ms,cached~.03ms;startup2.7s/280MiBheap. Inheritance scoped before residuals;avoid globalregex/JIT sweeps. OEWN human→homo stillunresolvedforpersonqueries.

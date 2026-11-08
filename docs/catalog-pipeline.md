@@ -276,3 +276,44 @@ source-format compatibility paths were retained. All 216 Python and 143
 JavaScript tests pass; a separate comparison found identical ranked IDs for all
 60 selected queries against the real resident index. Receipts are under
 `catalog-data/benchmarks/dead-code-cleanup/`.
+
+## Current local hierarchy, cache and candidate-art release
+
+Release `5b76771e…` retains 435,213 items and 713,438 media files. It exports
+64,209 noun nodes and 65,992 parent edges, 17,814 filled archetypes, 12,311
+models, and 61 drawings (59 candidates plus the two unchanged reviewed originals).
+The same pipeline replays pinned sources on a fresh host. The local metadata
+repack reused noun linking, took 165.6 seconds and peaked at 1,817 MiB; no Qwen
+calls or corpus uploads occurred.
+
+The full gates passed 246 Python tests, 199 JavaScript tests and `go test ./...`.
+Sixty-two real-catalog query probes retained contraction, negation, model and
+part ranking behavior with one catalog request and no per-query network. Known
+subtypes inherit compatible guidance, including grandmother → person and husky
+→ dog. Lexical sense gaps remain: this OEWN data resolves `human` to the animal
+genus sense, which does not inherit the separate person domain.
+
+The final two-CPU Node comparison measured:
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| JSON bytes | 65,966,782 | 73,322,196 |
+| Gzip bytes | 19,111,027 | 21,117,857 |
+| Prepared heap | 247.3 MiB | 280.0 MiB |
+| File read → registry ready | 2.01 s | 2.70 s |
+| Initial-pass query p95 | 9.44 ms | 11.41 ms |
+| Repeated-query p95 | 0.034 ms | 0.031 ms |
+
+An early inheritance implementation regressed individual queries to 415 ms.
+The final worker narrows the subject before intersecting residual terms, defers
+canonical domain checks to actual candidates, avoids per-node regex compilation,
+and skips ancestor work for six exact visible results. Separate fresh-worker
+typo/no-match probes measured 3.6–23.4 ms after the changes. These runs exclude
+browser disk-cache behavior, layout, paint and internet transfer. CacheStorage
+removes a network dependency; it does not establish a 20 ms full-catalog boot.
+
+The reloaded local service serves the new catalog and 24 hash-verified shell
+assets. Conditional catalog HEAD returns 304; all 61 art routes retain their
+body hashes and immutable caching. Local catalog/guide GETs measured 14.3/3.1 ms
+in a single check. Receipts are under
+`catalog-data/benchmarks/best-answer-som/`.
