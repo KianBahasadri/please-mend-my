@@ -174,3 +174,57 @@ with a separate 768 MiB cap; measured resident memory was about 100 MiB.
 `systemctl --user stop please-mend-my-local` releases port 8080. No browser was
 opened and production was unchanged. Detailed receipts remain in the ignored
 `catalog-data/benchmarks/noun-release/` directory.
+
+## Five-source local receipt
+
+Release `25477e31…` serves 435,213 entries (390,357 guides/articles plus 44,856
+retained topic pages) and 713,438 media files locally. Production remains on its
+previous catalog. The two new source caches contain 214,293 wikiHow guides and
+13,229 Appropedia articles. The full 215,365-row CSV is preserved: 1,071 empty
+rows excluded and one empty malformed fragment quarantined. Appropedia's
+English-labelled ZIM contained 9,107 confidently foreign-body pages; these remain
+in the raw archive and build-only language quarantine. This is a conservative
+new-source filter, not a completed language audit of the old catalog.
+
+The build links 412,075 rows to nouns, publishes 17,092 filled noun senses, and
+retains 12,310 guide-backed models, both reviewed diagrams, and the 100 cached
+v2 guides. The cached-download build took 363.3 seconds with an observed cgroup
+peak of 2,698 MiB inside an 8 GiB cap; the earlier unfiltered build peaked at
+6,146 MiB. Available workstation RAM stayed around 24 GiB. No Qwen calls, corpus
+uploads, production deployment, or browser launch occurred. The unserved
+preliminary snapshot was removed after successful local verification.
+
+The same two-CPU benchmark suite compared the previous 207,691-row catalog with
+the new catalog and search optimizations. Cold first-pass queries and repeated
+queries are separate: the latter use the bounded query LRU. These are Node
+worker timings, excluding network transfer, layout, and paint.
+
+| Metric | Previous | New |
+| --- | ---: | ---: |
+| Index JSON bytes | 38413254 | 65966782 |
+| Index gzip bytes | 11111137 | 19111027 |
+| Worker preparation, ms | 646.914 | 1108.251 |
+| File read to page registry ready, ms | 1216.48 | 1932.076 |
+| Prepared heap, MiB | 135.543 | 246.913 |
+| First-pass query p50 / p95, ms | 0.72 / 11.683 | 1.158 / 9.174 |
+| Repeated query p50 / p95, ms | 0.555 / 3.502 | 0.012 / 0.032 |
+| Cold one-letter `a`, ms | 120.369 | 0.3 |
+
+The expanded unoptimized catalog first measured 458 ms for a cold `a` query;
+prepared exact prefix rankings reduce it to 0.3 ms. Multi-word intersection
+plans resolve selective tokens first, then probe or stream only that candidate
+scope; partial quality maps never enter the full token cache. Differential
+tests compare these paths with full expansion. The final cold suite still has
+a 59 ms alias outlier; warm cache timings do not erase that cost. Registry
+lookup p95 remains 0.002 ms; initial payload and preparation costs grow with
+the larger catalog.
+
+The gate passed 186 Python tests, 134 JavaScript tests, and `go test ./...`.
+Actual worker probes retain bicycle-part ordering, Broken arm priority, and
+strict S23 model counts; new solar-heater, compost, and résumé queries work.
+HTTP verifies the selected index SHA, registry, both hashed diagrams, new-source
+guides/media, and that the served worker matches the source file. The rebuilt
+local server runs as user service `please-mend-my-local.service`, around
+140 MB RSS under its 768 MiB limit; a runtime drop-in selects the new catalog.
+Refresh an existing page to load the new resident index. Detailed receipts are
+in ignored `catalog-data/benchmarks/new-sources/`.

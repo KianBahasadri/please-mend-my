@@ -96,7 +96,7 @@ This preserves source material for the planned LLM restructuring and custom
 entry pages. WikiMed and First Aid use `health` / **Health & medicine**, separate
 from iFixit's `medical` / **Medical equipment** category.
 
-The completed local release is
+Historical three-source verification (before noun-backed and expanded releases):
 `f55559d274f784f9e90e11cc3b1bb9182dbc2b37abd16c236c8727873d6411c3`:
 
 | Source | Entries | Media files |
@@ -165,7 +165,7 @@ data, with no server or external search requests.
 Tests use tiny generated fixtures and the pinned native dependencies:
 
 ```sh
-uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==1.28.2 python -m unittest discover -s scripts -p 'test_*.py'
+python3 scripts/run_bounded.py -- uv run --python 3.12.12 --with libzim==4.1.0 --with lxml==6.1.3 --with pymupdf==1.28.2 --with wordfreq==3.1.1 --with langid==1.1.6 --with numpy==2.2.6 python -m unittest discover -s scripts -p 'test_*.py'
 node --test scripts/test_search_worker.cjs
 ```
 

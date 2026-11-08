@@ -371,16 +371,7 @@ function fuzzyTerms(token, matches) {
   }
 }
 
-function resolveToken(token, widen = false, strict = false) {
-  const cacheKey = (strict ? "!" : widen ? "+" : "=") + token;
-  const narrow = widen && !strict ? tokenCache.get("=" + token) : null;
-  if (narrow?.expanded) return narrow;
-  if (tokenCache.has(cacheKey)) {
-    const result = tokenCache.get(cacheKey);
-    tokenCache.delete(cacheKey);
-    tokenCache.set(cacheKey, result);
-    return result;
-  }
+function tokenMatches(token, widen, strict) {
   const matches = new Map(), terms = inverted.terms;
   for (let at = lowerBound(terms, token); at < terms.length && terms[at].startsWith(token) && (!strict || terms[at] === token); at++) {
     matches.set(at, terms[at] === token ? 1 : 2);
@@ -398,6 +389,99 @@ function resolveToken(token, widen = false, strict = false) {
   }
   const expanded = !matches.size || widen;
   if (expanded && !strict) fuzzyTerms(token, matches);
+  return { matches, expanded };
+}
+
+function cachedToken(token, widen, strict) {
+  return widen && !strict && tokenCache.get('=' + token)?.expanded ? tokenCache.get('=' + token)
+    : tokenCache.get((strict ? '!' : widen ? '+' : '=') + token);
+}
+
+function postingHas(term, identifier) {
+  const { offsets, values } = inverted.postings;
+  let low = offsets[term], high = offsets[term + 1];
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (values[middle] < identifier) low = middle + 1;
+    else high = middle;
+  }
+  return low < offsets[term + 1] && values[low] === identifier;
+}
+
+function tokenPlan(token, widen, strict) {
+  const cached = cachedToken(token, widen, strict);
+  if (cached) return { token, strict, cached, estimate: cached.documents.length };
+  const plan = { token, strict, ...tokenMatches(token, widen, strict) };
+  let estimate = 0;
+  const { offsets, values } = inverted.postings;
+  for (const [term] of plan.matches) {
+    let low = offsets[term], high = offsets[term + 1];
+    while (low < high) {
+      const middle = (low + high) >>> 1;
+      if (values[middle] < entries.length) low = middle + 1;
+      else high = middle;
+    }
+    estimate += low - offsets[term];
+    for (let at = low; at < offsets[term + 1]; at++) {
+      const group = values[at] - entries.length;
+      estimate += groupOffsets[group + 1] - groupOffsets[group];
+    }
+  }
+  plan.estimate = estimate;
+  return plan;
+}
+
+function restrictedToken(plan, candidates) {
+  // Probe only the current intersection when expanding a common word would
+  // visit far more documents. Partial quality maps never enter the token cache.
+  const quality = new Uint8Array(entries.length), documents = [];
+  const primaryDevices = primarySubjects.get(plan.token) || primarySubjects.get(porter(plan.token));
+  if (candidates.length > 128 && candidates.length * plan.matches.size * 12 >= plan.estimate) {
+    // A long prefix can have hundreds of terms. Stream its postings through a
+    // candidate mask instead of binary-searching every term for every document.
+    const allowed = new Uint8Array(entries.length), groupQuality = new Uint8Array(searchGroups.length);
+    for (const doc of candidates) allowed[doc] = 1;
+    const { offsets, values } = inverted.postings;
+    for (const [term, cost] of plan.matches) {
+      for (let at = offsets[term]; at < offsets[term + 1]; at++) {
+        const identifier = values[at];
+        if (identifier < entries.length) {
+          if (allowed[identifier] && (!quality[identifier] || cost < quality[identifier])) quality[identifier] = cost;
+        } else {
+          const group = identifier - entries.length;
+          if (!groupQuality[group] || cost + 16 < groupQuality[group]) groupQuality[group] = cost + 16;
+        }
+      }
+    }
+    for (const doc of candidates) {
+      const group = groupQuality[itemGroups[doc]];
+      if (group && (!quality[doc] || group < quality[doc])) quality[doc] = group;
+      if (quality[doc]) documents.push(doc);
+    }
+    return { documents: Uint32Array.from(documents), quality, expanded: plan.expanded, primaryDevices };
+  }
+  const terms = [...plan.matches].sort((a, b) => a[1] - b[1]);
+  for (const doc of candidates) {
+    let best = 0;
+    for (const [term, cost] of terms) {
+      if (best && cost >= best) break;
+      const found = postingHas(term, doc) ? cost
+        : itemGroups[doc] && postingHas(term, entries.length + itemGroups[doc]) ? cost + 16 : 0;
+      if (found && (!best || found < best)) best = found;
+    }
+    if (best) { quality[doc] = best; documents.push(doc); }
+  }
+  return { documents: Uint32Array.from(documents), quality, expanded: plan.expanded, primaryDevices };
+}
+
+function resolveToken(token, widen = false, strict = false, plan = undefined) {
+  const cacheKey = (strict ? "!" : widen ? "+" : "=") + token;
+  const cached = cachedToken(token, widen, strict);
+  if (cached) {
+    if (tokenCache.has(cacheKey)) { tokenCache.delete(cacheKey); tokenCache.set(cacheKey, cached); }
+    return cached;
+  }
+  const { matches, expanded } = plan || tokenMatches(token, widen, strict);
   const quality = new Uint8Array(matches.size ? entries.length : 0), groupQuality = new Uint8Array(matches.size ? searchGroups.length : 0);
   const documents = [], groups = [];
   const addDocument = (doc, cost) => {
@@ -549,10 +633,17 @@ function indexedSearch(query, tokens) {
     .map(token => token.replace(/^[('"“‘]+|[)'"”’,;:.!?]+$/gu, ""));
   const intersect = (widen) => {
     const lists = [];
-    for (const token of tokens) {
-      const list = resolveToken(token, widen, tokens.length > 1 && (token === "not" || token === "no"));
+    const plans = tokens.map(token => tokenPlan(token, widen, tokens.length > 1 && (token === "not" || token === "no")))
+      .sort((a, b) => a.estimate - b.estimate);
+    let candidates;
+    for (const plan of plans) {
+      const useRestricted = candidates && !plan.cached &&
+        (candidates.length <= 256 || plan.estimate > candidates.length * 2);
+      const list = useRestricted ? restrictedToken(plan, candidates)
+        : resolveToken(plan.token, widen, plan.strict, plan);
       if (!list.documents.length) return [];
       lists.push(list);
+      if (!candidates || useRestricted || list.documents.length < candidates.length) candidates = list.documents;
     }
     lists.sort((a, b) => a.documents.length - b.documents.length);
     if (broad) return broadSearch(query, lists[0]);

@@ -590,6 +590,34 @@ test('invalid prepared short-prefix documents fail startup', async () => {
   await assert.rejects(workerFor(prepared), /inverted index is invalid/);
 });
 
+test('selective token probes match full expansions and never poison later queries', async () => {
+  const index = fixture();
+  index.items = [];
+  index.search = { version: 1, groups: ['', 'laptop\nnotebook', 'battery'], itemGroups: [] };
+  for (let at = 0; at < 700; at++) {
+    index.items.push(['probe-' + at, 'How to Repair ' + (at % 4 ? 'Radio' : 'Laptop') + ' Battery ' + at,
+      'technology', at % 5 ? 'guide' : 'article', at % 11 ? '' : 'Sony WH-1000XM4']);
+    index.search.itemGroups.push(at % 3);
+  }
+  index.items.push(['rare', 'How to Be an Organized Artist1', 'technology', 'guide', '']);
+  index.search.itemGroups.push(0);
+  const prepared = prepare(index);
+  const source = fs.readFileSync(path.join(__dirname, '../assets/search-worker.js'), 'utf8');
+  const fullSource = source.replace('const useRestricted = candidates && !plan.cached &&',
+    'const useRestricted = false && candidates && !plan.cached &&');
+  assert.notEqual(source, fullSource);
+  const fast = await workerFor(prepared), full = await workerFor(prepared, fullSource);
+  for (const query of ['How to Be an Organized Artist1', 'laptop battery', 'repairing laptop', 'battery laptop',
+    'battery', 'how', 'laptop', 'laptpp batery', 'WH-1000XM4 battery', 'WH-1000XM5 battery', 'laptop not radio']) {
+    const a = await fast.search(query), b = await full.search(query);
+    fast.send({ type: 'range', requestId: a.requestId, rangeId: 1, start: 60, count: 40 });
+    full.send({ type: 'range', requestId: b.requestId, rangeId: 1, start: 60, count: 40 });
+    const aTail = await fast.next('range'), bTail = await full.next('range');
+    assert.equal(a.total, b.total, query);
+    assert.deepEqual(Array.from([...a.items, ...aTail.items], r => r[0]), Array.from([...b.items, ...bTail.items], r => r[0]), query);
+  }
+});
+
 test('published topic anchors stay resident while only actionable source matches become cards', async () => {
   const index = fixture();
   index.items = [

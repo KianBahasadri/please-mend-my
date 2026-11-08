@@ -36,7 +36,7 @@
 - VM replacement authorized: rebuild with 64GiB root (no extra data volume); retain EIP/domain; regenerate catalog on EC2.
 - Prod: i-00b3468454b650217/64GiB; cloud-built 207691 items/679729 media; unchanged runs reuse; no corpus uploads.
 - No audits/catalog scans unless asked; English-content filtering remains pending.
-- Local: http://127.0.0.1:8080; 207691 items/679729 media; catalog-data/releases/<pipeline SHA>; source SQLite in catalog-data/build/.
+- Local: http://127.0.0.1:8080; 435213 items/713438 media; catalog-data/releases/<pipeline SHA>; source SQLite in catalog-data/build/.
 - Local startup: CATALOG_DIR wins, else read catalog-data/local-catalog.path once; missing/invalid catalog→fail before listen (never hero-only503). Verify /api/catalog too; transient startup retries, ready clears stale errors.
 - Live: https://pleasemendmy.com (+www), EC2 32.193.25.68 us-east-1/c8g.xlarge; redeploy: `AWS_REGION=us-east-1 bash deploy/ec2.sh`.
 - CF proxy/Full(strict)/HTTP→HTTPS verified; root .env token 0600/ignored: never expose. Don't retry expired Wrangler OAuth.
@@ -68,5 +68,6 @@
 - No Browse library/category-filter buttons; typing searches all categorized items.
 - Best 100 matches/search; bounded ranking, continuous scroll, virtual cards; no Show more/Clear search; prefetch visible only. Keep full index in browser.
 - Build0–4: pinned OEWN+wordfreq nouns/edges/frequency→ALL merged-source noun/model links→build-only gaps→filled archetypes/parts/approved art→hashed release. No raw-guide scans; no fixed noun subset. Runtime registry/search+credits from release; /api/archetypes, /api/art/<sha>.json; no corpus art in assets/Git. Gate full Go/Python/JS tests+before/after bytes/startup/memory/query benchmarks.
-- Noun local18b15619…: 57566 seeded/12026 filled,12310 guide-backed models,2 approved art; 171186/207691 linked; gaps build-only. Alias ranks+model ancestry prevent bike/motorcycle,arm/weapon,phone/phoneme,Air/tune collisions.
+- Local25477e31…: 57566 seeded/17092 filled,12310 models,2 approved art; 412075/435213 linked; 100 cachedv2. New App13229+WikiHow214293; CSV1 malformed+1071 empty, App9107 foreign quarantined; raw kept.
 - Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.
+- Multiword search: selective-first, scoped posting probes/streaming; partial maps never cached as full. Local coldp95~9ms/cachedp95~.03ms; cold alias outlier59ms; startup~1.9s/19MB gzip. Go+186Py+134JS pass.
