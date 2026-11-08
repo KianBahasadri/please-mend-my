@@ -150,12 +150,12 @@ def progress(stage, **fields):
     print(json.dumps({'stage': stage, **fields}, ensure_ascii=False), flush=True)
 
 
-def prepare_selection(runtime, database, work, limit=300):
+def prepare_selection(runtime, database, work, limit=300, *, all_physical=False):
     """Bounded metadata-only selection; no source-guide bodies are traversed."""
     runtime, database, work = Path(runtime), Path(database), Path(work)
     payload = read(runtime / 'archetypes.json')
-    if not 1 <= limit <= 10000:
-        raise ValueError('Selection limit must be 1..10000')
+    if limit is not None and (type(limit) is not int or not 1 <= limit <= 10000):
+        raise ValueError('Selection limit must be 1..10000 or None for all physical nouns')
     with closing(sqlite3.connect(database.resolve().as_uri() + '?mode=ro', uri=True)) as db:
         db.row_factory = sqlite3.Row
         nouns = {row['id']: dict(row) for row in db.execute(
@@ -166,8 +166,8 @@ def prepare_selection(runtime, database, work, limit=300):
         for row in payload['archetypes']:
             noun = nouns.get(row['id'])
             if (not noun or noun['domain'].removeprefix('noun.') not in {'artifact', 'body'}
-                    or noun['guide_count'] < 5 or len(row['parts']) < 2
-                    or len(noun['label']) < 3 or noun['frequency'] < 2.0):
+                    or (not all_physical and (noun['guide_count'] < 5 or len(row['parts']) < 2
+                        or len(noun['label']) < 3 or noun['frequency'] < 2.0))):
                 continue
             # A broadly covered whole object is more useful than hundreds of
             # obscure same-object model senses or incidental component matches.
@@ -204,9 +204,9 @@ def prepare_selection(runtime, database, work, limit=300):
                 'aliases': row['aliases'][:30], 'baselineParts': row['parts'],
                 'catalogMatches': noun['guide_count'], 'modelCount': model_count,
                 'score': round(score, 5), 'examples': examples})
-            if len(selected) == limit:
+            if limit is not None and len(selected) == limit:
                 break
-    if len(selected) != limit:
+    if limit is not None and len(selected) != limit:
         raise ValueError(f'Only {len(selected)} eligible distinct archetypes for requested {limit}')
     result = {'version': VERSION, 'revision': payload.get('revision'), 'count': len(selected),
               'archetypes': selected, 'senseRejected': rejected}
@@ -310,7 +310,10 @@ def view_targets(taxonomy, phase='primary', previous=None):
         # the first eligible view; other views remain secondary, never duplicates.
         counts = {view['id']: sum(part['kind']=='physical' and part['viewId']==view['id']
                   for part in subject['parts']) for view in subject['views']}
-        primary = next((view for view in subject['views'] if counts[view['id']] >= 3), None)
+        # Catalog-wide publication retains simple/context drawings too. The
+        # older diagnostic runner keeps its three-part experiment unchanged.
+        primary_minimum = 1 if taxonomy.get('allowSparseViews') else 3
+        primary = next((view for view in subject['views'] if counts[view['id']] >= primary_minimum), None)
         if primary is None:
             continue
         views = [primary] if phase == 'primary' else [view for view in subject['views']
@@ -320,11 +323,12 @@ def view_targets(taxonomy, phase='primary', previous=None):
         for view in views:
             parts = [part for part in subject['parts'] if part['kind'] == 'physical'
                      and part['viewId'] == view['id']]
-            if len({part['id'] for part in parts} - already) < (3 if phase == 'primary' else 2):
+            if len({part['id'] for part in parts} - already) < (primary_minimum if phase == 'primary' else 2):
                 continue
             target = deepcopy(subject)
             target.update(viewId=view['id'], viewLabel=view['label'],
-                svgQueries=view['svgQueries'], viewParts=parts, previouslyMapped=sorted(already))
+                svgQueries=view['svgQueries'], viewParts=parts, previouslyMapped=sorted(already),
+                minimumDistinctPhysicalParts=min(3, len(parts)) if phase == 'primary' else 2)
             targets.append(target)
     return targets
 
@@ -475,7 +479,7 @@ def run_mapping(taxonomy, digests, work, *, phase='primary', previous=None, api_
             'images': images, 'input': {'id': target['id'], 'label': target['label'],
                 'definition': target['definition'], 'viewId': target['viewId'],
                 'viewLabel': target['viewLabel'], 'parts': parts,
-                'minimumDistinctPhysicalParts': 3 if phase == 'primary' else 2,
+                'minimumDistinctPhysicalParts': target.get('minimumDistinctPhysicalParts', 3 if phase == 'primary' else 2),
                 'visualEvidence': [{'id': image['id'], 'sha256': image['sha256']} for image in images],
                 'markVersion': MARK_VERSION,
                 'candidates': [{'id': item['source']['id'], 'title': item['source']['title'],
