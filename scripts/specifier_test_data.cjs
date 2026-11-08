@@ -1,7 +1,6 @@
 // Test-only catalog data. Production definitions come exclusively from releases.
 const fs = require('node:fs');
 const path = require('node:path');
-const vm = require('node:vm');
 const { createHash } = require('node:crypto');
 const clean = value => String(value).normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 const part = (id,label,query,aliases=[]) => ({id,label,query,aliases:[...new Set([query,label,...aliases].map(clean))]});
@@ -84,9 +83,8 @@ const broadNouns = new Set(("arm leg hand foot feet knee shoulder elbow wrist an
     "relationship marriage friendship family resume cv code website app software").split(/\s+/));
   for (const name of ["washing machine", "air conditioner", "coffee maker", "game console", "water heater", "mobile phone", "sewing machine"]) broadNouns.add(name);
 function bicycleArt() {
-  const file = path.join(__dirname, 'data/approved-bicycle-art.js');
-  const window = {}; vm.runInNewContext(fs.readFileSync(file,'utf8'),{window});
-  return {version:1,id:'bicycle',...window.mendBicycleArt};
+  const file = path.join(__dirname, 'data/approved-bicycle-art.json');
+  return {version:1,id:'bicycle',...JSON.parse(fs.readFileSync(file, 'utf8'))};
 }
 function artURL(art) { return '/api/art/'+createHash('sha256').update(JSON.stringify(art)).digest('hex')+'.json'; }
 function releaseFixture({specifics=true,art=true}={}) {

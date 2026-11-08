@@ -1,8 +1,6 @@
-import tempfile
-from pathlib import Path
 import unittest
 
-from diagram_credits import END, START, render, update_credits
+from diagram_credits import render
 
 
 class DiagramCreditsTest(unittest.TestCase):
@@ -29,27 +27,20 @@ class DiagramCreditsTest(unittest.TestCase):
         manifest["archetypes"][0]["artUrl"] = None
         self.assertEqual(render(manifest), "")
 
-    def test_bad_source_urls_fail_before_overwriting_page(self):
+    def test_bad_source_urls_fail_before_release_staging(self):
         manifest = self.manifest()
         manifest["archetypes"][0]["attribution"]["source"] = "javascript:alert(1)"
-        with tempfile.TemporaryDirectory() as directory:
-            page = Path(directory) / "credits.html"
-            original = "before" + START + "\n" + END + "after"
-            page.write_text(original)
-            with self.assertRaises(ValueError):
-                update_credits(page, manifest)
-            self.assertEqual(page.read_text(), original)
+        with self.assertRaises(ValueError):
+            render(manifest)
 
-    def test_regeneration_is_deterministic_and_keeps_existing_credits(self):
-        with tempfile.TemporaryDirectory() as directory:
-            page = Path(directory) / "credits.html"
-            page.write_text("existing bicycle credits\n" + START + "\n" + END + "\nfont notices")
-            update_credits(page, self.manifest())
-            first = page.read_bytes()
-            update_credits(page, self.manifest())
-            self.assertEqual(page.read_bytes(), first)
-            self.assertTrue(page.read_text().startswith("existing bicycle credits"))
-            self.assertTrue(page.read_text().endswith("font notices"))
+    def test_regeneration_is_deterministic_without_mutating_the_registry(self):
+        manifest = self.manifest()
+        import copy
+        before = copy.deepcopy(manifest)
+        first = render(manifest)
+        self.assertEqual(render(manifest), first)
+        self.assertEqual(manifest, before)
+        self.assertIn("Alice &amp; Bob", first)
 
 
 if __name__ == "__main__":

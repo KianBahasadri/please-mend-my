@@ -1,6 +1,5 @@
 {
   "version": 1,
-  "generatedBy": "scripts/prepare_bicycle_art.py",
   "viewBox": "250 65 565 355",
   "sources": [
     {
@@ -30,5 +29,7 @@
       "licenseConfirmation": "https://openclipart.org/share",
       "use": "Original headlight path10148 extracted, reflected, scaled, positioned and recolored; main Commons diagram has no headlight."
     }
-  ]
+  ],
+  "approvedArtifact": "scripts/data/approved-bicycle-art.json",
+  "validatedBy": "scripts/diagram_svg.py"
 }

@@ -1,6 +1,7 @@
 The bicycle art reuses two published SVGs. Their original bytes are retained here;
 the browser receives only the offline-prepared geometry in the selected catalog release.
-The byte-for-byte build fixture is `scripts/data/approved-bicycle-art.js`.
+The permanent approved artifact is `scripts/data/approved-bicycle-art.json`;
+its hash is pinned in `scripts/data/archetype-art.json`.
 
 “Bicycle diagram” by Al2 and Wikimedia Commons contributors:
 
@@ -27,9 +28,10 @@ The byte-for-byte build fixture is `scripts/data/approved-bicycle-art.js`.
 Source authors retain credit for their artwork. The grouping, interaction,
 monochrome adaptation, and light placement are modifications by this project;
 the authors do not endorse the site. Source URLs, SHA-256 pins, and preparation
-details are recorded in `sources.json`. Regenerate deterministically, offline:
+details are recorded in `sources.json`. The bespoke preparation script has been
+retired; the approved artifact preserves its reviewed geometry. New SVG
+compilation and approved-art validation use `scripts/diagram_svg.py`.
 
 ```sh
-python3 scripts/prepare_bicycle_art.py
-python3 scripts/prepare_bicycle_art.py --check
+python3 scripts/run_bounded.py -- uv run --python 3.12.12 python -m unittest discover -s scripts -p 'test_bicycle_art.py'
 ```

@@ -154,9 +154,24 @@
           ]
         }
       ],
-      "kind": "pinned-bicycle",
-      "file": null,
-      "sha256": null
+      "kind": "approved-json",
+      "file": "scripts/data/approved-bicycle-art.json",
+      "sha256": "e9f041cd9a32eca38a92d9d8d4add36d1935279542c2991b59d36fa871f5e7c2",
+      "sourcePins": [
+        {
+          "file": "docs/references/bicycle/commons-bicycle-diagram.original.svg",
+          "sha256": "fb46ca1c99668629b8111776031bc5b09db9e17735f95642ab933461ada52605"
+        },
+        {
+          "file": "docs/references/bicycle/openclipart-bicycle.original.svg",
+          "sha256": "5e0d8b79821d231246e3b0616e0e12f52e903c9c4910bfd3023d6b83b3dc52e4"
+        }
+      ],
+      "review": {
+        "approved": true,
+        "artSha256": "e9f041cd9a32eca38a92d9d8d4add36d1935279542c2991b59d36fa871f5e7c2",
+        "reason": "Preserved reviewed geometry, grouping, paints, crop and supplementary headlight without recompilation."
+      }
     },
     {
       "id": "phone",
@@ -239,7 +254,24 @@
       ],
       "kind": "approved-json",
       "file": "scripts/data/approved-phone-art.json",
-      "sha256": "c15418940cb86ec29d9dd97c8efc7bb458c1b26f0fcabc0ed1c76f7dc184685b"
+      "sha256": "c15418940cb86ec29d9dd97c8efc7bb458c1b26f0fcabc0ed1c76f7dc184685b",
+      "review": {
+        "approved": true,
+        "sourceSha256": "5a0ba04afb81de1d9d7e541a16066d5bbf31a98b2d6c23eec9194e45493399c5",
+        "mappingSha256": "002553d75d73ddc5b4907d46d4e6db05f1ccb923eb3a25895af98825d0558318",
+        "compilerVersion": "diagram-svg-v1",
+        "omitGeometryParts": [
+          "camera"
+        ],
+        "reviewReason": "The proposed camera path is an inset of the earpiece, not a camera. Keep camera in the list; omit its incorrect SVG mapping.",
+        "artSha256": "c15418940cb86ec29d9dd97c8efc7bb458c1b26f0fcabc0ed1c76f7dc184685b"
+      },
+      "sourcePins": [
+        {
+          "file": "docs/references/specifiers/phone-5a0ba04afb81de1d.original.svg",
+          "sha256": "5a0ba04afb81de1d9d7e541a16066d5bbf31a98b2d6c23eec9194e45493399c5"
+        }
+      ]
     }
   ]
 }

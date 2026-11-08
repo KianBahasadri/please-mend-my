@@ -1,17 +1,10 @@
 #!/usr/bin/env python3
-"""Generate static diagram credits from the published pilot manifest, offline."""
+"""Render diagram credits from the release registry without mutating source files."""
 
 from __future__ import annotations
 
-import argparse
 from html import escape
-import json
-from pathlib import Path
 from urllib.parse import urlsplit
-
-START = "<!-- diagram-pilot-credits:start -->"
-END = "<!-- diagram-pilot-credits:end -->"
-
 
 def link(label: str, url: str) -> str:
     parts = urlsplit(url)
@@ -53,28 +46,3 @@ def render(manifest: dict) -> str:
         "        </div>",
         "      </section>",
     ])
-
-
-def update_credits(page: Path, manifest: dict) -> None:
-    text = page.read_text()
-    if text.count(START) != 1 or text.count(END) != 1:
-        raise ValueError("Credits page needs one diagram section marker pair")
-    before, remainder = text.split(START, 1)
-    _, after = remainder.split(END, 1)
-    body = render(manifest)
-    updated = before + START + "\n" + (body + "\n      " if body else "      ") + END + after
-    if updated != text:
-        page.write_text(updated)
-
-
-def main() -> None:
-    root = Path(__file__).resolve().parents[1]
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=root / "catalog-data/build/diagram-pilot/published/art/manifest.json")
-    parser.add_argument("--page", type=Path, default=root / "credits.html")
-    args = parser.parse_args()
-    update_credits(args.page, json.loads(args.manifest.read_text()))
-
-
-if __name__ == "__main__":
-    main()

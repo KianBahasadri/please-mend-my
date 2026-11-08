@@ -106,8 +106,11 @@ parts; retain a view only if it adds two valid mapped parts. Shape counts are
 quality signals, not rigid rejection thresholds. Every view retains source/SHA/
 license pins, geometry checks and visual review. Lazy local art and confident
 physical-part matching support view switching; symptoms do not trigger jumps.
-This is a roadmap, not an implemented multi-view renderer. Large Qwen runs remain
-paused; worker concurrency must be bounded by memory and provider limits.
+The multi-view browser renderer is still a roadmap. The 300-archetype Qwen SVG
+experiment is now authorized at up to 128 concurrent remote requests, with only
+two local geometry workers, the production-sized 8 GiB memory ceiling, and an
+8 GiB free-RAM reserve. Other large AI batches remain paused. Generated mappings
+are staged for geometry and visual review before any catalog publication.
 
 The benchmark's default input is the locally selected release (or `CATALOG_DIR`).
 It reports resident bytes, preparation time, memory, synchronous registry lookup,
@@ -228,3 +231,33 @@ local server runs as user service `please-mend-my-local.service`, around
 140 MB RSS under its 768 MiB limit; a runtime drop-in selects the new catalog.
 Refresh an existing page to load the new resident index. Detailed receipts are
 in ignored `catalog-data/benchmarks/new-sources/`.
+
+## Shared helpers and cleanup verification
+
+Python normalization and the original Porter stemmer now live in
+`ingest_common.py`. Separate helpers retain search lowercasing, noun casefolding,
+whitespace-only alias keys and the iFixit category builder's ASCII-only keys.
+Source paths and strict model identifiers keep their literal semantics. The
+browser retains its equivalent JavaScript stemmer, tested against Python. Shared
+helper bytes participate in the dependent source, noun and release fingerprints.
+
+The bespoke bicycle compiler, pilot runner/configs, old source-finder CLI and
+static credits patcher have been removed. Reviewed bicycle and phone JSON now
+load through the unified compiler's approved-art validator. Both runtime hashes
+remain identical to release `25477e31…`; no corpus rebuild is needed to serve the
+cleanup. Future catalog builds use the updated dependency fingerprints.
+
+The cleanup passed 216 Python tests, 143 JavaScript tests and `go test ./...`.
+A frozen pre-refactor search-index fixture remains byte-identical. A full SVG
+cache replay attempted no network requests and preserved the historical 418 API
+calls / $0.31151606 accounting. One formerly failed candidate succeeded on retry,
+changing its mapping input set; its new cache key correctly stayed list-only
+offline. Comparing that source with the old and new compiler produced identical
+geometry. The original review evidence remains retained.
+
+On the unchanged 435,213-item catalog, prepared heap was 246.91 MiB before and
+after; JSON/gzip bytes stayed 65,966,782 / 19,111,027. Cold-query p95 measured
+9.11 → 8.93 ms and repeated-query p95 0.033 → 0.042 ms. Startup measured
+1.93 → 1.87 s. These single local Node runs show no material change; they exclude
+browser layout, paint and network transfer. The three hero styles add about
+3.45 KB compressed assets, with Matrix drawing constrained independently.

@@ -2,13 +2,17 @@
 
 A responsive typing page with rotating typography and subtle monochrome lighting.
 
-Twelve hero styles rotate without consecutive repeats. Alongside pixel, serif,
+Fifteen hero styles rotate without consecutive repeats. Alongside pixel, serif,
 comic, poster, typewriter, handwritten, and emoji styles, five repair treatments
 add stitched lettering, a torn tape patch, tool-shaped letters, blueprint marks,
-and cut-paper lettering. The repair treatments decorate only
+and cut-paper lettering. ASCII banners, a light/dark rainbow palette, and a
+digital Matrix theme add three more options. Matrix rain is capped at 60 fps
+and roughly 2 ms of drawing work, yields to pending input, and stops for hidden
+tabs or reduced motion. Prefix art decorates only
 the protected prompt; the editable text and caret stay native. The idle typing
 floaters share the same styles. Artwork uses local fonts, CSS, and inline vectors
-in the system light/dark palette; backgrounds keep their three-load rotation.
+in system light/dark colors, with rainbow and Matrix as explicit chromatic
+variations; backgrounds keep their three-load rotation.
 Prefix measurements run during fitting and font changes, never during ordinary
 typing.
 
@@ -65,7 +69,7 @@ The tab title follows the first hero line immediately, including its typed text.
 Check the hero and search interactions without opening a browser:
 
 ```sh
-node --test scripts/test_hero.cjs scripts/test_hero_styles.cjs scripts/test_hero_search.cjs scripts/test_specifiers.cjs scripts/test_search_worker.cjs scripts/test_structured_guides.cjs
+python3 scripts/run_bounded.py -- node --test --test-concurrency=1 scripts/test_*.cjs
 ```
 
 These controller tests cover timers, keyboard/selection behavior, focus, query

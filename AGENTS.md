@@ -9,12 +9,12 @@
 - Background clicks must retain textbox focus/caret/selection; keep cards/links usable.
 - Text random each refresh, no repeats; BG random every 3 loads, browser-persisted, no batch repeats. Fonts: pixel, Times New Roman, comic, etc. Emoji: "🙏, 🔧 my".
 - Hero: visual wordplay > font swaps; stitched (baseline cross-stitches+needle)/taped/tooltype (hammer p, wrench l, clamp e, nail comma, ruler m, level d)/blueprint/cutpaper; spareparts retired. Inert fixed-prefix art, native suffix/caret; match floaters.
-- Same white/dark palette across fonts; follow system light/dark live.
+- Same white/dark palette; rainbow+Matrix explicit exceptions; follow system light/dark live.
 - Fit prompt+"relationship" and full visible question on one line in all fonts/screens; shrink only as needed, preserve already-fitting sizes. Long editable text wraps.
 - Any registry noun/alias→instant question+specifier; preserve typing focus until idle/explicit/part. Specifier below full-width prompt/question: native answer left; SVG+same-height scroll-list right; stack≤820px. Bike synonyms→bicycle/11 parts; arm/laptop/phone/car/stove/toilet/fridge/jeans lists. Hover/focus/select/type sync; part→answer+immediate search; blank answer hides cards. Generic SVG controller assets/specifiers.js; release-backed registry; no empty SVG box.
 - Prefer reusable diagram SVGs (Commons/Openclipart) over redraws; pin original/source/SHA/license, retain credits+mark adaptations; local optimized vectors, no runtime third-party fetch.
 - Art credits+repo→unlinked /credits; no diagram credit row/site link; keep SVG/source metadata.
-- Diagram pilot8: phone screen/buttons/speaker approved; camera map rejected; 7 lists. Qwen40/SHA cache; 21 SVG pins; source/map/compiler/art-hash visual gate. Lazy local art+instant lists; offline replay14s/0calls. See docs/diagram-pilot.md.
+- Approved art: pinned bicycle+phone JSON in scripts/data/archetype-art.json; phone camera rejected. Legacy pilot/compiler retired; diagram_svg only AST compiler, diagram_ai cached transport. Source/map/compiler/art hashes+visual gate. See docs/diagram-pilot.md.
 - Idle hero only: little floaters above the prompt, one per type style, pop in, type an object (laptop, stove, …), then burst away. Stop when the suffix is non-empty, searching, reading, hidden, or motion is reduced. No second caret.
 - Delegate to subagents; one/repo area at a time; no clobbering.
 - RAM: prod c8g.xlarge=8GiB; local jobs may use up to 8GiB (user-authorized). One heavy cgroup job/CPU2; leave ≥8GiB available; serial tests/builds; no uncapped jobs.
@@ -72,3 +72,8 @@
 - Local server user unit please-mend-my-local.service; cap768MiB; restart/stop via systemctl --user. Build/check via scripts/run_bounded.py.
 - Multiword search: selective-first, scoped posting probes/streaming; partial maps never cached as full. Local coldp95~9ms/cachedp95~.03ms; cold alias outlier59ms; startup~1.9s/19MB gzip. Go+186Py+134JS pass.
 - Sense bugs: bike≠motorcycle; arm≠weapon; phone≠phoneme; MacBook Air≠tune. Keep alias ranks+model/category ancestry.
+- New styles: ASCII block/grid; high-contrast rainbow (palette exception); Matrix localPixelifySans digital font+green rain≤60fps, bounded canvas+nativecaret, pause hidden/reduced-motion. Preserve fit/selection/focus; no decorative input lag.
+- Cleanup authorized: retire pilot/bespoke SVG compilers after permanent approved-art migration; all new ASTs via diagram_svg. Shared Python text helpers in ingest_common; preserve JS Porter parity, model/Unicode semantics+approved geometry. Remove proven dead code; no UX changes.
+- SVG300:418calls/128peak,$.311516;231pins/18numeric-passviews→17visualreject+1held,0newapproved. Badnoun/model senses+wronggeometry keptlist-only; preserve existing2art. Batchpeak241MiB.
+- Reload local user service after finished frontend changes; verify /api/catalog+served asset hashes; never auto-open browser.
+- Cleanup gate:216Py/143JS/Go pass;2art runtimeSHA unchanged; offline0network. Newcandidate set→newmappingcachekey/list-only offline; never silently reuse mismatched evidence.

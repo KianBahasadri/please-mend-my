@@ -1,5 +1,6 @@
 from copy import deepcopy
 import hashlib
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,6 +17,41 @@ def source_svg(extra=""):
 
 
 class DiagramSVGTests(unittest.TestCase):
+    def test_approved_snapshots_require_exact_art_review_source_and_safe_ast(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'source.svg'
+            source.write_text(source_svg())
+            source_sha = hashlib.sha256(source.read_bytes()).hexdigest()
+            data = {'viewBox': '0 0 100 100', 'context': [],
+                    'parts': {name: [['rect', {'x': str(index * 20), 'y': '0', 'width': '10',
+                                              'height': '10', 'fill': 'currentColor'}]]
+                              for index, name in enumerate(('wheel', 'handle', 'tray'))}}
+            body = json.dumps(data).encode()
+            artifact = root / 'art.json'; artifact.write_bytes(body)
+            digest = hashlib.sha256(body).hexdigest()
+            record = {'kind': 'approved-json', 'file': 'art.json', 'sha256': digest,
+                      'sourcePins': [{'file': 'source.svg', 'sha256': source_sha}],
+                      'review': {'approved': True, 'artSha256': digest, 'sourceSha256': source_sha}}
+            self.assertEqual(svg.load_approved_art(root, record), data)
+            for field in ('approved', 'artSha256', 'sourceSha256'):
+                wrong = deepcopy(record); wrong['review'][field] = 'stale'
+                with self.subTest(field=field), self.assertRaises(ValueError):
+                    svg.load_approved_art(root, wrong)
+            artifact.write_bytes(body + b' ')
+            self.assertRaises(ValueError, svg.load_approved_art, root, record)
+            artifact.write_bytes(body)
+            source.write_bytes(source.read_bytes() + b' ')
+            self.assertRaises(ValueError, svg.load_approved_art, root, record)
+            source.write_text(source_svg())
+            unsafe = deepcopy(data); unsafe['parts']['wheel'][0][0] = 'image'
+            unsafe_body = json.dumps(unsafe).encode(); artifact.write_bytes(unsafe_body)
+            unsafe_sha = hashlib.sha256(unsafe_body).hexdigest()
+            record['sha256'] = record['review']['artSha256'] = unsafe_sha
+            self.assertRaises(ValueError, svg.load_approved_art, root, record)
+            record['file'] = '../outside.json'
+            self.assertRaises(ValueError, svg.load_approved_art, root, record)
+
     def test_shape_geometry_and_ancestor_transforms_survive(self):
         root = ET.fromstring(source_svg())
         leaves, dropped = svg.flatten(root)

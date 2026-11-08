@@ -8,9 +8,9 @@ Only the hero writes the native answer. Unknown subjects hide the container.
 The worker includes the registry in its initial ready message. The page configures
 it before setting the hero vocabulary. Parts appear immediately; approved geometry
 loads from `/api/art/<sha256>.json` and preserves a connected list when inserted.
-The [eight-subject pilot](diagram-pilot.md) is retained as a build experiment and
-source-review record. Its reviewed phone artwork and existing bicycle geometry
-are inputs to the release, rather than separate runtime modules.
+The [diagram experiments](diagram-pilot.md) retain historical source-review evidence.
+Approved phone and bicycle JSON are permanent inputs in
+`scripts/data/archetype-art.json`, rather than separate runtime modules.
 
 The bicycle uses actual geometry from Al2 and contributors' [Bicycle diagram](https://commons.wikimedia.org/wiki/File:Bicycle_diagram.svg),
 choosing its [CC BY 3.0 license](https://creativecommons.org/licenses/by/3.0/),
@@ -21,16 +21,13 @@ SVG's JSON metadata. No credit row or credits link appears beside the diagram.
 The original files, source URLs, hashes, and license records are pinned in
 [`docs/references/bicycle/`](references/bicycle/).
 
-`scripts/prepare_bicycle_art.py` prepares safe monochrome geometry descriptors
-offline from those pinned originals. Its generated build fixture is
-`scripts/data/approved-bicycle-art.js`; the release builder emits hashed JSON
-geometry. The browser builds interactive groups from that local data; no drawing
-is fetched or parsed from an external service during use. Regeneration and consistency checking run with:
-
-```sh
-python3 scripts/prepare_bicycle_art.py
-python3 scripts/prepare_bicycle_art.py --check
-```
+`scripts/diagram_svg.py` is the single SVG validator/compiler. The bicycle and
+phone use hash-pinned approved JSON so replacing the experimental compiler does
+not alter their reviewed geometry or runtime response bytes. The browser builds
+interactive groups from local release data; it never fetches upstream artwork.
+New proposals run through `diagram_batch.py`, geometry gates and visual review;
+see [the batch command](../scripts/README.md). The bespoke bicycle compiler and
+one-off pilot CLI/configurations have been retired.
 
 `window.mendHero` exposes `query()`, `focus()`, `isAwaitingSpecifics()`,
 `settleDelay()`, `setVocabulary(terms)`, and immediate `settle()`. Its timer

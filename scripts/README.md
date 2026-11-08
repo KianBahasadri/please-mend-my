@@ -36,6 +36,20 @@ corpus. A lock prevents overlapping builds; failed builds cannot replace a
 published release. EC2 downloads the same public sources and builds its own
 catalog; no local corpus, SQLite database, or response cache is uploaded.
 
+SVG batch experiments use the same local metadata and reusable source tools:
+
+```sh
+python3 scripts/run_bounded.py --memory-mib 8192 -- uv run --python 3.12.12 python scripts/diagram_batch.py run --limit 300 --concurrency 128 --discovery-workers 32 --geometry-workers 2
+```
+
+`OPENROUTER_API_KEY` is read from the ignored root `.env`. `--offline` replays
+validated response and source caches without upstream calls. `prepare`,
+`taxonomy`, `discover`, `digest`, `map`, and `compile` resume individual phases;
+`--phase secondary` selects the coverage-gated follow-up. Outputs, source pins,
+geometry, contact sheets, accounting, and `report.json` stay in
+`catalog-data/build/diagram-batch-300/`. A processed noun is not an accepted SVG.
+The batch does not mutate a served release or bypass visual approval.
+
 Pinned inputs:
 
 | Source | Archive | Bytes | SHA-256 |

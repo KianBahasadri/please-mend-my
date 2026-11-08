@@ -15,10 +15,10 @@ import json
 from pathlib import Path
 import re
 import sqlite3
-import stat
 
 from diagram_credits import render as render_credits
-from prepare_search import atomic_write, clean, json_bytes, porter, tokens
+from ingest_common import atomic_write, json_bytes, porter, normalize_words as normalized
+from diagram_svg import load_approved_art
 
 ROOT = Path(__file__).resolve().parents[1]
 APPROVED_ART = ROOT / "scripts/data/archetype-art.json"
@@ -29,10 +29,6 @@ PART_LIMIT = 12
 PART_STOPWORDS = set("a an the new old front rear left right upper lower part section item unit thing change repair replacement replacing disassembly reassembly guide tutorial fix fixing introduction troubleshooting maintenance removal removing procedure step tool instruction instructions information problem issue damage solution method service access opening assembly".split())
 PART_ACTIONS = set("replacement repair removal installation adjustment cleaning disassembly reassembly change replace remove install adjust clean fix replacing removing installing repairing fixing".split())
 PART_DEFINITION = re.compile(r"\b(?:part|component|assembly|section|piece|mechanism)\b.*\b(?:of|in|on|within)\b", re.I)
-
-
-def normalized(value):
-    return " ".join(re.findall(r"[^\W_]+", clean(value)))
 
 
 def database_connection(database):
@@ -226,17 +222,7 @@ def import_approved_art(records, config_path, nouns=None):
         # A source approval targets its ordinary object sense; one approved SVG
         # does not silently validate all polysemous senses with a shared alias.
         target = max(targets, key=lambda row: (row["guideCount"], row["frequency"]))
-        if approved["kind"] == "pinned-bicycle":
-            from prepare_bicycle_art import prepare
-            data = prepare()
-        elif approved["kind"] == "approved-json":
-            source = ROOT / approved["file"]
-            body = source.read_bytes()
-            if hashlib.sha256(body).hexdigest() != approved["sha256"]:
-                raise ValueError("Reviewed diagram content changed: " + approved["id"])
-            data = json.loads(body)
-        else:
-            raise ValueError("Unknown reviewed artwork compiler")
+        data = load_approved_art(ROOT, approved)
         data.update(version=1, id=target["id"])
         body = json_bytes(data)
         digest = hashlib.sha256(body).hexdigest()

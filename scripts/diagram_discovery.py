@@ -9,6 +9,7 @@ become successful empty discovery records.
 from __future__ import annotations
 
 from collections import defaultdict
+from html.parser import HTMLParser
 import hashlib
 import json
 import os
@@ -22,7 +23,7 @@ from urllib.parse import urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 import xml.etree.ElementTree as ET
 
-from find_diagram_sources import inspect_svg, license_from_metadata, plain
+from diagram_svg import inspect_svg
 
 VERSION = "diagram-discovery-v1"
 ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,30 @@ SEMAPHORES = {"commons": threading.BoundedSemaphore(4),
               "download": threading.BoundedSemaphore(8)}
 _CACHE_LOCKS = defaultdict(threading.Lock)
 _CACHE_LOCK = threading.Lock()
+
+
+
+class PlainText(HTMLParser):
+    def __init__(self): super().__init__(); self.parts = []
+    def handle_data(self, text): self.parts.append(text)
+
+def plain(value):
+    parser = PlainText(); parser.feed(str(value or ''))
+    return ' '.join(' '.join(parser.parts).split())
+
+def license_from_metadata(metadata):
+    def value(key): return plain(metadata.get(key, {}).get('value', ''))
+    name, url = value('LicenseShortName'), value('LicenseUrl')
+    if url.startswith('//'): url = 'https:' + url
+    url = re.sub(r'^http:', 'https:', url)
+    match = re.fullmatch(r'CC (BY(?:-SA)?) (1\.0|2\.0|2\.5|3\.0|4\.0)', name)
+    if match and url.rstrip('/') == 'https://creativecommons.org/licenses/' + match[1].lower() + '/' + match[2]:
+        return name, url.rstrip('/') + '/'
+    if name in {'CC0', 'CC0 1.0', 'Public domain'}:
+        if name.startswith('CC0') or 'creativecommons.org/publicdomain/zero/' in url:
+            return 'CC0 1.0', 'https://creativecommons.org/publicdomain/zero/1.0/'
+        return 'Public domain', 'https://creativecommons.org/publicdomain/mark/1.0/'
+    raise ValueError('Missing or unsupported explicit license')
 
 
 class DiscoveryError(RuntimeError):
@@ -370,3 +395,29 @@ def discover_candidates(subject, work, *, limit=3, queries=None, offline=False):
                 report["errors"].append({"provider": "openclipart", "query": label, "reason": str(error)})
         atomic(destination, canonical(report))
         return report
+
+
+def verify_manifest(path, fetch_missing=False):
+    manifest = json.loads(Path(path).read_bytes())
+    if manifest.get('version') != 1: raise ValueError('Unsupported source manifest')
+    seen = set()
+    for item in manifest['archetypes']:
+        for record in item['candidates']:
+            identifier = record['id']
+            if identifier in seen: raise ValueError('Duplicate source candidate ID')
+            seen.add(identifier)
+            filename = record['file']
+            if Path(filename).name != filename: raise ValueError('Source path must be a basename')
+            destination = Path(path).parent / filename
+            if not destination.exists() and fetch_missing:
+                body = request_bytes(record['download'], maximum=max(500_000, record['bytes']))
+                if hashlib.sha256(body).hexdigest() != record['sha256']: raise ValueError('Downloaded original changed SHA-256')
+                destination.write_bytes(body)
+            if destination.is_symlink(): raise ValueError('Pinned source must be a regular local file')
+            body = destination.read_bytes()
+            if len(body) != record['bytes'] or hashlib.sha256(body).hexdigest() != record['sha256']:
+                raise ValueError('Pinned source bytes changed: ' + identifier)
+            inspect_svg(body)
+            if record['license'] not in {'Public domain', 'CC0 1.0'} and not re.fullmatch(r'CC BY(?:-SA)? (?:1\.0|2\.0|2\.5|3\.0|4\.0)', record['license']):
+                raise ValueError('Unapproved source license')
+    return {'archetypes': len(manifest['archetypes']), 'candidates': len(seen)}

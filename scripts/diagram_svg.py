@@ -5,7 +5,7 @@ bounds (including path curves/transforms); its labels are hints, never approval.
 """
 from __future__ import annotations
 
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from copy import deepcopy
 import hashlib
 import json
@@ -34,15 +34,141 @@ def digest_bytes(value):
     return hashlib.sha256(value).hexdigest()
 
 
+def load_approved_art(root, record):
+    """Load an immutable reviewed AST, independently of any retired prototype.
+
+    Approved drawings are data. New SVG interpretation still passes through
+    ``structural_digest`` and ``compile_art``; this does not re-interpret or
+    silently repaint reviewed geometry during an ordinary catalog build.
+    """
+    root = Path(root).resolve()
+    if record.get("kind") != "approved-json":
+        raise ValueError("Reviewed artwork must be an approved JSON artifact")
+    review = record.get("review", {})
+    if review.get("approved") is not True or review.get("artSha256") != record.get("sha256"):
+        raise ValueError("Reviewed artwork needs an exact approved content hash")
+    def pinned_file(name, expected):
+        path = root / name
+        resolved = path.resolve()
+        resolved.relative_to(root)
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Reviewed artwork inputs must be regular pinned files")
+        body = path.read_bytes()
+        if digest_bytes(body) != expected:
+            raise ValueError("Reviewed artwork input changed: " + name)
+        return body
+    for source in record.get("sourcePins", []):
+        pinned_file(source["file"], source["sha256"])
+    if review.get("sourceSha256") and review["sourceSha256"] not in {
+            source["sha256"] for source in record.get("sourcePins", [])}:
+        raise ValueError("Reviewed source hash does not match the pinned inputs")
+    body = pinned_file(record["file"], record["sha256"])
+    if len(body) > 300_000:
+        raise ValueError("Reviewed artwork exceeds the runtime byte bound")
+    data = json.loads(body)
+    box = [float(value) for value in data["viewBox"].split()]
+    if len(box) != 4 or not all(math.isfinite(value) for value in box) or min(box[2:]) <= 0:
+        raise ValueError("Reviewed artwork needs a finite positive viewBox")
+    if not isinstance(data.get("parts"), dict) or len(data["parts"]) < 3:
+        raise ValueError("Reviewed artwork needs three distinct physical part buckets")
+    shape_count = 0
+    for bucket in [data["context"], *data["parts"].values()]:
+        if not isinstance(bucket, list):
+            raise ValueError("Reviewed shape buckets must be lists")
+        for descriptor in bucket:
+            if (not isinstance(descriptor, list) or len(descriptor) != 2
+                    or descriptor[0] not in SHAPES or not isinstance(descriptor[1], dict)):
+                raise ValueError("Reviewed artwork contains an unsupported shape descriptor")
+            attrs = descriptor[1]
+            if set(attrs) - GEOMETRY - PRESENTATION - {"transform", "data-source-id"}:
+                raise ValueError("Reviewed artwork contains an unsupported attribute")
+            if not all(isinstance(value, str) and not re.search(r"url\s*\(|javascript:|[<>]", value, re.I)
+                       for value in attrs.values()):
+                raise ValueError("Reviewed artwork contains an unsafe attribute value")
+            if any(attrs.get(key, "none") not in {"none", "currentColor", "var(--paper)"}
+                   for key in ("fill", "stroke")):
+                raise ValueError("Reviewed artwork paints must be theme-adaptive")
+            shape_count += 1
+    if shape_count > 500:
+        raise ValueError("Reviewed artwork exceeds the runtime shape bound")
+    return data
+
+
 def local(tag):
     return tag.rsplit("}", 1)[-1]
+
+
+
+def safe_svg_xml(body):
+    """Remove DTDs without resolving them; allow only unused constant entities.
+
+    Some Illustrator exports declare an unused namespace entity. That does not
+    make their vector geometry raster/active. Used, nested, external and parameter
+    entities fail closed; no DTD or entity declaration reaches the XML parser.
+    Original source bytes remain pinned and are never rewritten on disk.
+    """
+    declarations = re.findall(rb'<!ENTITY\b[^>]*>', body, re.I)
+    if len(declarations) > 32 or len(declarations) != len(re.findall(rb'<!ENTITY\b', body, re.I)):
+        raise ValueError('Unsupported XML entity declarations')
+    for declaration in declarations:
+        match = re.fullmatch(rb'<!ENTITY\s+([A-Za-z_:][A-Za-z0-9_.:\-]*)\s+([\'"])([^&<>]{0,256})\2\s*>', declaration, re.I)
+        if not match or b'&' + match.group(1) + b';' in body:
+            raise ValueError('Used, nested or external XML entities are unsupported')
+    # Scan quoted strings and the internal subset so embedded > characters do
+    # not cause the DTD stripper to leave a partial declaration behind.
+    cleaned = body
+    while True:
+        match = re.search(rb'<!DOCTYPE\b', cleaned, re.I)
+        if not match: break
+        quote = None; depth = 0; end = None
+        for at in range(match.end(), len(cleaned)):
+            char = cleaned[at]
+            if quote:
+                if char == quote: quote = None
+            elif char in (34, 39): quote = char
+            elif char == 91: depth += 1
+            elif char == 93: depth -= 1
+            elif char == 62 and depth == 0: end = at + 1; break
+            if depth < 0: raise ValueError('Invalid XML doctype')
+        if end is None: raise ValueError('Unterminated XML doctype')
+        cleaned = cleaned[:match.start()] + cleaned[end:]
+    if re.search(rb'<!ENTITY\b', cleaned, re.I):
+        raise ValueError('XML entity declaration outside DTD')
+    return cleaned
+
+def inspect_svg(body):
+    root = ET.fromstring(safe_svg_xml(body))
+    if root.tag.rsplit('}', 1)[-1] != 'svg': raise ValueError('Source is not SVG')
+    if b'<?xml-stylesheet' in body.lower(): raise ValueError('SVG contains an external stylesheet instruction')
+    counts = Counter()
+    for node in root.iter():
+        tag = node.tag.rsplit('}', 1)[-1]
+        counts[tag] += 1
+        if tag in {'script', 'image', 'feImage', 'foreignObject', 'iframe', 'audio', 'video', 'object', 'embed', 'animate', 'animateMotion', 'animateTransform', 'set'}:
+            raise ValueError('SVG contains raster or active content')
+        if tag == 'style':
+            css = ''.join(node.itertext())
+            if re.search(r'@import', css, re.I): raise ValueError('SVG contains imported CSS')
+            for target in re.findall(r'url\(([^)]*)\)', css, re.I):
+                if not target.strip().strip("\"'").startswith('#'):
+                    raise ValueError('SVG contains external stylesheet paint references')
+        for key, value in node.attrib.items():
+            key = key.rsplit('}', 1)[-1]
+            if key.lower().startswith('on'): raise ValueError('SVG contains event handler')
+            if tag == 'use' and key == 'href' and not value.startswith('#'):
+                raise ValueError('SVG contains external geometry references')
+            for target in re.findall(r'url\(([^)]*)\)', value, re.I):
+                if not target.strip().strip("\"'").startswith('#'):
+                    raise ValueError('SVG contains external paint references')
+    shapes = sum(counts[tag] for tag in SHAPES)
+    if shapes < 8: raise ValueError(f'Only {shapes} vector shapes; insufficient independent assemblies')
+    return {'shapes': shapes, 'groups': counts['g'], 'labels': counts['text'], 'viewBox': root.get('viewBox')}
 
 
 def parse_source(path, expected_sha):
     body = Path(path).read_bytes()
     if len(body) > 500_000 or digest_bytes(body) != expected_sha:
         raise ValueError("SVG source exceeds size bound or differs from its SHA pin")
-    from find_diagram_sources import safe_svg_xml
     root = ET.fromstring(safe_svg_xml(body))
     if local(root.tag) != "svg":
         raise ValueError("Source is not an SVG document")

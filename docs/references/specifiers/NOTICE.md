@@ -20,40 +20,22 @@ and selected licenses are recorded in `sources.json`. Wikimedia original files
 were matched to their API SHA-1 metadata before pinning. Openclipart detail pages
 explicitly identify the CC0 dedication in their ImageObject license metadata.
 
-Verify all pins without network access:
+The one-off source-finder CLI is retired. The retained source manifest is
+historical evidence; current build validation and discovery live in
+`diagram_svg.py` and `diagram_discovery.py`. Verify the retained source pins and
+source-security rules with the bounded fixture tests:
 
 ```sh
-python3 scripts/find_diagram_sources.py verify
+python3 scripts/run_bounded.py -- uv run --python 3.12.12 python -m unittest discover -s scripts -p 'test_diagram_sources.py'
 ```
 
-Retrieve missing originals from the pinned download URLs (changed bytes fail):
-
-```sh
-python3 scripts/find_diagram_sources.py fetch
-```
-
-Discover additional candidates with cached serial requests (review before use):
-
-```sh
-python3 scripts/find_diagram_sources.py discover --openclipart \
-  --queries catalog-data/build/diagram-pilot/taxonomy.json \
-  --output-dir catalog-data/build/diagram-sources/proposals \
-  --report catalog-data/build/diagram-sources/discovery-report.json
-```
-
-The optional query file contains `archetypes: [{id, svgQueries: [...]}]`. Discovery
-rejects raster wrappers, active content, external geometry/paint references,
-unsupported licenses, oversized sources, insufficient vector shapes and obvious
-subject/title noise. The discovery receipt records queries, inspected/accepted/
-rejected candidates and rejection reasons; proposals stay outside approved pins. Shape
-count is only a structural heuristic; visual review still rejects unrelated
-wordmarks, charts and illustrations that cannot support useful part highlights.
-Successful API responses and original downloads are cached. Requests are serial,
-identify the project, request `maxlag=5`, and back off on transient transport or
-MediaWiki JSON `maxlag`/`ratelimited` failures; error responses are never cached.
-`verify` and `fetch` also accept `--output-dir` to check a staged manifest instead
-of the pinned source directory.
-Unused constant XML namespace entities are stripped with their DTD before parsing;
+The scalable [batch pipeline](../../diagram-pilot.md) stages new sources outside
+Git, preserving original bytes, licenses and source hashes. Discovery rejects
+raster wrappers, active content, external geometry/paint, unsupported licenses,
+oversized sources and insufficient vector shapes. Shape counts are heuristics;
+visual review still rejects unrelated or incorrectly mapped geometry. Successful
+responses are cached; provider errors remain retryable and distinct from empty
+searches. Unused constant XML namespace entities are stripped with their DTD;
 used, nested, external and parameter entities are rejected without resolution.
 
 ## Attribution and selected licenses

@@ -35,25 +35,31 @@ WIKIHOW_SOURCE = ROOT / "scripts/wikihow-source.json"
 MERGE = ROOT / "scripts/merge_catalogs.py"
 OVERLAY = ROOT / "scripts/overlay_guides.py"
 STRUCTURED_GUIDES = ROOT / "scripts/structured_guides.py"
+RESTRUCTURE = ROOT / "scripts/restructure_catalog.py"
 SEED_NOUNS = ROOT / "scripts/seed_nouns.py"
 LINK_NOUNS = ROOT / "scripts/link_nouns.py"
 NOUN_SOURCE = ROOT / "scripts/nouns-source.json"
 ARCHETYPES = ROOT / "scripts/build_archetypes.py"
 ART_CONFIG = ROOT / "scripts/data/archetype-art.json"
 PHONE_ART = ROOT / "scripts/data/approved-phone-art.json"
-BICYCLE = ROOT / "scripts/prepare_bicycle_art.py"
+BICYCLE_ART = ROOT / "scripts/data/approved-bicycle-art.json"
+PHONE_SOURCE = ROOT / "docs/references/specifiers/phone-5a0ba04afb81de1d.original.svg"
 DIAGRAM_CREDITS = ROOT / "scripts/diagram_credits.py"
 DIAGRAM_COMPILER = ROOT / "scripts/diagram_svg.py"
-DIAGRAM_SOURCES = ROOT / "scripts/find_diagram_sources.py"
+DIAGRAM_SOURCES = ROOT / "scripts/diagram_discovery.py"
+DIAGRAM_AI = ROOT / "scripts/diagram_ai.py"
+DIAGRAM_BATCH = ROOT / "scripts/diagram_batch.py"
+DIAGRAM_REVIEW = ROOT / "scripts/review_diagram_batch.py"
 BICYCLE_SOURCES = (ROOT / "docs/references/bicycle/commons-bicycle-diagram.original.svg",
                    ROOT / "docs/references/bicycle/openclipart-bicycle.original.svg")
 SOURCE_NOTICES = (ROOT / "docs/references/wordnet/OEWN-LICENSE.md",
                   ROOT / "docs/references/wordnet/wordfreq-NOTICE.md")
 PIPELINE_INPUT_NAMES = ("INGEST", "ENRICH", "VOCABULARY", "WIKIMED", "FIRST_AID", "APPROPEDIA", "WIKIHOW",
                         "INGEST_COMMON", "APPROPEDIA_SOURCE", "WIKIHOW_SOURCE", "MERGE",
-                        "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES", "SEED_NOUNS", "LINK_NOUNS",
-                        "NOUN_SOURCE", "ARCHETYPES", "ART_CONFIG", "PHONE_ART", "BICYCLE",
-                        "DIAGRAM_CREDITS", "DIAGRAM_COMPILER", "DIAGRAM_SOURCES")
+                        "SEARCH_INDEX", "OVERLAY", "STRUCTURED_GUIDES", "RESTRUCTURE", "SEED_NOUNS", "LINK_NOUNS",
+                        "NOUN_SOURCE", "ARCHETYPES", "ART_CONFIG", "PHONE_ART", "BICYCLE_ART", "PHONE_SOURCE",
+                        "DIAGRAM_CREDITS", "DIAGRAM_COMPILER", "DIAGRAM_SOURCES",
+                        "DIAGRAM_AI", "DIAGRAM_BATCH", "DIAGRAM_REVIEW")
 
 
 def input_key(paths):
@@ -126,7 +132,7 @@ def ifixit_cached(data_dir):
     """Check small completion receipts only; never scan a completed source corpus."""
     try:
         receipt = json.loads((data_dir / "runtime/source-build.json").read_bytes())
-        if receipt.get("sourceSha256") != input_key((INGEST, ENRICH, VOCABULARY)):
+        if receipt.get("sourceSha256") != input_key((INGEST, ENRICH, VOCABULARY, INGEST_COMMON)):
             return False
         manifest = completed_manifest(data_dir / "runtime")
         return manifest.get("searchEnrichment", {}).get("version") == 1
@@ -216,7 +222,7 @@ def build_release(data_dir, release_root, uv="uv", cache_dir=None, source_runtim
                 manifest = completed_manifest(data_dir / "runtime")
                 if manifest.get("searchEnrichment", {}).get("version") != 1:
                     raise RuntimeError("Search alias enrichment did not finish; refusing to publish.")
-                receipt = {"sourceSha256": input_key((INGEST, ENRICH, VOCABULARY))}
+                receipt = {"sourceSha256": input_key((INGEST, ENRICH, VOCABULARY, INGEST_COMMON))}
                 temporary = data_dir / "runtime/source-build.json.tmp"
                 temporary.write_text(json.dumps(receipt, separators=(",", ":")) + "\n")
                 temporary.replace(data_dir / "runtime/source-build.json")
