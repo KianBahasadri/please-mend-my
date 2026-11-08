@@ -1,5 +1,5 @@
 \documentclass[10pt,letterpaper]{article}
-\usepackage[margin=0.82in]{geometry}
+\usepackage[margin=0.75in]{geometry}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{microtype}
@@ -20,14 +20,14 @@
 % Section styling
 \titleformat{\section}{\large\bfseries\scshape}{\thesection.}{0.5em}{}[\titlerule]
 \titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.5em}{}
-\titlespacing*{\section}{0pt}{1.0em}{0.45em}
-\titlespacing*{\subsection}{0pt}{0.7em}{0.25em}
-\setlist{itemsep=0.15em, topsep=0.25em, leftmargin=1.5em}
+\titlespacing*{\section}{0pt}{0.85em}{0.35em}
+\titlespacing*{\subsection}{0pt}{0.6em}{0.2em}
+\setlist{itemsep=0.05em, topsep=0.15em, leftmargin=1.5em}
 
 \begin{document}
 
 {\centering
-{\huge\textbf{pleasemendmy.com}}\\[0.25em]
+{\huge\textbf{\href{https://pleasemendmy.com}{\textcolor{black}{pleasemendmy.com}}}}\\[0.25em]
 {\large\textsc{Design Process Document}}\\[0.8em]
 }
 
@@ -39,7 +39,7 @@
 \textbf{Discord:} \texttt{@the\_cleverest}
 \end{minipage}\hfill
 \begin{minipage}[t]{0.48\textwidth}
-\textbf{GitHub:} \href{https://github.com/KianBahasadri}{github.com/KianBahasadri}\\
+\textbf{GitHub:} \href{https://github.com/KianBahasadri/please-mend-my}{KianBahasadri/please-mend-my}\\
 \textbf{LinkedIn:} \href{https://www.linkedin.com/in/kian-bahasadri/}{linkedin.com/in/kian-bahasadri}\\
 \textbf{Date:} November 8, 2026
 \end{minipage}
@@ -51,53 +51,57 @@
 \section{Project Overview}
 
 \subsection{Purpose}
-I have a lifelong habit of putting people on the spot, bringing up moral and philosophical questions in everyday conversation to test whether our assumptions hold up when examined. \textbf{pleasemendmy.com} is kind of an intimate project because it's an extension of that habit. I wanted to challenge you (yes, you \raisebox{-0.2em}{\includegraphics[height=1.15em]{docs/point-viewer.png}}) on how you use technology every day.
+I have a lifelong habit of putting people on the spot, bringing up moral and philosophical questions in everyday conversation to test whether I can point out some flaw in their beliefs. \textbf{pleasemendmy.com} is kind of an intimate project because it's an extension of that habit. I wanted to challenge you (yes, you \raisebox{-0.2em}{\includegraphics[height=1.15em]{docs/point-viewer.png}}) on how you use technology every day.
 
-Today's hardware and browsers can hold a searchable encyclopedia of practical knowledge on the device and answer in milliseconds, so that tool should already exist and be the default. Instead, advertising incentives, platform politics, and pressure to route basic questions through AI products have left us with slow, bloated tools. As designers there should be nothing more \underline{heartbreaking} than seeing our friends and family depend on tools that are slower, less economical, return AI answers that can change from one run to the next, and are increasingly becoming subscription services. Whatever happened to knowledge being free for all?
+Today's hardware and browsers can hold a searchable encyclopedia of practical knowledge on the device and answer in milliseconds, so that tool should already exist and be the default. Instead, advertising incentives, platform politics, and pressure to route basic questions through AI products have left us with slow, bloated tools. As designers, there should be nothing more disappointing than seeing our friends and family depend on tools that are slower, less economical, return AI answers that can change from one run to the next, and are increasingly becoming subscription services.
 
-This project is meant to be kind of punk and countercultural. I built it to criticize slow, wasteful defaults by showing the alternative, and I've decided to maintain and improve it for future use!
+This project is meant to be kind of punk and countercultural. I built it to criticize slow, wasteful defaults by showing the alternative, and I've enjoyed it so much that I've decided to maintain and improve it for future use!
 
 \subsection{Audience and Goals}
-The audience is anyone looking up practical or reference information on any topic: repairs, medicine, first aid, cooking, software, sustainability, childcare, or relationships. Rather than stopping at physical repair, the goal is to supply all the expert-vetted, reputable human-written knowledge we can source, answer locally in milliseconds without live AI, and avoid wasted network transfers.
+The audience is anyone seeking practical or reference knowledge on any topic: repairs, medicine, first aid, cooking, software, sustainability, childcare, or relationships. Rather than stopping at physical repair, the goal is to supply all the expert-vetted, reputable human-written information we can source, answer locally in milliseconds without live AI, and avoid wasted transfers.
 
 \section{Research and Insights}
 
-A hackathon mentor conversation framed the problem: young adults used to call their parents for help with things like eating well, mending something broken, or caring for children. General advice was easy to find, but situational advice was hard.
+A mentor conversation framed the problem: young adults used to call their parents for help with eating well, mending broken items, or caring for children. General advice was easy to find, but situational advice was hard.
 
-Today people take those questions to Google, AI, or manual source hunting. AI suits open-ended problems, but all three fail everyday lookup:
+Today people use Google, AI, or manual source hunting. AI suits open-ended problems, but all three fail everyday lookup:
 \begin{itemize}
-    \item \textbf{Search engines:} Sponsored links, SEO filler, and ads bury instructions below the fold. Queries tie into user profiles and tracking, trading data privacy for ad targeting while shaping results into personalized information bubbles.
-    \item \textbf{AI chat:} Users wait while a remote model streams a verbose, non-deterministic answer whose accuracy and sources are hard to verify. Capable tiers increasingly require paid subscriptions, while prompts and personal context are logged to user profiles.
-    \item \textbf{Manual source hunting:} Going straight to authentic manuals, wikis, or archives avoids ads, profiling, and AI guesswork, but knowledge sits scattered across clunky directories. Knowing where to look and digging through separate sites is harder than using Google or AI, so despite its upsides, rarely anybody does it.
+    \item \textbf{Search engines:} Sponsored links, SEO filler, and ads bury instructions. Queries tie into user profiles and tracking, trading data privacy for ad targeting while shaping results into personalized information bubbles.
+    \item \textbf{AI chat:} Users wait while a remote model streams verbose, non-deterministic answers with hard-to-verify sources. Capable tiers increasingly require paid subscriptions, while prompts and personal context are logged to user profiles.
+    \item \textbf{Manual source hunting:} Going straight to authentic manuals, wikis, or archives avoids ads, profiling, and AI guesswork, but knowledge sits scattered across clunky directories. Knowing where to look and digging through separate sites is harder than Google or AI, so despite its upsides, rarely anybody does it.
 \end{itemize}
 
 \newpage
 \section{Initial Mockups and Prototypes}
 
-Initially, my goal was an autonomous system that resolves problems rather than a knowledge database. In practice, everyday questions rarely need an agent, just immediate access to human instructions. Early prototypes tested that lookup:
+Initially, my goal was an autonomous system that mends things \textit{for you} rather than a knowledge database. In practice, everyday questions rarely need an agent, just immediate access to accurate, easy-to-read instructions. Early prototypes tested that:
 \begin{enumerate}
-    \item \textbf{Prompt and spotlight landing:} A full-screen ``\textit{please, mend my }'' input over a spotlight backdrop, rotating basic fonts while idle floaters typed example objects.
-    \item \textbf{Directory-style iFixit search:} Local iFixit search with ``Browse library,'' category filters, a 100-card grid, and a separate ``Back to results'' view.
-    \item \textbf{Early hero wordplay:} CSS and SVG prototypes replacing font swaps with physical textures, including a riveted-metal theme alongside stitched thread, blueprint lines, and tool-shaped letters.
+    \item \textbf{Minimal landing:} A full-screen ``\textit{please, mend my }'' input rotating basic fonts over soft lighting.
+    \item \textbf{Directory iFixit search:} Local iFixit search with ``Browse library,'' category filters, a 100-card grid, and a ``Back to results'' view.
+    \item \textbf{Hero wordplay:} CSS and SVG prototypes replacing font swaps with physical textures, including riveted metal, stitched thread, blueprint lines, and tool-shaped letters.
 \end{enumerate}
 
 \section{Iterations and Feedback}
 
-Across the commit history, the product evolved through four shifts:
+Advice from four mentors guided key iterations alongside the repository's evolution:
 \begin{itemize}
-    \item \textbf{Repair tool to general encyclopedia:} The iFixit prototype expanded to add WikiMed, U.S. Army First Aid, Appropedia, and wikiHow (435,213 items), using offline postings, stems, and hierarchical aliases to keep browser search fast.
-    \item \textbf{Refining wordplay and triage:} The riveted-metal style was cut, while stitched thread, blueprint, and tool-letter themes were refined alongside ASCII, rainbow, and Matrix styles. Bare nouns began opening a follow-up question with part lists and clickable diagrams.
-    \item \textbf{Card grid to inline answer:} Category filters, ``Browse library,'' and the 100-card grid still made users scan and click like a search engine, so they were replaced by opening the top guide inline below the prompt.
-    \item \textbf{Offline schema restructuring:} Because HTML varies across five sources, a build-time pipeline ran an offline model on a 100-guide pilot to reorganize articles into uniform tools, warnings, and steps without query-time AI.
+    \item \textbf{Mentor-guided atmosphere and onboarding:} Drew helped shape the spotlight background, and Professor Ridwan suggested animating example words typing into the idle landing prompt so visitors immediately understand they are supposed to type too.
+    \item \textbf{Repair tool to general encyclopedia:} Building on mentor discussions, the iFixit prototype expanded to WikiMed, U.S. Army First Aid, Appropedia, and wikiHow (435,213 items), using offline postings, stems, and aliases for fast browser search.
+    \item \textbf{Cards to inline answer and triage:} The riveted-metal style, category filters, and 100-card grid were cut; bare nouns gained follow-up prompts with clickable part diagrams, and the top guide moved inline.
+    \item \textbf{Offline restructuring:} Because HTML varies across five sources, a build-time pipeline ran an offline model on a 100-guide pilot to reorganize articles into uniform tools, warnings, and steps without query-time AI.
 \end{itemize}
 
 \section{Final Product and Outcomes}
 
 \begin{itemize}
-    \item \textbf{Everyday language and visual part lookup:} Users rarely know part names (a bicycle \textit{derailleur}) and type everyday symptoms (\textit{``it's not turning on''}). The prompt strips filler while keeping negation, asks \textit{``What's wrong with your [noun]?''} for bare nouns, and lets users click parts on available diagrams or lists instead of naming them.
-    \item \textbf{Immediate inline guides:} Search ranks locally as you type, rendering the top match inline with five side alternatives. Restructured pilot guides show safety notices, tools, materials, and steps; others render cleaned source HTML with attribution and source links.
-    \item \textbf{Private, low-request lookup:} Local search keeps queries private on-device with no profiling. Once loaded, the site makes almost no repeat requests, never re-fetches index data or guides already grabbed, keeps opened guides working offline, and lets a small server handle traffic with minimal bandwidth and compute.
+    \item \textbf{Everyday language and part lookup:} Users rarely know part names (a bicycle \textit{derailleur}) and type symptoms (\textit{``it's not turning on''}). The prompt strips filler, keeps negation, asks \textit{``What's wrong with your [noun]?''} for bare nouns, and lets users click parts on available diagrams or lists.
+    \item \textbf{Immediate inline guides:} Search ranks locally as you type, showing the top match inline with five side alternatives. Pilot guides show safety notices, tools, materials, and steps; others render cleaned source HTML with attribution and source links.
+    \item \textbf{Private, low-request lookup:} Local search keeps queries private on-device with no profiling. Once loaded, the site makes almost no repeat requests, never re-fetches index data or guides already grabbed, keeps opened guides working offline, and minimizes server bandwidth and compute.
 \end{itemize}
+
+\section{Figma}
+
+Figma was not used. (I never learned rip.)
 
 \section{Citations and AI Use}
 
@@ -112,8 +116,8 @@ No AI was used to create visuals. Diagrams, SVGs, and images come from Wikimedia
 
 \subsection{AI Use}
 \begin{itemize}
-    \item \textbf{Code:} All code was written by LLM agents.
-    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} was used in batch processing articles into a strict schema, and to parse and map open source SVGs.
+    \item \textbf{Code and writing:} All code was written by LLM agents.
+    \item \textbf{Offline text:} \texttt{qwen/qwen3.6-35b-a3b} was used in batch processing articles into a strict schema, and to parse and map open-source SVGs.
 \end{itemize}
 
 \end{document}
