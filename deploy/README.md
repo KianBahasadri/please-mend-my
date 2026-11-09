@@ -1,3 +1,9 @@
+The hosted deployment was retired on November 9, 2026. The AWS stack, disk,
+Elastic IP, and network have been deleted, and the apex/www DNS records have
+been removed. See the [shutdown record and remaining costs](../docs/teardown.md).
+The deployment history and instructions below are retained for reference;
+recreating infrastructure requires a new explicit user request.
+
 Deploy the embedded Go server directly on a non-burstable `c8g.xlarge` (4 vCPU, 8 GiB), encrypted 64 GiB gp3 root disk (6,000 IOPS), and a stable Elastic IP. The Go binary builds locally; catalog ingestion runs on EC2. The stack owns its VPC/subnet; HTTP 80 and HTTPS 443 are public and SSH 22 admits only your current IPv4 `/32`.
 
 Live deployment: [https://pleasemendmy.com](https://pleasemendmy.com) and [https://www.pleasemendmy.com](https://www.pleasemendmy.com), proxied through Cloudflare to `32.193.25.68`; stack `please-mend-my`, `us-east-1`, instance `i-00b3468454b650217` (`aarch64`, 4 vCPU, 64 GiB root). The former 20 GiB instance was replaced; the Elastic IP and DNS were retained. Direct IP HTTP remains available for health probes. Cloudflare uses Full (strict) and redirects HTTP to HTTPS.

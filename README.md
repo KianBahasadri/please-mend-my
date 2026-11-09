@@ -1,5 +1,8 @@
 # please, mend my
 
+The hosted deployment was retired on November 9, 2026. Source and local data
+remain available. See the [shutdown record and remaining costs](docs/teardown.md).
+
 A responsive typing page with rotating typography and subtle monochrome lighting.
 
 Fifteen hero styles rotate without consecutive repeats. Alongside pixel, serif,
