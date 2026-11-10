@@ -1,5 +1,6 @@
 - Retired 2026-11-09 at user request: AWS stack/instance/64GiB root/EIP/network deleted; imported EC2 key deleted; apex/www DNS removed. No deploys, paid jobs, or AI restarts without a new explicit request. Domain registration + OpenRouter key retained by explicit user exception. See docs/teardown.md for verification and costs.
 - Branch cleanup 2026-11-09: four remaining demo commits fast-forwarded to main (1e9c311); demo deleted locally+origin; shared workdir now main. Preserve local corpus/caches and source.
+- Ops cleanup 2026-11-10: removed detached please-mend-my-prod-ops worktree at user request; preserved its ignored operations files in catalog-data/retired-prod-ops/. Only main branch/worktree remains.
 - Persistent session memory: read/update each session; log reqs/bugs tersely.
 - "resume"=quota restored after abrupt cutoff; check agents+saved work, continue unfinished tasks (agents may be cut off too).
 - Public: KianBahasadri/please-mend-my.

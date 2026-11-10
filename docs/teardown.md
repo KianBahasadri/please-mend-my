@@ -37,8 +37,11 @@ limit remains $10.
 The four commits after the previous `main` tip were fast-forwarded from `demo`
 to `main` at `1e9c311`. The remote and local `demo` branches were then deleted,
 and the shared workspace was switched to `main`. `git ls-remote --heads origin`
-confirmed that `main` was the only remote branch. The previous deployment
-worktree is detached; its ignored local data remains preserved.
+confirmed that `main` was the only remote branch. On November 10, the user
+requested removal of the remaining ops checkout. No `ops` branch existed;
+the detached `please-mend-my-prod-ops` worktree was removed after preserving
+its ignored operations files in `catalog-data/retired-prod-ops/` in the main
+workspace. Only the main workspace and `main` branch remain.
 
 ## Remaining costs
 
